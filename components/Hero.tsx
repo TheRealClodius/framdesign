@@ -2,8 +2,8 @@ import Image from "next/image";
 
 export default function Hero() {
   return (
-    <section className="flex flex-col items-center justify-center min-h-[60vh] px-4 py-20 text-center">
-      <div className="relative w-64 h-64 mb-8 md:w-80 md:h-80 grayscale opacity-90">
+    <section className="flex flex-col items-center justify-center min-h-[60vh] px-4 py-20 text-center w-full max-w-[120rem] mx-auto">
+      <div className="relative w-[16rem] h-[16rem] mb-8 md:w-[20rem] md:h-[20rem] lg:w-[24rem] lg:h-[24rem] grayscale opacity-90">
         {/* Placeholder for the Polar Bear image */}
         <div className="absolute inset-0 flex items-center justify-center bg-gray-100 border border-gray-200 rounded-lg">
           <span className="text-sm text-gray-400 font-mono">
@@ -22,14 +22,13 @@ export default function Hero() {
         /> */}
       </div>
       
-      <h1 className="text-6xl md:text-8xl lg:text-9xl font-serif tracking-tighter">
+      <h1 className="text-[4rem] md:text-[6rem] lg:text-[8rem] xl:text-[10rem] leading-none font-serif tracking-tighter">
         FRAM.
       </h1>
       
-      <p className="mt-6 text-sm md:text-base font-mono text-gray-500 max-w-md">
+      <p className="mt-6 text-[0.875rem] md:text-[1rem] lg:text-[1.125rem] font-mono text-gray-500 max-w-[28rem]">
         Building and launching products.
       </p>
     </section>
   );
 }
-

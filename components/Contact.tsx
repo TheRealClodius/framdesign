@@ -46,15 +46,15 @@ export default function Contact() {
   };
 
   return (
-    <section className="w-full max-w-md mx-auto px-4 py-20">
+    <section className="w-full max-w-[28rem] mx-auto px-4 py-20">
       <div className="mb-10 text-center">
-        <h2 className="text-2xl font-serif mb-2">Contact</h2>
-        <p className="text-xs font-mono text-gray-500">GET IN TOUCH</p>
+        <h2 className="text-[1.5rem] md:text-[2rem] font-serif mb-2">Contact</h2>
+        <p className="text-[0.75rem] font-mono text-gray-500 tracking-wider">GET IN TOUCH</p>
       </div>
 
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 font-mono text-sm">
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 font-mono text-[0.875rem]">
         <div className="space-y-2">
-          <label htmlFor="name" className="block uppercase text-xs tracking-wider">
+          <label htmlFor="name" className="block uppercase text-[0.75rem] tracking-wider">
             Name
           </label>
           <input
@@ -64,12 +64,12 @@ export default function Contact() {
             placeholder="Jane Doe"
           />
           {errors.name && (
-            <p className="text-red-500 text-xs mt-1">{errors.name.message}</p>
+            <p className="text-red-500 text-[0.75rem] mt-1">{errors.name.message}</p>
           )}
         </div>
 
         <div className="space-y-2">
-          <label htmlFor="email" className="block uppercase text-xs tracking-wider">
+          <label htmlFor="email" className="block uppercase text-[0.75rem] tracking-wider">
             Email
           </label>
           <input
@@ -80,12 +80,12 @@ export default function Contact() {
             placeholder="jane@example.com"
           />
           {errors.email && (
-            <p className="text-red-500 text-xs mt-1">{errors.email.message}</p>
+            <p className="text-red-500 text-[0.75rem] mt-1">{errors.email.message}</p>
           )}
         </div>
 
         <div className="space-y-2">
-          <label htmlFor="message" className="block uppercase text-xs tracking-wider">
+          <label htmlFor="message" className="block uppercase text-[0.75rem] tracking-wider">
             Message
           </label>
           <textarea
@@ -96,25 +96,25 @@ export default function Contact() {
             placeholder="Tell us about your project..."
           />
           {errors.message && (
-            <p className="text-red-500 text-xs mt-1">{errors.message.message}</p>
+            <p className="text-red-500 text-[0.75rem] mt-1">{errors.message.message}</p>
           )}
         </div>
 
         <button
           type="submit"
           disabled={isSubmitting}
-          className="w-full bg-black text-white py-4 uppercase text-xs tracking-widest hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed mt-8"
+          className="w-full bg-black text-white py-4 uppercase text-[0.75rem] tracking-[0.2em] hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed mt-8"
         >
           {isSubmitting ? "Sending..." : "Send Message"}
         </button>
 
         {submitStatus === "success" && (
-          <p className="text-green-600 text-center text-xs mt-4">
+          <p className="text-green-600 text-center text-[0.75rem] mt-4">
             Message sent successfully. We'll be in touch.
           </p>
         )}
         {submitStatus === "error" && (
-          <p className="text-red-500 text-center text-xs mt-4">
+          <p className="text-red-500 text-center text-[0.75rem] mt-4">
             Something went wrong. Please try again or email us directly.
           </p>
         )}
@@ -122,4 +122,3 @@ export default function Contact() {
     </section>
   );
 }
-
