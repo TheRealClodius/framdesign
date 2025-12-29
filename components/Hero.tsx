@@ -1,25 +1,37 @@
-import Image from "next/image";
+"use client";
+
+import { useEffect, useRef } from "react";
 
 export default function Hero() {
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.play().catch((error) => {
+        console.error("Video autoplay failed:", error);
+      });
+    }
+  }, []);
+
   return (
     <section className="flex flex-col items-center justify-center min-h-[60vh] px-4 py-20 text-center w-full max-w-[120rem] mx-auto">
-      <div className="relative w-[16rem] h-[16rem] mb-8 md:w-[20rem] md:h-[20rem] lg:w-[24rem] lg:h-[24rem] grayscale opacity-90">
-        {/* Placeholder for the Polar Bear image */}
-        <div className="absolute inset-0 flex items-center justify-center bg-gray-100 border border-gray-200 rounded-lg">
-          <span className="text-sm text-gray-400 font-mono">
-            [Polar Bear Image Placeholder]
-            <br />
-            /polar-bear.png
-          </span>
-        </div>
-        {/* Uncomment below when image is available */}
-        {/* <Image
-          src="/polar-bear.png"
-          alt="Polar bear sitting and looking around"
-          fill
-          className="object-contain"
-          priority
-        /> */}
+      <div className="relative w-[16rem] h-[16rem] mb-8 md:w-[20rem] md:h-[20rem] lg:w-[24rem] lg:h-[24rem] bg-white rounded-lg overflow-hidden">
+        <video
+          ref={videoRef}
+          src="/hero-video.mp4"
+          autoPlay
+          loop
+          muted
+          playsInline
+          preload="metadata"
+          className="w-full h-full object-contain grayscale opacity-90"
+          style={{
+            filter: "brightness(1.4) contrast(1.3)",
+          }}
+          onError={(e) => {
+            console.error("Video loading error:", e);
+          }}
+        />
       </div>
       
       <h1 className="text-[4rem] md:text-[6rem] lg:text-[8rem] xl:text-[10rem] leading-none font-serif tracking-tighter">
