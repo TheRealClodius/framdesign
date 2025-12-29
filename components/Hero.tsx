@@ -14,7 +14,7 @@ export default function Hero() {
   }, []);
 
   return (
-    <section className="flex flex-col items-center justify-center min-h-[60vh] px-4 py-20 text-center w-full max-w-[120rem] mx-auto">
+    <section className="flex flex-col items-center justify-center min-h-[60vh] px-4 py-20 text-center w-full max-w-[120rem] mx-auto bg-white">
       <div className="relative w-[16rem] h-[16rem] mb-8 md:w-[20rem] md:h-[20rem] lg:w-[24rem] lg:h-[24rem] bg-white rounded-lg overflow-hidden">
         <video
           ref={videoRef}
