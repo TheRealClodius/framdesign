@@ -21,6 +21,17 @@ export const metadata: Metadata = {
   icons: {
     icon: "/favicon.svg",
   },
+  viewport: {
+    width: "device-width",
+    initialScale: 1,
+    maximumScale: 1,
+    userScalable: false,
+  },
+  themeColor: "#ffffff",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+  },
   openGraph: {
     title: "FRAM DESIGN",
     description: "Building and launching products. iOS apps, AI agents, and innovative solutions.",

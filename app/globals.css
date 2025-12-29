@@ -13,14 +13,29 @@
 }
 
 html {
-  background-color: #ffffff;
+  background-color: #ffffff !important;
+  -webkit-tap-highlight-color: transparent;
 }
 
 body {
-  background: var(--background);
-  background-color: #ffffff;
+  background: var(--background) !important;
+  background-color: #ffffff !important;
   color: var(--foreground);
   font-family: var(--font-mono);
+  /* Prevent iOS Safari from applying dark background */
+  -webkit-background-size: 100% 100%;
+}
+
+/* Prevent iOS Safari video background issues */
+video {
+  background-color: #ffffff !important;
+  -webkit-background-size: cover;
+  background-size: cover;
+}
+
+/* Ensure all containers maintain white background on iOS */
+* {
+  -webkit-tap-highlight-color: transparent;
 }
 
 h1, h2, h3, h4, h5, h6 {

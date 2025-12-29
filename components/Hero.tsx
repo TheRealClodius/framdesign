@@ -27,6 +27,9 @@ export default function Hero() {
           className="w-full h-full object-contain grayscale opacity-90"
           style={{
             filter: "brightness(1.4) contrast(1.3)",
+            backgroundColor: "#ffffff",
+            WebkitBackgroundSize: "cover",
+            backgroundSize: "cover",
           }}
           onError={(e) => {
             console.error("Video loading error:", e);
