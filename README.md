@@ -20,12 +20,20 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
 ## Environment Variables
 
-Create a `.env.local` file with:
+Create a `.env.local` file in the root directory with:
 
 ```bash
+GEMINI_API_KEY=your_gemini_api_key
 RESEND_API_KEY=your_resend_api_key
 CONTACT_EMAIL=your@email.com
 ```
+
+### Getting a Gemini API Key
+
+1. Go to [Google AI Studio](https://makersuite.google.com/app/apikey)
+2. Sign in with your Google account
+3. Click "Create API Key"
+4. Copy the key and add it to your `.env.local` file as `GEMINI_API_KEY`
 
 ## Deployment
 

@@ -44,20 +44,29 @@ export default function ChatInterface() {
       });
 
       if (!response.ok) {
-        throw new Error("Failed to fetch response");
+        const errorData = await response.json().catch(() => ({}));
+        console.error("API Error:", response.status, errorData);
+        
+        // Handle overloaded model error specifically
+        if (response.status === 503 || errorData.error?.toLowerCase().includes("overloaded")) {
+          throw new Error("The AI model is currently overloaded. Please try again in a moment.");
+        }
+        
+        throw new Error(errorData.error || errorData.details || `Failed to fetch response: ${response.status}`);
       }
 
       const data = await response.json();
       
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", content: data.message || "ERROR: COULD NOT GET RESPONSE." }
+        { role: "assistant", content: data.message || data.error || "ERROR: COULD NOT GET RESPONSE." }
       ]);
     } catch (error) {
-      console.error(error);
+      console.error("Chat error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", content: "ERROR: SOMETHING WENT WRONG. PLEASE TRY AGAIN." }
+        { role: "assistant", content: `ERROR: ${errorMessage}. PLEASE TRY AGAIN.` }
       ]);
     } finally {
       setIsLoading(false);
@@ -65,9 +74,9 @@ export default function ChatInterface() {
   };
 
   return (
-    <section className="w-full max-w-[28rem] mx-auto px-4 py-20">
+    <section className="w-full max-w-[28rem] mx-auto px-4 pt-12 pb-9">
       <div className="mb-10 text-center">
-        <p className="text-[0.75rem] font-mono text-gray-500 tracking-wider">AI ASSISTANT</p>
+        <p className="text-[0.75rem] font-mono text-gray-500 tracking-wider">FRAM ASSISTANT</p>
       </div>
 
       <div className="flex flex-col h-[500px] font-mono text-[0.875rem]">
@@ -87,7 +96,7 @@ export default function ChatInterface() {
                 }`}
               >
                 <p className="uppercase text-[0.75rem] text-gray-400 mb-1 tracking-wider">
-                  {message.role === "user" ? "You" : "AI"}
+                  {message.role === "user" ? "You" : "FRAM"}
                 </p>
                 <p className="text-black leading-relaxed">
                   {message.content}
@@ -98,7 +107,7 @@ export default function ChatInterface() {
           {isLoading && (
              <div className="flex justify-start">
                <div className="max-w-[85%] text-left">
-                 <p className="uppercase text-[0.75rem] text-gray-400 mb-1 tracking-wider">AI</p>
+                 <p className="uppercase text-[0.75rem] text-gray-400 mb-1 tracking-wider">FRAM</p>
                  <div className="flex space-x-1 items-center h-6">
                    <div className="w-1.5 h-1.5 bg-gray-300 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
                    <div className="w-1.5 h-1.5 bg-gray-300 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
