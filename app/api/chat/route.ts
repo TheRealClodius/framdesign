@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { GoogleGenAI } from "@google/genai";
-import { GEMINI_SYSTEM_PROMPT } from "@/lib/config";
+import { FRAM_SYSTEM_PROMPT } from "@/lib/config";
 
 // Helper function to retry API calls with exponential backoff
 async function retryWithBackoff<T>(
@@ -72,7 +72,7 @@ export async function POST(request: Request) {
     // Add system instruction as initial context
     history.push({
       role: "user",
-      parts: [{ text: GEMINI_SYSTEM_PROMPT }],
+      parts: [{ text: FRAM_SYSTEM_PROMPT }],
     });
     history.push({
       role: "model",
