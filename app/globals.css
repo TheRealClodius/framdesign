@@ -71,24 +71,19 @@ h1, h2, h3, h4, h5, h6 {
   }
 }
 
-/* iOS Safari only - bottom corner radius on mobile */
+@media (min-width: 769px) {
+  .safe-area-spacer {
+    display: none;
+  }
+}
+
+/* iOS Safari specific: Add bottom corner radius to form container on mobile */
 @supports (-webkit-touch-callout: none) {
   @media (max-width: 768px) {
-    .hero-video-container {
+    .form-container {
       border-bottom-left-radius: 20px;
       border-bottom-right-radius: 20px;
       overflow: hidden;
     }
-    
-    .hero-video-container video {
-      border-bottom-left-radius: 20px;
-      border-bottom-right-radius: 20px;
-    }
-  }
-}
-
-@media (min-width: 769px) {
-  .safe-area-spacer {
-    display: none;
   }
 }
