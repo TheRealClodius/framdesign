@@ -13,6 +13,7 @@
     "@fontsource/google-sans-flex": "^5.2.1",
     "@hookform/resolvers": "^5.2.2",
     "next": "16.1.1",
+    "openai": "^6.15.0",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-hook-form": "^7.69.0",
