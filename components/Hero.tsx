@@ -37,8 +37,13 @@ export default function Hero() {
         />
       </div>
       
-      <div className="relative z-10 flex flex-col items-center justify-center min-h-screen px-4 py-20">
-        <h1 className="text-[4rem] md:text-[6rem] lg:text-[8rem] xl:text-[10rem] leading-none tracking-tighter font-sans-flex text-[#000000]">
+      <div className="relative z-10 flex flex-col items-center justify-center min-h-screen px-4 md:px-4 py-20">
+        <h1 
+          className="leading-none tracking-tighter font-sans-flex text-[#000000] md:text-[6rem] lg:text-[8rem] xl:text-[10rem]"
+          style={{
+            fontSize: 'clamp(4rem, 20vw, 8rem)',
+          }}
+        >
           FRAM
         </h1>
       </div>
