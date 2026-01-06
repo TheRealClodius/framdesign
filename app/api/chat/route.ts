@@ -45,8 +45,13 @@ export async function POST(request: Request) {
 
     const apiKey = process.env.GEMINI_API_KEY;
 
+    // Log for debugging (API key presence, not the key itself)
+    console.log("GEMINI_API_KEY present:", !!apiKey);
+    console.log("GEMINI_API_KEY length:", apiKey ? apiKey.length : 0);
+
     if (!apiKey) {
       // Return a mock response if no API key is configured
+      console.error("GEMINI_API_KEY is missing!");
       return NextResponse.json({
         message: "I AM A DEMO AI ASSISTANT. PLEASE CONFIGURE THE GEMINI_API_KEY ENVIRONMENT VARIABLE TO ENABLE REAL RESPONSES."
       });
@@ -86,13 +91,18 @@ export async function POST(request: Request) {
 
     // Generate response with full conversation history (with retry logic)
     const response = await retryWithBackoff(async () => {
-      return await ai.models.generateContent({
+      console.log("Calling Gemini API with model: gemini-2.5-flash");
+      console.log("History length:", history.length);
+      const result = await ai.models.generateContent({
         model: "gemini-2.5-flash", // Gemini 2.5 Flash: $0.15/1M input tokens, $0.60/1M output tokens
         contents: history,
       });
+      console.log("Gemini API response received");
+      return result;
     });
 
     const text = response.text || "ERROR: NO RESPONSE FROM AI.";
+    console.log("Response text length:", text.length);
 
     return NextResponse.json({
       message: text
@@ -101,12 +111,28 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error("Error in chat route:", error);
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    
+    // Log full error details for debugging
+    console.error("Error details:", {
+      message: errorMessage,
+      stack: errorStack,
+      name: error instanceof Error ? error.name : undefined,
+    });
     
     // Check if it's an overloaded error
     if (errorMessage.toLowerCase().includes("overloaded")) {
       return NextResponse.json(
         { error: "The AI model is currently overloaded. Please try again in a moment." },
         { status: 503 }
+      );
+    }
+    
+    // Check for API key errors
+    if (errorMessage.toLowerCase().includes("api key") || errorMessage.toLowerCase().includes("authentication") || errorMessage.toLowerCase().includes("401") || errorMessage.toLowerCase().includes("403")) {
+      return NextResponse.json(
+        { error: "Invalid API key. Please check your GEMINI_API_KEY environment variable.", details: errorMessage },
+        { status: 401 }
       );
     }
     
