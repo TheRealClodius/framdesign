@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { GoogleGenAI, Type } from "@google/genai";
 import { FRAM_SYSTEM_PROMPT } from "@/lib/config";
-import crypto from "crypto";
 
 // Tool definition for Fram's ignore/timeout capability
 const ignoreUserTool = {
@@ -42,14 +41,21 @@ const MIN_MESSAGES_FOR_CACHE = 3;
  * The hash is stable across messages in the same conversation, only changing
  * when the conversation fundamentally changes (first messages or timeout state)
  */
-function hashConversation(messages: Array<{ role: string; content: string }>, timeoutExpired: boolean): string {
+async function hashConversation(messages: Array<{ role: string; content: string }>, timeoutExpired: boolean): Promise<string> {
   // Create a stable hash based on first few messages and timeout state
   // Note: We don't include messageCount so the hash stays stable as conversation grows
   const key = JSON.stringify({
     firstMessages: messages.slice(0, 3).map(m => ({ role: m.role, content: m.content.substring(0, 100) })),
     timeoutExpired
   });
-  return crypto.createHash('sha256').update(key).digest('hex').substring(0, 16);
+  
+  // Use Web Crypto API for better compatibility across runtimes
+  const encoder = new TextEncoder();
+  const data = encoder.encode(key);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  return hashHex.substring(0, 16);
 }
 
 /**
@@ -69,6 +75,12 @@ async function getSystemPromptCache(ai: GoogleGenAI): Promise<string | null> {
   // Create new cache
   systemPromptCachePromise = (async () => {
     try {
+      // Check if caches API is available
+      if (!ai.caches || typeof ai.caches.create !== 'function') {
+        console.warn("Cache API not available in this SDK version");
+        return null;
+      }
+
       // Build system prompt content with acknowledgment
       const systemContent = [
         {
@@ -99,7 +111,11 @@ async function getSystemPromptCache(ai: GoogleGenAI): Promise<string | null> {
       return cache.name || null;
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error.stack : undefined;
       console.warn("Failed to create system prompt cache (may not be supported for this model):", errorMessage);
+      if (errorStack) {
+        console.warn("Stack trace:", errorStack);
+      }
       // Cache creation failed - likely model doesn't support caching yet
       // Return null to fall back to non-cached approach
       return null;
@@ -138,9 +154,12 @@ async function getConversationCache(
       // Cache expired, remove it
       conversationCacheStore.delete(conversationHash);
       try {
-        await ai.caches.delete({ name: cached.cacheName });
-      } catch {
-        // Ignore deletion errors
+        if (ai.caches && typeof ai.caches.delete === 'function') {
+          await ai.caches.delete({ name: cached.cacheName });
+        }
+      } catch (error) {
+        // Ignore deletion errors (cache may already be expired server-side)
+        console.warn("Failed to delete expired cache:", error instanceof Error ? error.message : String(error));
       }
     }
   }
@@ -148,6 +167,12 @@ async function getConversationCache(
   // Create new cache if we have enough messages
   if (history.length >= MIN_MESSAGES_FOR_CACHE) {
     try {
+      // Check if caches API is available
+      if (!ai.caches || typeof ai.caches.create !== 'function') {
+        console.warn("Cache API not available in this SDK version");
+        return { cacheName: null, newMessages: history };
+      }
+
       // Build cache content: system prompt + conversation history
       const cacheContent = [...history];
 
@@ -173,7 +198,11 @@ async function getConversationCache(
       return { cacheName, newMessages: [] };
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error.stack : undefined;
       console.warn("Failed to create conversation cache:", errorMessage);
+      if (errorStack) {
+        console.warn("Stack trace:", errorStack);
+      }
       // Fall back to non-cached approach
       return { cacheName: null, newMessages: history };
     }
@@ -284,7 +313,7 @@ export async function POST(request: Request) {
     }
 
     // Try to use caching for better performance and cost savings
-    const conversationHash = hashConversation(messages, timeoutExpired);
+    const conversationHash = await hashConversation(messages, timeoutExpired);
     const systemCache = await getSystemPromptCache(ai);
     const { cacheName: conversationCache, newMessages } = await getConversationCache(ai, conversationHash, history);
 
