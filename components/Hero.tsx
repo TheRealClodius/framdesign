@@ -14,8 +14,8 @@ export default function Hero() {
   }, []);
 
   return (
-    <section className="flex flex-col items-center justify-center min-h-[60vh] px-4 py-20 text-center w-full max-w-[120rem] mx-auto bg-white">
-      <div className="relative w-[16rem] h-[16rem] mb-8 md:w-[20rem] md:h-[20rem] lg:w-[24rem] lg:h-[24rem] bg-white rounded-lg overflow-hidden">
+    <section className="flex flex-col items-center justify-center min-h-screen text-center w-full bg-black relative">
+      <div className="absolute inset-0 w-full h-full overflow-hidden">
         <video
           ref={videoRef}
           src="/hero-video.mp4"
@@ -24,10 +24,10 @@ export default function Hero() {
           muted
           playsInline
           preload="metadata"
-          className="w-full h-full object-contain grayscale opacity-90"
+          className="w-full h-full object-cover grayscale opacity-90"
           style={{
             filter: "brightness(1.4) contrast(1.3)",
-            backgroundColor: "#ffffff",
+            backgroundColor: "#000000",
             WebkitBackgroundSize: "cover",
             backgroundSize: "cover",
           }}
@@ -37,13 +37,11 @@ export default function Hero() {
         />
       </div>
       
-      <h1 className="text-[4rem] md:text-[6rem] lg:text-[8rem] xl:text-[10rem] leading-none font-serif tracking-tighter">
-        FRAM.
-      </h1>
-      
-      <p className="mt-6 text-[0.875rem] md:text-[1rem] lg:text-[1.125rem] font-mono text-gray-500 max-w-[28rem]">
-        Building and launching products.
-      </p>
+      <div className="relative z-10 flex flex-col items-center justify-center min-h-screen px-4 py-20">
+        <h1 className="text-[4rem] md:text-[6rem] lg:text-[8rem] xl:text-[10rem] leading-none tracking-tighter font-sans-flex text-[#000000]">
+          FRAM
+        </h1>
+      </div>
     </section>
   );
 }

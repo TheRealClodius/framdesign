@@ -9,6 +9,8 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@fontsource/google-sans-code": "^5.2.3",
+    "@fontsource/google-sans-flex": "^5.2.1",
     "@hookform/resolvers": "^5.2.2",
     "next": "16.1.1",
     "react": "19.2.3",

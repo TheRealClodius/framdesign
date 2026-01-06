@@ -14,14 +14,16 @@ export async function POST(request: Request) {
 
     const resend = new Resend(apiKey);
     const body = await request.json();
-    const { name, email, message } = contactFormSchema.parse(body);
+    const { name, companyName, email, message } = contactFormSchema.parse(body);
+
+    const emailText = `Name: ${name}\n${companyName ? `Company: ${companyName}\n` : ''}Email: ${email}\n\nMessage:\n${message}`;
 
     const data = await resend.emails.send({
       from: "Contact Form <onboarding@resend.dev>",
       to: [process.env.CONTACT_EMAIL || "delivered@resend.dev"],
-      subject: `New message from ${name}`,
+      subject: `New message from ${name}${companyName ? ` (${companyName})` : ''}`,
       replyTo: email,
-      text: `Name: ${name}\nEmail: ${email}\n\nMessage:\n${message}`,
+      text: emailText,
     });
 
     if (data.error) {

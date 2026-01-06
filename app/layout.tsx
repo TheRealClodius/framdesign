@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { Cormorant_Garamond, JetBrains_Mono } from "next/font/google";
+import "@fontsource/google-sans-flex";
+import "@fontsource/google-sans-code";
 import "./globals.css";
 
 const cormorant = Cormorant_Garamond({
@@ -27,7 +29,7 @@ export const metadata: Metadata = {
     maximumScale: 1,
     userScalable: false,
   },
-  themeColor: "#ffffff",
+  themeColor: "#000000",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
@@ -52,9 +54,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="bg-white">
+    <html lang="en" className="bg-black">
       <body
-        className={`${cormorant.variable} ${jetbrainsMono.variable} antialiased bg-white text-black selection:bg-black selection:text-white`}
+        className={`${cormorant.variable} ${jetbrainsMono.variable} antialiased bg-black text-white selection:bg-white selection:text-black`}
       >
         {children}
       </body>
