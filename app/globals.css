@@ -54,6 +54,25 @@ h1, h2, h3, h4, h5, h6 {
 /* Mobile safe area support */
 @media (max-width: 768px) {
   .hero-safe-area {
-    min-height: calc(100vh + env(safe-area-inset-bottom));
+    min-height: 100vh;
+    min-height: 100svh;
+  }
+  
+  .hero-video-container {
+    height: 100% !important;
+  }
+  
+  .safe-area-spacer {
+    display: block !important;
+    min-height: 60px !important;
+    height: env(safe-area-inset-bottom, 60px) !important;
+    width: 100% !important;
+    background-color: #000000 !important;
+  }
+}
+
+@media (min-width: 769px) {
+  .safe-area-spacer {
+    display: none;
   }
 }
