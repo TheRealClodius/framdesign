@@ -85,5 +85,23 @@ h1, h2, h3, h4, h5, h6 {
       border-bottom-right-radius: 20px;
       overflow: hidden;
     }
+    
+    /* Prevent iOS Safari auto-zoom on input focus by setting font-size to 16px minimum */
+    input[type="text"],
+    input[type="email"],
+    input[type="tel"],
+    input[type="number"],
+    input[type="search"],
+    input[type="url"],
+    textarea,
+    select {
+      font-size: 16px !important;
+    }
+    
+    /* Keep placeholder text size consistent */
+    input::placeholder,
+    textarea::placeholder {
+      font-size: 16px !important;
+    }
   }
 }
