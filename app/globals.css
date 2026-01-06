@@ -87,12 +87,7 @@ h1, h2, h3, h4, h5, h6 {
     }
     
     /* Prevent iOS Safari auto-zoom on input focus by setting font-size to 16px minimum */
-    input[type="text"],
-    input[type="email"],
-    input[type="tel"],
-    input[type="number"],
-    input[type="search"],
-    input[type="url"],
+    input,
     textarea,
     select {
       font-size: 16px !important;
