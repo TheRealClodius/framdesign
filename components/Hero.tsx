@@ -14,7 +14,7 @@ export default function Hero() {
   }, []);
 
   return (
-    <section className="flex flex-col items-center justify-center min-h-screen text-center w-full bg-black relative">
+    <section className="flex flex-col items-center justify-center min-h-screen md:min-h-screen hero-safe-area text-center w-full bg-black relative">
       <div className="absolute inset-0 w-full h-full overflow-hidden">
         <video
           ref={videoRef}
@@ -37,7 +37,7 @@ export default function Hero() {
         />
       </div>
       
-      <div className="relative z-10 flex flex-col items-center justify-center min-h-screen px-4 md:px-4 py-20">
+      <div className="relative z-10 flex flex-col items-center justify-center min-h-screen md:min-h-screen hero-safe-area px-4 md:px-4 py-20">
         <h1 
           className="leading-none tracking-tighter font-sans-flex text-[#000000] md:text-[6rem] lg:text-[8rem] xl:text-[10rem]"
           style={{

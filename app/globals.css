@@ -50,3 +50,10 @@ h1, h2, h3, h4, h5, h6 {
 .font-sans-code {
   font-family: "Google Sans Code", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 }
+
+/* Mobile safe area support */
+@media (max-width: 768px) {
+  .hero-safe-area {
+    min-height: calc(100vh + env(safe-area-inset-bottom));
+  }
+}
