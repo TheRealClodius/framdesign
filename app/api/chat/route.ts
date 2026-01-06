@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { GoogleGenAI, Type } from "@google/genai";
 import { FRAM_SYSTEM_PROMPT } from "@/lib/config";
+import crypto from "crypto";
 
 // Tool definition for Fram's ignore/timeout capability
 const ignoreUserTool = {
@@ -21,6 +22,166 @@ const ignoreUserTool = {
     required: ["duration_seconds", "farewell_message"]
   }
 };
+
+// In-memory cache store for conversation caches
+// Key: conversation hash, Value: { cacheName: string, cachedMessageCount: number, createdAt: number }
+const conversationCacheStore = new Map<string, { cacheName: string; cachedMessageCount: number; createdAt: number }>();
+
+// Shared system prompt cache (created once, reused)
+let systemPromptCache: string | null = null;
+let systemPromptCachePromise: Promise<string | null> | null = null;
+
+// Cache TTL: 1 hour (3600 seconds)
+const CACHE_TTL_SECONDS = 3600;
+
+// Minimum messages before creating a conversation cache (to ensure we meet token minimums)
+const MIN_MESSAGES_FOR_CACHE = 3;
+
+/**
+ * Creates a hash of the conversation history to identify unique conversations
+ * The hash is stable across messages in the same conversation, only changing
+ * when the conversation fundamentally changes (first messages or timeout state)
+ */
+function hashConversation(messages: Array<{ role: string; content: string }>, timeoutExpired: boolean): string {
+  // Create a stable hash based on first few messages and timeout state
+  // Note: We don't include messageCount so the hash stays stable as conversation grows
+  const key = JSON.stringify({
+    firstMessages: messages.slice(0, 3).map(m => ({ role: m.role, content: m.content.substring(0, 100) })),
+    timeoutExpired
+  });
+  return crypto.createHash('sha256').update(key).digest('hex').substring(0, 16);
+}
+
+/**
+ * Creates or retrieves the system prompt cache
+ */
+async function getSystemPromptCache(ai: GoogleGenAI): Promise<string | null> {
+  // If cache creation is in progress, wait for it
+  if (systemPromptCachePromise) {
+    return systemPromptCachePromise;
+  }
+
+  // If cache already exists, return it
+  if (systemPromptCache) {
+    return systemPromptCache;
+  }
+
+  // Create new cache
+  systemPromptCachePromise = (async () => {
+    try {
+      // Build system prompt content with acknowledgment
+      const systemContent = [
+        {
+          role: "user" as const,
+          parts: [{ text: FRAM_SYSTEM_PROMPT }],
+        },
+        {
+          role: "model" as const,
+          parts: [{ text: "UNDERSTOOD." }],
+        }
+      ];
+
+      // Check token count first (optional, but good practice)
+      // Note: gemini-3-flash-preview might not support caching yet
+      // We'll try to create cache, but fall back gracefully if it fails
+      const cache = await ai.caches.create({
+        model: "gemini-3-flash-preview", // Try with preview model
+        config: {
+          systemInstruction: FRAM_SYSTEM_PROMPT,
+          contents: systemContent,
+          ttl: `${CACHE_TTL_SECONDS}s`,
+          displayName: "fram-system-prompt"
+        }
+      });
+
+      systemPromptCache = cache.name || null;
+      console.log("System prompt cache created:", cache.name);
+      return cache.name || null;
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.warn("Failed to create system prompt cache (may not be supported for this model):", errorMessage);
+      // Cache creation failed - likely model doesn't support caching yet
+      // Return null to fall back to non-cached approach
+      return null;
+    } finally {
+      systemPromptCachePromise = null;
+    }
+  })();
+
+  return systemPromptCachePromise;
+}
+
+/**
+ * Creates or retrieves a conversation cache for the given history
+ */
+async function getConversationCache(
+  ai: GoogleGenAI,
+  conversationHash: string,
+  history: Array<{ role: string; parts: Array<{ text: string }> }>
+): Promise<{ cacheName: string | null; newMessages: Array<{ role: string; parts: Array<{ text: string }> }> }> {
+  const cached = conversationCacheStore.get(conversationHash);
+
+  // Check if we have a valid cache
+  if (cached) {
+    const age = Date.now() - cached.createdAt;
+    const ageSeconds = age / 1000;
+    
+    // If cache is still valid and we have new messages
+    if (ageSeconds < CACHE_TTL_SECONDS && cached.cachedMessageCount < history.length) {
+      // Return only new messages that aren't cached
+      const newMessages = history.slice(cached.cachedMessageCount);
+      return { cacheName: cached.cacheName, newMessages };
+    } else if (ageSeconds < CACHE_TTL_SECONDS) {
+      // Cache is valid and up to date
+      return { cacheName: cached.cacheName, newMessages: [] };
+    } else {
+      // Cache expired, remove it
+      conversationCacheStore.delete(conversationHash);
+      try {
+        await ai.caches.delete({ name: cached.cacheName });
+      } catch {
+        // Ignore deletion errors
+      }
+    }
+  }
+
+  // Create new cache if we have enough messages
+  if (history.length >= MIN_MESSAGES_FOR_CACHE) {
+    try {
+      // Build cache content: system prompt + conversation history
+      const cacheContent = [...history];
+
+      const cache = await ai.caches.create({
+        model: "gemini-3-flash-preview",
+        config: {
+          systemInstruction: FRAM_SYSTEM_PROMPT,
+          contents: cacheContent,
+          ttl: `${CACHE_TTL_SECONDS}s`,
+          displayName: `fram-conversation-${conversationHash}`
+        }
+      });
+
+      // Store cache reference
+      const cacheName = cache.name || null;
+      conversationCacheStore.set(conversationHash, {
+        cacheName: cacheName || "",
+        cachedMessageCount: history.length,
+        createdAt: Date.now()
+      });
+
+      console.log(`Conversation cache created: ${cacheName} (${history.length} messages)`);
+      return { cacheName, newMessages: [] };
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.warn("Failed to create conversation cache:", errorMessage);
+      // Fall back to non-cached approach
+      return { cacheName: null, newMessages: history };
+    }
+  }
+
+  // Not enough messages yet, return full history
+  return { cacheName: null, newMessages: history };
+}
 
 // Helper function to retry API calls with exponential backoff
 async function retryWithBackoff<T>(
@@ -86,7 +247,7 @@ export async function POST(request: Request) {
 
     const ai = new GoogleGenAI({ apiKey });
 
-    // Build conversation history with system prompt
+    // Build conversation history in Gemini format
     const history: Array<{ role: string; parts: Array<{ text: string }> }> = [];
     
     // Add system instruction as initial context
@@ -122,17 +283,71 @@ export async function POST(request: Request) {
       }
     }
 
-    // Generate response with full conversation history (with retry logic)
-    const response = await retryWithBackoff(async () => {
-      console.log("Calling Gemini API with model: gemini-1.5-flash");
-      console.log("History length:", history.length);
-      const result = await ai.models.generateContent({
-        model: "gemini-1.5-flash", // Gemini 1.5 Flash
-        contents: history,
-        config: {
-          tools: [{ functionDeclarations: [ignoreUserTool] }]
+    // Try to use caching for better performance and cost savings
+    const conversationHash = hashConversation(messages, timeoutExpired);
+    const systemCache = await getSystemPromptCache(ai);
+    const { cacheName: conversationCache, newMessages } = await getConversationCache(ai, conversationHash, history);
+
+    // Determine what content to send and whether to use cache
+    let contentsToSend: Array<{ role: string; parts: Array<{ text: string }> }>;
+    let cachedContent: string | undefined;
+
+    if (conversationCache) {
+      // Use conversation cache - only send new messages
+      // If no new messages but cache exists, send at least the current user message
+      if (newMessages.length > 0) {
+        contentsToSend = newMessages;
+      } else {
+        // Cache is up to date, but we still need to send the current user message
+        const lastMessage = messages[messages.length - 1];
+        if (lastMessage && lastMessage.role === "user") {
+          contentsToSend = [{
+            role: "user" as const,
+            parts: [{ text: lastMessage.content }],
+          }];
+        } else {
+          // Fallback: send empty array (shouldn't happen in normal flow)
+          contentsToSend = [];
         }
+      }
+      cachedContent = conversationCache;
+      console.log(`Using conversation cache: ${conversationCache}, sending ${contentsToSend.length} new messages`);
+    } else if (systemCache && history.length < MIN_MESSAGES_FOR_CACHE) {
+      // Use system prompt cache only - send full conversation history
+      contentsToSend = history;
+      cachedContent = systemCache;
+      console.log(`Using system prompt cache: ${systemCache}, sending full history (${history.length} messages)`);
+    } else {
+      // No cache available - send full history
+      contentsToSend = history;
+      cachedContent = undefined;
+      console.log(`No cache available, sending full history (${history.length} messages)`);
+    }
+
+    // Generate response with cached content if available (with retry logic)
+    const response = await retryWithBackoff(async () => {
+      console.log("Calling Gemini API with model: gemini-3-flash-preview");
+      console.log("Contents to send:", contentsToSend.length, "messages");
+      console.log("Using cached content:", cachedContent || "none");
+
+      const config: {
+        tools: Array<{ functionDeclarations: Array<typeof ignoreUserTool> }>;
+        cachedContent?: string;
+      } = {
+        tools: [{ functionDeclarations: [ignoreUserTool] }]
+      };
+
+      // Add cached content reference if available
+      if (cachedContent) {
+        config.cachedContent = cachedContent;
+      }
+
+      const result = await ai.models.generateContent({
+        model: "gemini-3-flash-preview", // Gemini 3 Flash Preview
+        contents: contentsToSend,
+        config
       });
+      
       console.log("Gemini API response received");
       console.log("Response structure:", JSON.stringify(Object.keys(result || {})));
       return result;
