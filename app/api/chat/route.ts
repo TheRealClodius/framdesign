@@ -310,44 +310,63 @@ export async function POST(request: Request) {
     }
 
     // Try to use caching for better performance and cost savings
-    const conversationHash = hashConversation(messages, timeoutExpired);
-    const systemCache = await getSystemPromptCache(ai);
-    const { cacheName: conversationCache, newMessages } = await getConversationCache(ai, conversationHash, history);
-
-    // Determine what content to send and whether to use cache
+    // Wrap in try-catch to ensure cache failures don't break the request
     let contentsToSend: Array<{ role: string; parts: Array<{ text: string }> }>;
     let cachedContent: string | undefined;
 
-    if (conversationCache) {
-      // Use conversation cache - only send new messages
-      // If no new messages but cache exists, send at least the current user message
-      if (newMessages.length > 0) {
-        contentsToSend = newMessages;
-      } else {
-        // Cache is up to date, but we still need to send the current user message
-        const lastMessage = messages[messages.length - 1];
-        if (lastMessage && lastMessage.role === "user") {
-          contentsToSend = [{
-            role: "user" as const,
-            parts: [{ text: lastMessage.content }],
-          }];
+    // Temporarily disable caching to debug the 500 error
+    // TODO: Re-enable caching once we verify the API supports it
+    const ENABLE_CACHING = false;
+
+    if (ENABLE_CACHING) {
+      try {
+        const conversationHash = hashConversation(messages, timeoutExpired);
+        const systemCache = await getSystemPromptCache(ai);
+        const { cacheName: conversationCache, newMessages } = await getConversationCache(ai, conversationHash, history);
+
+        // Determine what content to send and whether to use cache
+        if (conversationCache) {
+          // Use conversation cache - only send new messages
+          // If no new messages but cache exists, send at least the current user message
+          if (newMessages.length > 0) {
+            contentsToSend = newMessages;
+          } else {
+            // Cache is up to date, but we still need to send the current user message
+            const lastMessage = messages[messages.length - 1];
+            if (lastMessage && lastMessage.role === "user") {
+              contentsToSend = [{
+                role: "user" as const,
+                parts: [{ text: lastMessage.content }],
+              }];
+            } else {
+              // Fallback: send empty array (shouldn't happen in normal flow)
+              contentsToSend = [];
+            }
+          }
+          cachedContent = conversationCache;
+          console.log(`Using conversation cache: ${conversationCache}, sending ${contentsToSend.length} new messages`);
+        } else if (systemCache && history.length < MIN_MESSAGES_FOR_CACHE) {
+          // Use system prompt cache only - send full conversation history
+          contentsToSend = history;
+          cachedContent = systemCache;
+          console.log(`Using system prompt cache: ${systemCache}, sending full history (${history.length} messages)`);
         } else {
-          // Fallback: send empty array (shouldn't happen in normal flow)
-          contentsToSend = [];
+          // No cache available - send full history
+          contentsToSend = history;
+          cachedContent = undefined;
+          console.log(`No cache available, sending full history (${history.length} messages)`);
         }
+      } catch (cacheError) {
+        // If cache operations fail, fall back to non-cached approach
+        console.warn("Cache operations failed, falling back to non-cached approach:", cacheError);
+        contentsToSend = history;
+        cachedContent = undefined;
       }
-      cachedContent = conversationCache;
-      console.log(`Using conversation cache: ${conversationCache}, sending ${contentsToSend.length} new messages`);
-    } else if (systemCache && history.length < MIN_MESSAGES_FOR_CACHE) {
-      // Use system prompt cache only - send full conversation history
-      contentsToSend = history;
-      cachedContent = systemCache;
-      console.log(`Using system prompt cache: ${systemCache}, sending full history (${history.length} messages)`);
     } else {
-      // No cache available - send full history
+      // Caching disabled - send full history
       contentsToSend = history;
       cachedContent = undefined;
-      console.log(`No cache available, sending full history (${history.length} messages)`);
+      console.log("Caching disabled, sending full history");
     }
 
     // Generate response with cached content if available (with retry logic)
@@ -364,8 +383,14 @@ export async function POST(request: Request) {
       };
 
       // Add cached content reference if available
-      if (cachedContent) {
-        config.cachedContent = cachedContent;
+      // Only add if cachedContent is truthy and not empty
+      if (cachedContent && cachedContent.trim()) {
+        try {
+          config.cachedContent = cachedContent;
+        } catch (e) {
+          console.warn("Failed to set cachedContent in config:", e);
+          // Continue without cache
+        }
       }
 
       const result = await ai.models.generateContent({
@@ -425,27 +450,42 @@ export async function POST(request: Request) {
       message: errorMessage,
       stack: errorStack,
       name: error instanceof Error ? error.name : undefined,
+      error: String(error)
     });
     
-    // Check if it's an overloaded error
-    if (errorMessage.toLowerCase().includes("overloaded")) {
+    // Ensure we always return a valid JSON response
+    try {
+      // Check if it's an overloaded error
+      if (errorMessage.toLowerCase().includes("overloaded")) {
+        return NextResponse.json(
+          { error: "The AI model is currently overloaded. Please try again in a moment." },
+          { status: 503 }
+        );
+      }
+      
+      // Check for API key errors
+      if (errorMessage.toLowerCase().includes("api key") || errorMessage.toLowerCase().includes("authentication") || errorMessage.toLowerCase().includes("401") || errorMessage.toLowerCase().includes("403")) {
+        return NextResponse.json(
+          { error: "Invalid API key. Please check your GEMINI_API_KEY environment variable.", details: errorMessage },
+          { status: 401 }
+        );
+      }
+      
+      // Return error with details
       return NextResponse.json(
-        { error: "The AI model is currently overloaded. Please try again in a moment." },
-        { status: 503 }
+        { error: "Internal Server Error", details: errorMessage },
+        { status: 500 }
+      );
+    } catch (jsonError) {
+      // If JSON serialization fails, return a simple error
+      console.error("Failed to serialize error response:", jsonError);
+      return new NextResponse(
+        JSON.stringify({ error: "Internal Server Error", details: "An unexpected error occurred" }),
+        { 
+          status: 500,
+          headers: { "Content-Type": "application/json" }
+        }
       );
     }
-    
-    // Check for API key errors
-    if (errorMessage.toLowerCase().includes("api key") || errorMessage.toLowerCase().includes("authentication") || errorMessage.toLowerCase().includes("401") || errorMessage.toLowerCase().includes("403")) {
-      return NextResponse.json(
-        { error: "Invalid API key. Please check your GEMINI_API_KEY environment variable.", details: errorMessage },
-        { status: 401 }
-      );
-    }
-    
-    return NextResponse.json(
-      { error: "Internal Server Error", details: errorMessage },
-      { status: 500 }
-    );
   }
 }
