@@ -1,6 +1,26 @@
 import { NextResponse } from "next/server";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 import { FRAM_SYSTEM_PROMPT } from "@/lib/config";
+
+// Tool definition for Fram's ignore/timeout capability
+const ignoreUserTool = {
+  name: "ignore_user",
+  description: "Use this when a user is rude, disrespectful, abusive, or crosses a line. This will block the user from sending messages for the specified duration. Use this when words alone are not enough.",
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      duration_seconds: {
+        type: Type.NUMBER,
+        description: "How long to ignore the user in seconds. Use 30-60 for mild rudeness, 300-600 for moderate disrespect, 3600 for serious insults, up to 86400 (24 hours) for extreme abuse."
+      },
+      farewell_message: {
+        type: Type.STRING,
+        description: "The final message to deliver before going silent. Should be firm and direct, not petty."
+      }
+    },
+    required: ["duration_seconds", "farewell_message"]
+  }
+};
 
 // Helper function to retry API calls with exponential backoff
 async function retryWithBackoff<T>(
@@ -41,7 +61,7 @@ async function retryWithBackoff<T>(
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { messages } = body;
+    const { messages, timeoutExpired } = body;
 
     const apiKey = process.env.GEMINI_API_KEY;
 
@@ -79,6 +99,19 @@ export async function POST(request: Request) {
       parts: [{ text: "UNDERSTOOD." }],
     });
 
+    // If a timeout just expired, add context about it BEFORE the conversation history
+    // This ensures FRAM understands old offenses are "paid for"
+    if (timeoutExpired) {
+      history.push({
+        role: "user",
+        parts: [{ text: "IMPORTANT CONTEXT: A TIMEOUT HAS JUST EXPIRED. THE USER HAS SERVED THEIR TIME FOR PREVIOUS OFFENSES. OLD MESSAGES IN THE CONVERSATION HISTORY THAT LED TO THE TIMEOUT ARE CONSIDERED RESOLVED. ONLY EVALUATE THE USER BASED ON THEIR CURRENT AND RECENT BEHAVIOR AFTER THIS POINT. GIVE THEM A FRESH START UNLESS THEY COMMIT NEW OFFENSES." }],
+      });
+      history.push({
+        role: "model",
+        parts: [{ text: "ACKNOWLEDGED. TIMEOUT EXPIRED. EVALUATING ONLY CURRENT BEHAVIOR." }],
+      });
+    }
+
     // Convert previous messages to Gemini format
     for (const msg of messages) {
       if (msg.content && msg.content.trim()) {
@@ -91,16 +124,38 @@ export async function POST(request: Request) {
 
     // Generate response with full conversation history (with retry logic)
     const response = await retryWithBackoff(async () => {
-      console.log("Calling Gemini API with model: gemini-2.5-flash");
+      console.log("Calling Gemini API with model: gemini-1.5-flash");
       console.log("History length:", history.length);
       const result = await ai.models.generateContent({
-        model: "gemini-2.5-flash", // Gemini 2.5 Flash: $0.15/1M input tokens, $0.60/1M output tokens
+        model: "gemini-1.5-flash", // Gemini 1.5 Flash
         contents: history,
+        config: {
+          tools: [{ functionDeclarations: [ignoreUserTool] }]
+        }
       });
       console.log("Gemini API response received");
       console.log("Response structure:", JSON.stringify(Object.keys(result || {})));
       return result;
     });
+
+    // Check if Fram decided to use the ignore_user tool
+    const functionCall = response.candidates?.[0]?.content?.parts?.[0]?.functionCall;
+    
+    if (functionCall && functionCall.name === "ignore_user") {
+      const args = functionCall.args as { duration_seconds: number; farewell_message: string };
+      const durationSeconds = args.duration_seconds;
+      const farewellMessage = args.farewell_message;
+      
+      console.log("Fram used ignore_user tool:", { durationSeconds, farewellMessage });
+      
+      return NextResponse.json({
+        message: farewellMessage,
+        timeout: {
+          duration: durationSeconds,
+          until: Date.now() + (durationSeconds * 1000)
+        }
+      });
+    }
 
     // Try to access text property - check different possible structures
     let text: string;
