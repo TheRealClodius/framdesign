@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { GoogleGenAI, Type } from "@google/genai";
 import { FRAM_SYSTEM_PROMPT } from "@/lib/config";
+import { createHash } from "crypto";
 
 // Tool definition for Fram's ignore/timeout capability
 const ignoreUserTool = {
@@ -41,7 +42,7 @@ const MIN_MESSAGES_FOR_CACHE = 3;
  * The hash is stable across messages in the same conversation, only changing
  * when the conversation fundamentally changes (first messages or timeout state)
  */
-async function hashConversation(messages: Array<{ role: string; content: string }>, timeoutExpired: boolean): Promise<string> {
+function hashConversation(messages: Array<{ role: string; content: string }>, timeoutExpired: boolean): string {
   // Create a stable hash based on first few messages and timeout state
   // Note: We don't include messageCount so the hash stays stable as conversation grows
   const key = JSON.stringify({
@@ -49,13 +50,9 @@ async function hashConversation(messages: Array<{ role: string; content: string 
     timeoutExpired
   });
   
-  // Use Web Crypto API for better compatibility across runtimes
-  const encoder = new TextEncoder();
-  const data = encoder.encode(key);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-  return hashHex.substring(0, 16);
+  // Use Node.js crypto module (Next.js API routes run in Node.js runtime by default)
+  const hash = createHash('sha256').update(key).digest('hex');
+  return hash.substring(0, 16);
 }
 
 /**
@@ -313,7 +310,7 @@ export async function POST(request: Request) {
     }
 
     // Try to use caching for better performance and cost savings
-    const conversationHash = await hashConversation(messages, timeoutExpired);
+    const conversationHash = hashConversation(messages, timeoutExpired);
     const systemCache = await getSystemPromptCache(ai);
     const { cacheName: conversationCache, newMessages } = await getConversationCache(ai, conversationHash, history);
 
