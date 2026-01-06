@@ -98,10 +98,21 @@ export async function POST(request: Request) {
         contents: history,
       });
       console.log("Gemini API response received");
+      console.log("Response structure:", JSON.stringify(Object.keys(result || {})));
       return result;
     });
 
-    const text = response.text || "ERROR: NO RESPONSE FROM AI.";
+    // Try to access text property - check different possible structures
+    let text: string;
+    if (response.text) {
+      text = response.text;
+    } else if (response.candidates && response.candidates[0]?.content?.parts?.[0]?.text) {
+      text = response.candidates[0].content.parts[0].text;
+    } else {
+      console.error("Unexpected response structure:", JSON.stringify(response, null, 2));
+      throw new Error("Unable to extract text from API response");
+    }
+    
     console.log("Response text length:", text.length);
 
     return NextResponse.json({
