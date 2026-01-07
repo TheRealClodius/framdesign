@@ -1,40 +1,121 @@
 # FRAM DESIGN
 
-Landing page for FRAM DESIGN.SRL-D - Building and launching products.
+Building and launching products. iOS apps, AI agents, and innovative solutions.
 
 ## Getting Started
 
-First, install dependencies:
+### Prerequisites
 
-```bash
-npm install
-```
+- Node.js 18+ 
+- npm or yarn
 
-Then, run the development server:
+### Installation
+
+1. Clone the repository
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+
+3. Set up environment variables:
+   ```bash
+   cp .env.example .env.local
+   ```
+
+4. Configure your environment variables in `.env.local`:
+   - `NEXT_PUBLIC_GA_MEASUREMENT_ID`: Your Google Analytics 4 Measurement ID
+   - `RESEND_API_KEY`: Your Resend API key for email functionality
+   - `GOOGLE_GENAI_API_KEY`: Google Generative AI API key
+   - `OPENAI_API_KEY`: OpenAI API key
+
+### Development
+
+Run the development server:
 
 ```bash
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
 
-## Environment Variables
-
-Create a `.env.local` file in the root directory with:
+### Production Build
 
 ```bash
-GEMINI_API_KEY=your_gemini_api_key
-RESEND_API_KEY=your_resend_api_key
-CONTACT_EMAIL=your@email.com
+npm run build
+npm start
 ```
 
-### Getting a Gemini API Key
+## Analytics Setup
 
-1. Go to [Google AI Studio](https://makersuite.google.com/app/apikey)
-2. Sign in with your Google account
-3. Click "Create API Key"
-4. Copy the key and add it to your `.env.local` file as `GEMINI_API_KEY`
+This project uses Google Analytics 4 (GA4) to track website visitors and user behavior.
 
-## Deployment
+### Setting Up Google Analytics 4
 
-Deploy to Vercel or your preferred hosting platform.
+1. **Create a Google Analytics Account** (if you don't have one):
+   - Go to [https://analytics.google.com/](https://analytics.google.com/)
+   - Sign in with your Google account
+   - Click "Start measuring"
+
+2. **Create a GA4 Property**:
+   - Enter your account name
+   - Configure account settings
+   - Create a property (choose "Web" as platform)
+   - Enter your website details
+
+3. **Get Your Measurement ID**:
+   - After creating the property, you'll see your Measurement ID (format: `G-XXXXXXXXXX`)
+   - Copy this ID
+
+4. **Add to Your Environment**:
+   - Add the Measurement ID to your `.env.local` file:
+     ```
+     NEXT_PUBLIC_GA_MEASUREMENT_ID=G-XXXXXXXXXX
+     ```
+   - Restart your development server
+
+5. **Verify Installation**:
+   - Visit your website
+   - Open Google Analytics
+   - Go to Reports → Realtime
+   - You should see your visit in real-time
+
+### What Analytics Tracks
+
+- **Page Views**: Every page visited on your site
+- **User Sessions**: Unique visitor sessions
+- **Traffic Sources**: Where visitors come from (direct, search, social, etc.)
+- **User Demographics**: Location, device type, browser, etc.
+- **Engagement Metrics**: Time on page, bounce rate, etc.
+- **Custom Events**: Any custom events you configure
+
+### Viewing Daily Visitors
+
+To view daily visitor statistics:
+
+1. Go to [Google Analytics](https://analytics.google.com/)
+2. Select your property
+3. Navigate to **Reports → Life Cycle → Acquisition → Traffic acquisition**
+4. Or go to **Reports → Realtime** for live visitor data
+5. Use the date picker to select custom date ranges
+6. Export data as needed (CSV, PDF, Google Sheets)
+
+### Privacy Considerations
+
+- GA4 is GDPR compliant when configured correctly
+- Consider adding a cookie consent banner for EU visitors
+- You can enable IP anonymization in GA4 settings
+- Review Google's data processing terms
+
+## Tech Stack
+
+- **Framework**: Next.js 16
+- **Language**: TypeScript
+- **Styling**: Tailwind CSS 4
+- **Analytics**: Google Analytics 4
+- **AI**: Google Generative AI, OpenAI
+- **Email**: Resend
+- **Diagrams**: Mermaid
+
+## License
+
+Private repository - All rights reserved.

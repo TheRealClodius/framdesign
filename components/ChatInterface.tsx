@@ -1,12 +1,12 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import MarkdownWithMermaid from "./MarkdownWithMermaid";
 
 type Message = {
   role: "user" | "assistant";
   content: string;
+  streaming?: boolean;
 };
 
 const TIMEOUT_STORAGE_KEY = "fram_timeout_until";
@@ -33,7 +33,10 @@ export default function ChatInterface() {
 
   const scrollToBottom = () => {
     if (messagesContainerRef.current) {
-      messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+      messagesContainerRef.current.scrollTo({
+        top: messagesContainerRef.current.scrollHeight,
+        behavior: 'smooth'
+      });
     }
   };
 
@@ -122,26 +125,180 @@ export default function ChatInterface() {
         throw new Error(errorData.error || errorData.details || `Failed to fetch response: ${response.status}`);
       }
 
-      const data = await response.json();
+      // Check if response is streaming or JSON
+      const contentType = response.headers.get('Content-Type');
       
-      // Check if Fram decided to timeout the user
-      if (data.timeout) {
-        const { until } = data.timeout;
-        localStorage.setItem(TIMEOUT_STORAGE_KEY, until.toString());
-        setTimeoutUntil(until);
-        setWasBlocked(true);
-      } else if (expired) {
-        // Timeout expired and user sent a message - reset the flag
-        setWasBlocked(false);
+      if (contentType?.includes('text/plain')) {
+        // Streaming response - create placeholder message with streaming flag
+        setMessages((prev) => [...prev, { role: "assistant", content: "", streaming: true }]);
+        
+        const reader = response.body?.getReader();
+        const decoder = new TextDecoder();
+        
+        if (!reader) {
+          throw new Error("No response body");
+        }
+        
+        let firstChunk = true;
+        let buffer = "";
+        let lastUpdateTime = Date.now();
+        let lastChunkTime = Date.now();
+        const UPDATE_INTERVAL = 50; // Update UI every 50ms to reduce re-renders for long streams
+        const STREAM_TIMEOUT = 60000; // 60 second timeout for streams
+        const CHUNK_TIMEOUT = 30000; // 30 second timeout between chunks
+        
+        // Function to flush buffer to state
+        const flushBuffer = () => {
+          if (buffer) {
+            const contentToAdd = buffer;
+            buffer = "";
+            setMessages((prev) => {
+              const updated = [...prev];
+              const lastIndex = updated.length - 1;
+              // Create a NEW object to trigger React re-render
+              updated[lastIndex] = {
+                ...updated[lastIndex],
+                content: updated[lastIndex].content + contentToAdd,
+                streaming: true,
+              };
+              return updated;
+            });
+            scrollToBottom();
+          }
+        };
+        
+        // Set up timeout to detect hanging streams
+        const streamStartTime = Date.now();
+        const timeoutId = setTimeout(() => {
+          console.error("Stream timeout: No response received within", STREAM_TIMEOUT, "ms");
+          reader.cancel();
+          setMessages((prev) => {
+            const updated = [...prev];
+            const lastIndex = updated.length - 1;
+            const currentContent = updated[lastIndex].content;
+            const newContent = currentContent.trim() === ""
+              ? "ERROR: Stream timeout. The agent did not respond in time. Please try again."
+              : currentContent + "\n\n[Stream timed out - response may be incomplete]";
+            updated[lastIndex] = {
+              ...updated[lastIndex],
+              content: newContent,
+              streaming: false,
+            };
+            return updated;
+          });
+          setIsLoading(false);
+        }, STREAM_TIMEOUT);
+        
+        try {
+          while (true) {
+            // Check for chunk timeout (stream might be hanging)
+            const now = Date.now();
+            if (now - lastChunkTime > CHUNK_TIMEOUT) {
+              console.warn("Stream appears to be hanging - no chunks received for", CHUNK_TIMEOUT, "ms");
+              // Don't cancel yet, but log a warning
+            }
+            
+            const { done, value } = await reader.read();
+            
+            if (done) {
+              clearTimeout(timeoutId);
+              // Flush any remaining buffer before finishing
+              flushBuffer();
+              console.log("Stream completed successfully. Total time:", Date.now() - streamStartTime, "ms");
+              break;
+            }
+            
+            // Reset chunk timeout
+            lastChunkTime = Date.now();
+            
+            const chunk = decoder.decode(value, { stream: true });
+            
+            if (!chunk) {
+              console.warn("Received empty chunk");
+              continue;
+            }
+            
+            // Hide loading dots on first chunk
+            if (firstChunk) {
+              setIsLoading(false);
+              firstChunk = false;
+              console.log("First chunk received after", Date.now() - streamStartTime, "ms");
+            }
+            
+            // Accumulate chunks in buffer
+            buffer += chunk;
+            
+            // Throttle updates for long streams - only update UI every UPDATE_INTERVAL ms
+            if (now - lastUpdateTime >= UPDATE_INTERVAL) {
+              flushBuffer();
+              lastUpdateTime = now;
+            }
+          }
+          
+          // Ensure final buffer is flushed
+          flushBuffer();
+          
+          // Mark streaming as complete
+          setMessages((prev) => {
+            const updated = [...prev];
+            const lastIndex = updated.length - 1;
+            updated[lastIndex] = {
+              ...updated[lastIndex],
+              streaming: false,
+            };
+            return updated;
+          });
+        } catch (streamError) {
+          clearTimeout(timeoutId);
+          console.error("Stream reading error:", streamError);
+          const errorMessage = streamError instanceof Error ? streamError.message : "Streaming error";
+          const errorStack = streamError instanceof Error ? streamError.stack : undefined;
+          console.error("Stream error details:", { errorMessage, errorStack });
+          
+          setMessages((prev) => {
+            const updated = [...prev];
+            const lastIndex = updated.length - 1;
+            const currentContent = updated[lastIndex].content;
+            const newContent = currentContent.trim() === ""
+              ? `ERROR: ${errorMessage}. PLEASE TRY AGAIN.`
+              : currentContent + `\n\n[ERROR: ${errorMessage}]`;
+            updated[lastIndex] = {
+              ...updated[lastIndex],
+              content: newContent,
+              streaming: false,
+            };
+            return updated;
+          });
+        } finally {
+          clearTimeout(timeoutId);
+          setIsLoading(false);
+        }
+      } else {
+        // JSON response (timeout or error)
+        const data = await response.json();
+        
+        // Check if Fram decided to timeout the user
+        if (data.timeout) {
+          const { until } = data.timeout;
+          localStorage.setItem(TIMEOUT_STORAGE_KEY, until.toString());
+          setTimeoutUntil(until);
+          setWasBlocked(true);
+        } else if (expired) {
+          // Timeout expired and user sent a message - reset the flag
+          setWasBlocked(false);
+        }
+        
+        setMessages((prev) => [
+          ...prev,
+          { role: "assistant", content: data.message || data.error || "ERROR: COULD NOT GET RESPONSE." }
+        ]);
       }
-      
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: data.message || data.error || "ERROR: COULD NOT GET RESPONSE." }
-      ]);
     } catch (error) {
       console.error("Chat error:", error);
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      console.error("Chat error details:", { errorMessage, errorStack, error });
+      
       setMessages((prev) => [
         ...prev,
         { role: "assistant", content: `ERROR: ${errorMessage}. PLEASE TRY AGAIN.` }
@@ -152,13 +309,13 @@ export default function ChatInterface() {
   };
 
   return (
-    <section className="w-full max-w-[28rem] mx-auto px-4 pt-12 pb-9">
+    <section className="w-full max-w-[28rem] md:max-w-[950px] mx-auto px-4 pt-12 pb-9">
       <div className="mb-10 text-center">
         <p className="text-[0.75rem] font-mono text-gray-500 tracking-wider">FRAM ASSISTANT</p>
       </div>
 
-      <div className="flex flex-col h-[500px] font-mono text-[0.875rem]">
-        <div ref={messagesContainerRef} className="flex-1 overflow-y-auto mb-6 space-y-6 scrollbar-hide">
+      <div className="flex flex-col h-[500px] md:h-[700px] font-mono text-[0.875rem]">
+        <div ref={messagesContainerRef} className="flex-1 overflow-y-auto mb-2 space-y-6 scrollbar-hide">
           {messages.map((message, index) => (
             <div
               key={index}
@@ -178,52 +335,7 @@ export default function ChatInterface() {
                 </p>
                 {message.role === "assistant" ? (
                   <div className="text-black leading-relaxed">
-                    <ReactMarkdown
-                      remarkPlugins={[remarkGfm]}
-                      components={{
-                        p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
-                        strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
-                        em: ({ children }) => <em className="italic">{children}</em>,
-                        code: ({ children }) => (
-                          <code className="bg-gray-100 px-1 py-0.5 rounded text-[0.875rem] font-mono">
-                            {children}
-                          </code>
-                        ),
-                        ul: ({ children }) => <ul className="list-disc list-inside mb-2 space-y-1">{children}</ul>,
-                        ol: ({ children }) => <ol className="list-decimal list-inside mb-2 space-y-1">{children}</ol>,
-                        li: ({ children }) => <li>{children}</li>,
-                        blockquote: ({ children }) => (
-                          <blockquote className="border-l-2 border-gray-300 pl-3 italic my-2">
-                            {children}
-                          </blockquote>
-                        ),
-                        h1: ({ children }) => <h1 className="text-lg font-bold mb-2 mt-3 first:mt-0">{children}</h1>,
-                        h2: ({ children }) => <h2 className="text-base font-bold mb-2 mt-3 first:mt-0">{children}</h2>,
-                        h3: ({ children }) => <h3 className="text-sm font-bold mb-1 mt-2 first:mt-0">{children}</h3>,
-                        table: ({ children }) => (
-                          <div className="overflow-x-auto my-4 border border-gray-300 rounded">
-                            <table className="min-w-full divide-y divide-gray-300 text-[0.875rem]">
-                                {children}
-                            </table>
-                          </div>
-                        ),
-                        thead: ({ children }) => <thead className="bg-gray-50">{children}</thead>,
-                        tbody: ({ children }) => <tbody className="divide-y divide-gray-200 bg-white">{children}</tbody>,
-                        tr: ({ children }) => <tr>{children}</tr>,
-                        th: ({ children }) => (
-                          <th scope="col" className="px-3 py-2 text-left text-xs font-semibold text-gray-900 uppercase tracking-wider border-r last:border-r-0 border-gray-200">
-                            {children}
-                          </th>
-                        ),
-                        td: ({ children }) => (
-                          <td className="px-3 py-2 whitespace-normal text-black align-top border-r last:border-r-0 border-gray-200">
-                            {children}
-                          </td>
-                        ),
-                      }}
-                    >
-                      {message.content}
-                    </ReactMarkdown>
+                    <MarkdownWithMermaid content={message.content} isStreaming={message.streaming} />
                   </div>
                 ) : (
                   <p className="text-black leading-relaxed">
@@ -263,7 +375,7 @@ export default function ChatInterface() {
             )}
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="relative">
+          <form onSubmit={handleSubmit} className="relative max-w-[500px] mx-auto w-full">
             <textarea
               ref={textareaRef}
               rows={1}

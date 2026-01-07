@@ -369,9 +369,9 @@ export async function POST(request: Request) {
       console.log("Caching disabled, sending full history");
     }
 
-    // Generate response with cached content if available (with retry logic)
-    const response = await retryWithBackoff(async () => {
-      console.log("Calling Gemini API with model: gemini-3-flash-preview");
+    // Generate response with streaming (with retry logic)
+    const stream = await retryWithBackoff(async () => {
+      console.log("Calling Gemini API with model: gemini-3-flash-preview (streaming)");
       console.log("Contents to send:", contentsToSend.length, "messages");
       console.log("Using cached content:", cachedContent || "none");
 
@@ -393,52 +393,173 @@ export async function POST(request: Request) {
         }
       }
 
-      const result = await ai.models.generateContent({
+      const result = await ai.models.generateContentStream({
         model: "gemini-3-flash-preview", // Gemini 3 Flash Preview
         contents: contentsToSend,
         config
       });
       
-      console.log("Gemini API response received");
-      console.log("Response structure:", JSON.stringify(Object.keys(result || {})));
+      console.log("Gemini API stream created");
       return result;
     });
 
-    // Check if Fram decided to use the ignore_user tool
-    const functionCall = response.candidates?.[0]?.content?.parts?.[0]?.functionCall;
+    // Check for function calls BEFORE streaming
+    // Buffer first few chunks to check for function calls
+    let functionCallDetected = false;
+    let functionCall: { name: string; args: { duration_seconds: number; farewell_message: string } } | null = null;
+    const bufferedChunks: unknown[] = [];
+    const MAX_BUFFER_CHUNKS = 3; // Check first 3 chunks
+    let iterator: AsyncIterator<unknown> | null = null;
     
-    if (functionCall && functionCall.name === "ignore_user") {
-      const args = functionCall.args as { duration_seconds: number; farewell_message: string };
-      const durationSeconds = args.duration_seconds;
-      const farewellMessage = args.farewell_message;
+    try {
+      // The stream itself is an async iterable
+      iterator = stream[Symbol.asyncIterator]();
       
-      console.log("Fram used ignore_user tool:", { durationSeconds, farewellMessage });
-      
-      return NextResponse.json({
-        message: farewellMessage,
-        timeout: {
-          duration: durationSeconds,
-          until: Date.now() + (durationSeconds * 1000)
+      // Buffer first few chunks
+      for (let i = 0; i < MAX_BUFFER_CHUNKS; i++) {
+        const result = await iterator.next();
+        if (result.done) break;
+        
+        const chunk = result.value as { candidates?: Array<{ content?: { parts?: Array<{ functionCall?: { name: string; args: { duration_seconds: number; farewell_message: string } } }> } }> };
+        bufferedChunks.push(chunk);
+        
+        // Check for function call
+        if (chunk.candidates?.[0]?.content?.parts?.[0]?.functionCall) {
+          functionCall = chunk.candidates[0].content.parts[0].functionCall;
+          functionCallDetected = true;
+          console.log("Function call detected in stream:", functionCall.name);
+          break;
         }
-      });
+      }
+      
+      // If function call detected, handle it and return JSON
+      if (functionCallDetected && functionCall?.name === "ignore_user") {
+        const args = functionCall.args as { duration_seconds: number; farewell_message: string };
+        const durationSeconds = args.duration_seconds;
+        const farewellMessage = args.farewell_message;
+        
+        console.log("Fram used ignore_user tool:", { durationSeconds, farewellMessage });
+        
+        return NextResponse.json({
+          message: farewellMessage,
+          timeout: {
+            duration: durationSeconds,
+            until: Date.now() + (durationSeconds * 1000)
+          }
+        });
+      }
+      
+      // Otherwise, stream response including buffered chunks + remaining chunks
+      return new Response(
+        new ReadableStream({
+          async start(controller) {
+            const streamStartTime = Date.now();
+            let chunksProcessed = 0;
+            let bytesSent = 0;
+            
+            try {
+              console.log("Starting stream response (buffered chunks:", bufferedChunks.length, ")");
+              const encoder = new TextEncoder();
+              
+              // Stream buffered chunks first
+              for (const chunk of bufferedChunks) {
+                const chunkTyped = chunk as { text?: string | (() => string); candidates?: Array<{ content?: { parts?: Array<{ text?: string; functionCall?: unknown }> } }> };
+                let text: string | undefined;
+                
+                if (typeof chunkTyped.text === 'function') {
+                  text = chunkTyped.text();
+                } else if (chunkTyped.text) {
+                  text = chunkTyped.text;
+                } else if (chunkTyped.candidates?.[0]?.content?.parts?.[0]?.text) {
+                  text = chunkTyped.candidates[0].content.parts[0].text;
+                }
+                
+                if (text) {
+                  const encoded = encoder.encode(text);
+                  bytesSent += encoded.length;
+                  controller.enqueue(encoded);
+                  chunksProcessed++;
+                }
+              }
+              
+              // Continue streaming remaining chunks from iterator
+              if (!iterator) {
+                console.log("No iterator available, closing stream");
+                controller.close();
+                return;
+              }
+              
+              console.log("Streaming remaining chunks from iterator");
+              while (true) {
+                const result = await iterator.next();
+                if (result.done) {
+                  console.log("Iterator done");
+                  break;
+                }
+                
+                const chunk = result.value as { text?: string | (() => string); candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
+                let text: string | undefined;
+                
+                if (typeof chunk.text === 'function') {
+                  text = chunk.text();
+                } else if (chunk.text) {
+                  text = chunk.text;
+                } else if (chunk.candidates?.[0]?.content?.parts?.[0]?.text) {
+                  text = chunk.candidates[0].content.parts[0].text;
+                }
+                
+                if (text) {
+                  const encoded = encoder.encode(text);
+                  bytesSent += encoded.length;
+                  controller.enqueue(encoded);
+                  chunksProcessed++;
+                  
+                  // Log progress every 10 chunks
+                  if (chunksProcessed % 10 === 0) {
+                    console.log(`Stream progress: ${chunksProcessed} chunks, ${bytesSent} bytes sent`);
+                  }
+                }
+              }
+              
+              console.log(`Stream completed: ${chunksProcessed} chunks, ${bytesSent} bytes, ${Date.now() - streamStartTime}ms`);
+              controller.close();
+            } catch (error) {
+              console.error("Error streaming response:", error);
+              const errorMessage = error instanceof Error ? error.message : "Streaming error";
+              const errorStack = error instanceof Error ? error.stack : undefined;
+              console.error("Stream error details:", { 
+                errorMessage, 
+                errorStack, 
+                chunksProcessed, 
+                bytesSent,
+                duration: Date.now() - streamStartTime 
+              });
+              
+              // Try to send error message to client before closing
+              try {
+                const encoder = new TextEncoder();
+                controller.enqueue(encoder.encode(`\n\n[Stream error: ${errorMessage}]`));
+              } catch (e) {
+                console.error("Failed to send error message to client:", e);
+              }
+              
+              controller.error(new Error(errorMessage));
+            }
+          },
+        }),
+        {
+          headers: {
+            'Content-Type': 'text/plain; charset=utf-8',
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+          },
+        }
+      );
+    } catch (error) {
+      console.error("Error processing stream:", error);
+      // Fallback to non-streaming if stream processing fails
+      throw error;
     }
-
-    // Try to access text property - check different possible structures
-    let text: string;
-    if (response.text) {
-      text = response.text;
-    } else if (response.candidates && response.candidates[0]?.content?.parts?.[0]?.text) {
-      text = response.candidates[0].content.parts[0].text;
-    } else {
-      console.error("Unexpected response structure:", JSON.stringify(response, null, 2));
-      throw new Error("Unable to extract text from API response");
-    }
-    
-    console.log("Response text length:", text.length);
-
-    return NextResponse.json({
-      message: text
-    });
 
   } catch (error) {
     console.error("Error in chat route:", error);

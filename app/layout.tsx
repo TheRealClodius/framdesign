@@ -1,8 +1,10 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Cormorant_Garamond, JetBrains_Mono } from "next/font/google";
 import "@fontsource/google-sans-flex";
 import "@fontsource/google-sans-code";
 import "./globals.css";
+import ConsoleFilter from "@/components/ConsoleFilter";
+import Analytics from "@/components/Analytics";
 
 const cormorant = Cormorant_Garamond({
   variable: "--font-cormorant",
@@ -23,14 +25,6 @@ export const metadata: Metadata = {
   icons: {
     icon: "/favicon.svg",
   },
-  viewport: {
-    width: "device-width",
-    initialScale: 1,
-    maximumScale: 1,
-    userScalable: false,
-    viewportFit: "cover",
-  },
-  themeColor: "#000000",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
@@ -49,6 +43,15 @@ export const metadata: Metadata = {
   },
 };
 
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: "cover",
+  themeColor: "#000000",
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -59,7 +62,10 @@ export default function RootLayout({
       <body
         className={`${cormorant.variable} ${jetbrainsMono.variable} antialiased bg-black text-white selection:bg-white selection:text-black`}
       >
+        <ConsoleFilter />
         {children}
+        <div id="modal-root" />
+        <Analytics />
       </body>
     </html>
   );
