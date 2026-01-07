@@ -43,7 +43,7 @@ export default function Hero() {
           muted
           playsInline
           preload="metadata"
-          className="w-full h-full object-cover md:object-contain md:scale-[1.85] grayscale opacity-90"
+          className="w-full h-full object-cover md:object-contain md:scale-[2.1] grayscale opacity-90"
           style={{
             filter: "brightness(1.4) contrast(1.3)",
             backgroundColor: "#000000",
