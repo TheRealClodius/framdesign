@@ -314,7 +314,7 @@ export default function ChatInterface() {
         <p className="text-[0.75rem] font-mono text-gray-500 tracking-wider">FRAM ASSISTANT</p>
       </div>
 
-      <div className="flex flex-col h-[500px] md:h-[700px] font-mono text-[0.875rem]">
+      <div className="flex flex-col h-[520px] md:h-[500px] font-mono text-[0.875rem]">
         <div ref={messagesContainerRef} className="flex-1 overflow-y-auto mb-2 space-y-6 scrollbar-hide">
           {messages.map((message, index) => (
             <div

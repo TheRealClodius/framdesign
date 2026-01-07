@@ -69,6 +69,11 @@ h1, h2, h3, h4, h5, h6 {
     width: 100% !important;
     background-color: #000000 !important;
   }
+  
+  /* Footer safe area padding */
+  .footer-safe-area {
+    padding-bottom: calc(2.25rem + env(safe-area-inset-bottom, 0px)) !important;
+  }
 }
 
 @media (min-width: 769px) {

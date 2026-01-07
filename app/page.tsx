@@ -23,7 +23,7 @@ export default function Home() {
       <div className="w-full bg-white form-container">
         <ChatInterface />
         
-        <footer className="w-full text-center pt-8 pb-9 text-[10px] font-mono text-gray-500">
+        <footer className="w-full text-center pt-8 pb-9 text-[10px] font-mono text-gray-500 footer-safe-area">
           <p>&copy; {new Date().getFullYear()} FRAM DESIGN. All rights reserved.</p>
         </footer>
       </div>
