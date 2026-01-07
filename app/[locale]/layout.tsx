@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Cormorant_Garamond, JetBrains_Mono, M_PLUS_1_Code } from "next/font/google";
 import "@fontsource/google-sans-flex";
 import "@fontsource/google-sans-code";
-import "./globals.css";
+import "../globals.css";
 import ConsoleFilter from "@/components/ConsoleFilter";
 import Analytics from "@/components/Analytics";
 
