@@ -76,7 +76,7 @@ export default function DiagramModal({ dataUrl, onClose }: DiagramModalProps) {
         alignItems: "center",
         justifyContent: "center",
         padding: "1rem",
-        borderRadius: "8px",
+        borderRadius: "0",
         animation: "fadeIn 0.2s ease-in-out"
       }}
       onClick={(e) => {
