@@ -21,6 +21,7 @@ export default function ChatInterface() {
   const [timeoutUntil, setTimeoutUntil] = useState<number | null>(null);
   const [wasBlocked, setWasBlocked] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -31,7 +32,9 @@ export default function ChatInterface() {
   }, [input]);
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (messagesContainerRef.current) {
+      messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+    }
   };
 
   // Check localStorage for existing timeout on mount
@@ -155,7 +158,7 @@ export default function ChatInterface() {
       </div>
 
       <div className="flex flex-col h-[500px] font-mono text-[0.875rem]">
-        <div className="flex-1 overflow-y-auto mb-6 space-y-6 scrollbar-hide">
+        <div ref={messagesContainerRef} className="flex-1 overflow-y-auto mb-6 space-y-6 scrollbar-hide">
           {messages.map((message, index) => (
             <div
               key={index}

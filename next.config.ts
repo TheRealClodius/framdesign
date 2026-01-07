@@ -14,6 +14,9 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  experimental: {
+    scrollRestoration: false,
+  },
 };
 
 export default nextConfig;

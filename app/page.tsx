@@ -1,7 +1,20 @@
+"use client";
+
+import { useEffect } from "react";
 import Hero from "@/components/Hero";
 import ChatInterface from "@/components/ChatInterface";
 
 export default function Home() {
+  useEffect(() => {
+    // Scroll to top on page load/refresh
+    window.scrollTo(0, 0);
+    
+    // Prevent scroll restoration
+    if ('scrollRestoration' in window.history) {
+      window.history.scrollRestoration = 'manual';
+    }
+  }, []);
+
   return (
     <main className="min-h-screen flex flex-col items-center justify-between bg-black">
       <Hero />
