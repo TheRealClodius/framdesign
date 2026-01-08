@@ -50,6 +50,7 @@ const MAX_RAW_MESSAGES = 20;
 // Token estimation: rough approximation (1 token ≈ 4 characters)
 const TOKENS_PER_CHAR = 0.25;
 const MAX_TOKENS = 30000; // Safety limit for context window
+const SUMMARY_WORD_LIMIT = 80; // Hard cap for summaries when trimming
 
 // Summarization threshold: summarize when we exceed MAX_RAW_MESSAGES
 const SUMMARIZATION_THRESHOLD = MAX_RAW_MESSAGES;
@@ -80,10 +81,13 @@ function estimateMessageTokens(messages: Array<{ role: string; parts: Array<{ te
  * when the conversation fundamentally changes (first messages or timeout state)
  */
 function hashConversation(messages: Array<{ role: string; content: string }>, timeoutExpired: boolean): string {
-  // Create a stable hash based on first few messages and timeout state
-  // Note: We don't include messageCount so the hash stays stable as conversation grows
+  // Create a stable hash based on a richer slice of the conversation and timeout state
+  const firstMessages = messages.slice(0, 5).map(m => ({
+    role: m.role,
+    content: m.content.substring(0, 500)
+  }));
   const key = JSON.stringify({
-    firstMessages: messages.slice(0, 3).map(m => ({ role: m.role, content: m.content.substring(0, 100) })),
+    firstMessages,
     timeoutExpired
   });
   
@@ -138,6 +142,67 @@ Summary:`;
 function hashSystemPrompt(prompt: string): string {
   const hash = createHash('sha256').update(prompt).digest('hex');
   return hash.substring(0, 16);
+}
+
+/**
+ * Trims text to a maximum word count.
+ */
+function trimToWords(text: string, maxWords: number): string {
+  const words = text.trim().split(/\s+/);
+  if (words.length <= maxWords) return text.trim();
+  return words.slice(0, maxWords).join(" ") + "…";
+}
+
+/**
+ * Enforce token budget by trimming summary and dropping oldest context items.
+ */
+function enforceTokenBudget(
+  contents: Array<{ role: string; parts: Array<{ text: string }> }>,
+  summary: string | null,
+  maxTokens: number
+): {
+  contents: Array<{ role: string; parts: Array<{ text: string }> }>;
+  summary: string | null;
+  droppedMessages: number;
+  summaryTrimmed: boolean;
+} {
+  let adjustedContents = [...contents];
+  let adjustedSummary = summary;
+  let summaryTrimmed = false;
+  let droppedMessages = 0;
+
+  let tokens = estimateMessageTokens(adjustedContents);
+  if (tokens <= maxTokens) {
+    return { contents: adjustedContents, summary: adjustedSummary, droppedMessages, summaryTrimmed };
+  }
+
+  // Trim summary first if present
+  if (adjustedSummary) {
+    const trimmed = trimToWords(adjustedSummary, SUMMARY_WORD_LIMIT);
+    if (trimmed !== adjustedSummary) {
+      adjustedSummary = trimmed;
+      adjustedContents = adjustedContents.map((msg) => {
+        if (msg.role === "user" && msg.parts?.[0]?.text?.startsWith("PREVIOUS CONVERSATION SUMMARY:")) {
+          return {
+            ...msg,
+            parts: [{ text: `PREVIOUS CONVERSATION SUMMARY:\n\n${trimmed}\n\n---\n\nCONTINUING WITH RECENT MESSAGES:` }]
+          };
+        }
+        return msg;
+      });
+      summaryTrimmed = true;
+      tokens = estimateMessageTokens(adjustedContents);
+    }
+  }
+
+  // Drop oldest messages until within budget (leave at least one)
+  while (tokens > maxTokens && adjustedContents.length > 1) {
+    adjustedContents.shift();
+    droppedMessages += 1;
+    tokens = estimateMessageTokens(adjustedContents);
+  }
+
+  return { contents: adjustedContents, summary: adjustedSummary, droppedMessages, summaryTrimmed };
 }
 
 /**
@@ -598,6 +663,17 @@ export async function POST(request: Request) {
       console.log("Caching disabled, sending summary + recent messages");
     }
 
+    // Enforce token budget after cache decisions
+    const budgetResult = enforceTokenBudget(contentsToSend, summary, MAX_TOKENS);
+    contentsToSend = budgetResult.contents;
+    summary = budgetResult.summary;
+    if (budgetResult.summaryTrimmed) {
+      console.log(`Summary trimmed to ${SUMMARY_WORD_LIMIT} words for token budget`);
+    }
+    if (budgetResult.droppedMessages > 0) {
+      console.log(`Dropped ${budgetResult.droppedMessages} oldest message(s) to fit token budget`);
+    }
+
     // Generate response with streaming (with retry logic)
     const stream = await retryWithBackoff(async () => {
       const estimatedTokens = estimateMessageTokens(contentsToSend);
@@ -631,9 +707,12 @@ export async function POST(request: Request) {
         }
       }
 
-      // Only add tools if we're NOT using cached content (tools are in cache if cachedContent is set)
-      if (!cachedContent || !cachedContent.trim()) {
+      const usingCache = !!cachedContent && !!cachedContent.trim();
+
+      // Only add tools/systemInstruction if we're NOT using cached content (tools live in cache when present)
+      if (!usingCache) {
         config.tools = [{ functionDeclarations: [ignoreUserTool] }];
+        config.systemInstruction = FRAM_SYSTEM_PROMPT;
       }
 
       const result = await ai.models.generateContentStream({
@@ -646,149 +725,75 @@ export async function POST(request: Request) {
       return result;
     });
 
-    // Check for function calls BEFORE streaming
-    // Buffer first few chunks to check for function calls
-    let functionCallDetected = false;
+    // Check for function calls across the full stream before sending output
     let functionCall: { name: string; args: { duration_seconds: number; farewell_message: string } } | null = null;
-    const bufferedChunks: unknown[] = [];
-    const MAX_BUFFER_CHUNKS = 3; // Check first 3 chunks
-    let iterator: AsyncIterator<unknown> | null = null;
-    
+    const textChunks: string[] = [];
+
     try {
-      // The stream itself is an async iterable
-      iterator = stream[Symbol.asyncIterator]();
-      
-      // Buffer first few chunks
-      for (let i = 0; i < MAX_BUFFER_CHUNKS; i++) {
-        const result = await iterator.next();
-        if (result.done) break;
-        
-        const chunk = result.value as { candidates?: Array<{ content?: { parts?: Array<{ functionCall?: { name: string; args: { duration_seconds: number; farewell_message: string } } }> } }> };
-        bufferedChunks.push(chunk);
-        
-        // Check for function call
-        if (chunk.candidates?.[0]?.content?.parts?.[0]?.functionCall) {
-          functionCall = chunk.candidates[0].content.parts[0].functionCall;
-          functionCallDetected = true;
-          console.log("Function call detected in stream:", functionCall.name);
+      for await (const chunk of stream as AsyncIterable<unknown>) {
+        const typed = chunk as { text?: string | (() => string); candidates?: Array<{ content?: { parts?: Array<{ text?: string; functionCall?: { name: string; args: { duration_seconds: number; farewell_message: string } } }> } }> };
+        const candidates = typed.candidates?.[0]?.content?.parts || [];
+
+        // Detect function call anywhere in the stream
+        const callPart = candidates.find((part) => part.functionCall);
+        if (callPart?.functionCall) {
+          functionCall = callPart.functionCall;
           break;
         }
+
+        let text: string | undefined;
+        if (typeof typed.text === "function") {
+          text = typed.text();
+        } else if (typed.text) {
+          text = typed.text;
+        } else if (candidates?.[0]?.text) {
+          text = candidates[0].text;
+        }
+
+        if (text) {
+          textChunks.push(text);
+        }
       }
-      
+
       // If function call detected, handle it and return JSON
-      if (functionCallDetected && functionCall?.name === "ignore_user") {
+      if (functionCall?.name === "ignore_user") {
         const args = functionCall.args as { duration_seconds: number; farewell_message: string };
         const durationSeconds = args.duration_seconds;
         const farewellMessage = args.farewell_message;
-        
+
         console.log("Fram used ignore_user tool:", { durationSeconds, farewellMessage });
-        
+
         return NextResponse.json({
           message: farewellMessage,
           timeout: {
             duration: durationSeconds,
-            until: Date.now() + (durationSeconds * 1000)
+            until: Date.now() + durationSeconds * 1000
           }
         });
       }
-      
-      // Otherwise, stream response including buffered chunks + remaining chunks
+
+      // No tool call: stream buffered text chunks to the client
       return new Response(
         new ReadableStream({
-          async start(controller) {
-            const streamStartTime = Date.now();
+          start(controller) {
+            const encoder = new TextEncoder();
             let chunksProcessed = 0;
             let bytesSent = 0;
-            
+
             try {
-              console.log("Starting stream response (buffered chunks:", bufferedChunks.length, ")");
-              const encoder = new TextEncoder();
-              
-              // Stream buffered chunks first
-              for (const chunk of bufferedChunks) {
-                const chunkTyped = chunk as { text?: string | (() => string); candidates?: Array<{ content?: { parts?: Array<{ text?: string; functionCall?: unknown }> } }> };
-                let text: string | undefined;
-                
-                if (typeof chunkTyped.text === 'function') {
-                  text = chunkTyped.text();
-                } else if (chunkTyped.text) {
-                  text = chunkTyped.text;
-                } else if (chunkTyped.candidates?.[0]?.content?.parts?.[0]?.text) {
-                  text = chunkTyped.candidates[0].content.parts[0].text;
-                }
-                
-                if (text) {
-                  const encoded = encoder.encode(text);
-                  bytesSent += encoded.length;
-                  controller.enqueue(encoded);
-                  chunksProcessed++;
-                }
+              for (const text of textChunks) {
+                const encoded = encoder.encode(text);
+                bytesSent += encoded.length;
+                controller.enqueue(encoded);
+                chunksProcessed++;
               }
-              
-              // Continue streaming remaining chunks from iterator
-              if (!iterator) {
-                console.log("No iterator available, closing stream");
-                controller.close();
-                return;
-              }
-              
-              console.log("Streaming remaining chunks from iterator");
-              while (true) {
-                const result = await iterator.next();
-                if (result.done) {
-                  console.log("Iterator done");
-                  break;
-                }
-                
-                const chunk = result.value as { text?: string | (() => string); candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
-                let text: string | undefined;
-                
-                if (typeof chunk.text === 'function') {
-                  text = chunk.text();
-                } else if (chunk.text) {
-                  text = chunk.text;
-                } else if (chunk.candidates?.[0]?.content?.parts?.[0]?.text) {
-                  text = chunk.candidates[0].content.parts[0].text;
-                }
-                
-                if (text) {
-                  const encoded = encoder.encode(text);
-                  bytesSent += encoded.length;
-                  controller.enqueue(encoded);
-                  chunksProcessed++;
-                  
-                  // Log progress every 10 chunks
-                  if (chunksProcessed % 10 === 0) {
-                    console.log(`Stream progress: ${chunksProcessed} chunks, ${bytesSent} bytes sent`);
-                  }
-                }
-              }
-              
-              console.log(`Stream completed: ${chunksProcessed} chunks, ${bytesSent} bytes, ${Date.now() - streamStartTime}ms`);
+              console.log(`Stream completed: ${chunksProcessed} chunks, ${bytesSent} bytes`);
               controller.close();
             } catch (error) {
               console.error("Error streaming response:", error);
-              const errorMessage = error instanceof Error ? error.message : "Streaming error";
-              const errorStack = error instanceof Error ? error.stack : undefined;
-              console.error("Stream error details:", { 
-                errorMessage, 
-                errorStack, 
-                chunksProcessed, 
-                bytesSent,
-                duration: Date.now() - streamStartTime 
-              });
-              
-              // Try to send error message to client before closing
-              try {
-                const encoder = new TextEncoder();
-                controller.enqueue(encoder.encode(`\n\n[Stream error: ${errorMessage}]`));
-              } catch (e) {
-                console.error("Failed to send error message to client:", e);
-              }
-              
-              controller.error(new Error(errorMessage));
+              controller.error(error);
             }
-          },
+          }
         }),
         {
           headers: {

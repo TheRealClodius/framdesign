@@ -19,6 +19,7 @@ import { useState, useRef, useEffect } from "react";
 import MarkdownWithMermaid from "./MarkdownWithMermaid";
 
 type Message = {
+  id: string;
   role: "user" | "assistant";
   content: string;
   streaming?: boolean;
@@ -26,11 +27,28 @@ type Message = {
 
 const TIMEOUT_STORAGE_KEY = "fram_timeout_until";
 const MESSAGES_STORAGE_KEY = "fram_conversation";
+const MAX_PERSISTED_MESSAGES = 40;
+const MAX_SENT_MESSAGES = 50;
 const BLOCKED_MESSAGE = "Fram has decided not to respond to you anymore as you've been rude. Fram does not take shit from anybody.";
+
+const newId = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+
+const sanitizeForStorage = (msgs: Message[]) => {
+  const withIds = msgs
+    .filter((m) => !m.streaming)
+    .map((m) => (m.id ? m : { ...m, id: newId() }));
+  return withIds.slice(-MAX_PERSISTED_MESSAGES);
+};
+
+const prepareMessagesForSend = (msgs: Message[]) =>
+  msgs
+    .filter((m) => !m.streaming)
+    .slice(-MAX_SENT_MESSAGES)
+    .map((m) => ({ role: m.role, content: m.content }));
 
 export default function ChatInterface() {
   const [messages, setMessages] = useState<Message[]>([
-    { role: "assistant", content: "HELLO. HOW CAN I HELP YOU TODAY?" }
+    { id: "initial-assistant", role: "assistant", content: "HELLO. HOW CAN I HELP YOU TODAY?" }
   ]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -80,7 +98,10 @@ export default function ChatInterface() {
         const parsedMessages = JSON.parse(stored);
         if (Array.isArray(parsedMessages) && parsedMessages.length > 0) {
           // Filter out streaming messages (they shouldn't be persisted)
-          const validMessages = parsedMessages.filter((msg: Message) => !msg.streaming);
+          const validMessages = parsedMessages
+            .filter((msg: Message) => !msg.streaming)
+            .map((msg: Message) => (msg.id ? msg : { ...msg, id: newId() }))
+            .slice(-MAX_PERSISTED_MESSAGES);
           if (validMessages.length > 0) {
             setMessages(validMessages);
           }
@@ -94,10 +115,11 @@ export default function ChatInterface() {
 
   // Auto-save messages to localStorage on changes
   useEffect(() => {
-    // Filter out streaming messages before saving
-    const messagesToSave = messages.filter((msg) => !msg.streaming);
+    const messagesToSave = sanitizeForStorage(messages);
     if (messagesToSave.length > 0) {
       localStorage.setItem(MESSAGES_STORAGE_KEY, JSON.stringify(messagesToSave));
+    } else {
+      localStorage.removeItem(MESSAGES_STORAGE_KEY);
     }
   }, [messages]);
 
@@ -163,7 +185,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
         },
           body: JSON.stringify({
             messages: [
-              ...messages.slice(0, messageIndex),
+              ...prepareMessagesForSend(messages.slice(0, messageIndex)),
               { role: "user", content: fixPrompt }
             ],
             timeoutExpired: false,
@@ -260,7 +282,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
 
     const userMessage = input.trim();
     setInput("");
-    setMessages((prev) => [...prev, { role: "user", content: userMessage }]);
+    setMessages((prev) => [...prev, { id: newId(), role: "user", content: userMessage }]);
     setIsLoading(true);
 
     // Check if timeout just expired - if so, pass that context to the API
@@ -273,7 +295,10 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          messages: [...messages, { role: "user", content: userMessage }],
+          messages: [
+            ...prepareMessagesForSend(messages),
+            { role: "user", content: userMessage }
+          ],
           timeoutExpired: expired || false,
         }),
       });
@@ -295,7 +320,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
       
       if (contentType?.includes('text/plain')) {
         // Streaming response - create placeholder message with streaming flag
-        setMessages((prev) => [...prev, { role: "assistant", content: "", streaming: true }]);
+        setMessages((prev) => [...prev, { id: newId(), role: "assistant", content: "", streaming: true }]);
         
         const reader = response.body?.getReader();
         const decoder = new TextDecoder();
@@ -455,7 +480,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
         
         setMessages((prev) => [
           ...prev,
-          { role: "assistant", content: data.message || data.error || "ERROR: COULD NOT GET RESPONSE." }
+          { id: newId(), role: "assistant", content: data.message || data.error || "ERROR: COULD NOT GET RESPONSE." }
         ]);
       }
     } catch (error) {
@@ -466,7 +491,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
       
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", content: `ERROR: ${errorMessage}. PLEASE TRY AGAIN.` }
+        { id: newId(), role: "assistant", content: `ERROR: ${errorMessage}. PLEASE TRY AGAIN.` }
       ]);
     } finally {
       setIsLoading(false);
@@ -483,7 +508,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
         <div ref={messagesContainerRef} className="h-[600px] md:flex-1 md:min-h-0 overflow-y-auto mb-2 space-y-6 scrollbar-boxy">
           {messages.map((message, index) => (
             <div
-              key={index}
+              key={message.id || index}
               className={`flex ${
                 message.role === "user" ? "justify-end" : "justify-start"
               }`}

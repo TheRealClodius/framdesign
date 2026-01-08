@@ -4,6 +4,7 @@
 
 describe('Token Estimation', () => {
   const TOKENS_PER_CHAR = 0.25;
+  const SUMMARY_WORD_LIMIT = 80;
 
   function estimateTokens(text: string): number {
     return Math.ceil(text.length * TOKENS_PER_CHAR);
@@ -17,6 +18,59 @@ describe('Token Estimation', () => {
       }
     }
     return total;
+  }
+
+  function trimToWords(text: string, maxWords: number): string {
+    const words = text.trim().split(/\s+/);
+    if (words.length <= maxWords) return text.trim();
+    return words.slice(0, maxWords).join(" ") + "…";
+  }
+
+  function enforceTokenBudget(
+    contents: Array<{ role: string; parts: Array<{ text: string }> }>,
+    summary: string | null,
+    maxTokens: number
+  ): {
+    contents: Array<{ role: string; parts: Array<{ text: string }> }>;
+    summary: string | null;
+    droppedMessages: number;
+    summaryTrimmed: boolean;
+  } {
+    let adjustedContents = [...contents];
+    let adjustedSummary = summary;
+    let summaryTrimmed = false;
+    let droppedMessages = 0;
+
+    let tokens = estimateMessageTokens(adjustedContents);
+    if (tokens <= maxTokens) {
+      return { contents: adjustedContents, summary: adjustedSummary, droppedMessages, summaryTrimmed };
+    }
+
+    if (adjustedSummary) {
+      const trimmed = trimToWords(adjustedSummary, SUMMARY_WORD_LIMIT);
+      if (trimmed !== adjustedSummary) {
+        adjustedSummary = trimmed;
+        adjustedContents = adjustedContents.map((msg) => {
+          if (msg.role === "user" && msg.parts?.[0]?.text?.startsWith("PREVIOUS CONVERSATION SUMMARY:")) {
+            return {
+              ...msg,
+              parts: [{ text: `PREVIOUS CONVERSATION SUMMARY:\n\n${trimmed}\n\n---\n\nCONTINUING WITH RECENT MESSAGES:` }]
+            };
+          }
+          return msg;
+        });
+        summaryTrimmed = true;
+        tokens = estimateMessageTokens(adjustedContents);
+      }
+    }
+
+    while (tokens > maxTokens && adjustedContents.length > 1) {
+      adjustedContents.shift();
+      droppedMessages += 1;
+      tokens = estimateMessageTokens(adjustedContents);
+    }
+
+    return { contents: adjustedContents, summary: adjustedSummary, droppedMessages, summaryTrimmed };
   }
 
   test('should estimate tokens correctly for simple text', () => {
@@ -104,5 +158,35 @@ describe('Token Estimation', () => {
     
     expect(tokens).toBeGreaterThan(MAX_TOKENS);
     // This test verifies we can detect when we exceed the limit
+  });
+
+  test('should trim summary to fit token budget', () => {
+    const longSummary = Array.from({ length: 120 }, (_, i) => `word${i}`).join(' ');
+    const contents = [
+      {
+        role: 'user',
+        parts: [{ text: `PREVIOUS CONVERSATION SUMMARY:\n\n${longSummary}\n\n---\n\nCONTINUING WITH RECENT MESSAGES:` }],
+      },
+      { role: 'user', parts: [{ text: 'Hi' }] },
+    ];
+
+    const result = enforceTokenBudget(contents, longSummary, 200); // Small budget to force trim but keep summary entry
+    expect(result.summaryTrimmed).toBe(true);
+    const trimmedWords = result.summary?.trim().split(/\s+/).length || 0;
+    expect(trimmedWords).toBeLessThanOrEqual(SUMMARY_WORD_LIMIT);
+    expect(result.contents[0].parts[0].text).toContain(result.summary || '');
+  });
+
+  test('should drop oldest messages when over budget', () => {
+    const contents = [
+      { role: 'user', parts: [{ text: 'a'.repeat(200) }] },
+      { role: 'model', parts: [{ text: 'b'.repeat(200) }] },
+      { role: 'user', parts: [{ text: 'c'.repeat(10) }] },
+    ];
+
+    const result = enforceTokenBudget(contents, null, 60);
+    expect(result.droppedMessages).toBeGreaterThan(0);
+    expect(result.contents.length).toBeGreaterThan(0);
+    expect(estimateMessageTokens(result.contents)).toBeLessThanOrEqual(60);
   });
 });

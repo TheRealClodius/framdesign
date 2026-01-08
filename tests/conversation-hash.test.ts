@@ -6,29 +6,34 @@
 import { createHash } from 'crypto';
 
 function hashConversation(messages: Array<{ role: string; content: string }>, timeoutExpired: boolean): string {
+  const firstMessages = messages.slice(0, 5).map(m => ({
+    role: m.role,
+    content: m.content.substring(0, 500)
+  }));
   const key = JSON.stringify({
-    firstMessages: messages.slice(0, 3).map(m => ({ role: m.role, content: m.content.substring(0, 100) })),
+    firstMessages,
     timeoutExpired
   });
-  
+
   const hash = createHash('sha256').update(key).digest('hex');
   return hash.substring(0, 16);
 }
 
 describe('Conversation Hashing', () => {
-  test('should generate same hash for same initial messages', () => {
-    const messages1 = [
+  test('should generate same hash for identical first 5 messages', () => {
+    const firstFive = [
       { role: 'user', content: 'Hello' },
       { role: 'assistant', content: 'Hi there' },
+      { role: 'user', content: 'How are you?' },
+      { role: 'assistant', content: 'Doing well' },
+      { role: 'user', content: 'Great to hear' },
     ];
-    const messages2 = [
-      { role: 'user', content: 'Hello' },
-      { role: 'assistant', content: 'Hi there' },
-    ];
-    
+    const messages1 = [...firstFive];
+    const messages2 = [...firstFive, { role: 'assistant', content: 'Extra message beyond first 5' }];
+
     const hash1 = hashConversation(messages1, false);
     const hash2 = hashConversation(messages2, false);
-    
+
     expect(hash1).toBe(hash2);
   });
 
@@ -37,33 +42,31 @@ describe('Conversation Hashing', () => {
       { role: 'user', content: 'Hello' },
       { role: 'assistant', content: 'Hi there' },
     ];
-    
+
     const hash1 = hashConversation(messages, false);
     const hash2 = hashConversation(messages, true);
-    
+
     expect(hash1).not.toBe(hash2);
   });
 
-  test('should generate same hash as conversation grows', () => {
+  test('should generate same hash as conversation grows when first 5 unchanged', () => {
     const messages1 = [
-      { role: 'user', content: 'Hello' },
-      { role: 'assistant', content: 'Hi there' },
-      { role: 'user', content: 'How are you?' },
-    ];
-    
-    const messages2 = [
       { role: 'user', content: 'Hello' },
       { role: 'assistant', content: 'Hi there' },
       { role: 'user', content: 'How are you?' },
       { role: 'assistant', content: 'I am fine' },
       { role: 'user', content: 'Great!' },
     ];
-    
+
+    const messages2 = [
+      ...messages1,
+      { role: 'assistant', content: 'Adding later message 1' },
+      { role: 'user', content: 'Adding later message 2' },
+    ];
+
     const hash1 = hashConversation(messages1, false);
     const hash2 = hashConversation(messages2, false);
-    
-    // Hash should be stable as conversation grows (based on first 3 messages)
-    // Both have same first 3 messages, so hash should be same
+
     expect(hash1).toBe(hash2);
   });
 
@@ -72,15 +75,15 @@ describe('Conversation Hashing', () => {
       { role: 'user', content: 'Hello' },
       { role: 'assistant', content: 'Hi there' },
     ];
-    
+
     const messages2 = [
       { role: 'user', content: 'Goodbye' },
       { role: 'assistant', content: 'See you' },
     ];
-    
+
     const hash1 = hashConversation(messages1, false);
     const hash2 = hashConversation(messages2, false);
-    
+
     expect(hash1).not.toBe(hash2);
   });
 
@@ -92,44 +95,37 @@ describe('Conversation Hashing', () => {
     expect(hash.length).toBe(16);
   });
 
-  test('should truncate long content in first messages', () => {
-    const longContent = 'a'.repeat(200);
+  test('should truncate long content in first messages to 500 chars', () => {
+    const longContent = 'a'.repeat(600);
     const messages1 = [
       { role: 'user', content: longContent },
     ];
-    
-    // First 100 chars are same, rest is different
-    // But hash function truncates to first 100 chars, so hashes should be same
+
     const messages2 = [
-      { role: 'user', content: longContent.substring(0, 100) + 'different' },
+      { role: 'user', content: longContent.substring(0, 500) + 'DIFFERENT_TAIL' },
     ];
-    
+
     const hash1 = hashConversation(messages1, false);
     const hash2 = hashConversation(messages2, false);
-    
-    // Should only consider first 100 chars, so hashes should be the same
+
     expect(hash1).toBe(hash2);
   });
 
-  test('should only consider first 3 messages', () => {
-    const messages1 = [
+  test('should only consider first 5 messages', () => {
+    const base = [
       { role: 'user', content: 'First' },
       { role: 'assistant', content: 'Second' },
       { role: 'user', content: 'Third' },
       { role: 'assistant', content: 'Fourth' },
+      { role: 'user', content: 'Fifth' },
     ];
-    
-    const messages2 = [
-      { role: 'user', content: 'First' },
-      { role: 'assistant', content: 'Second' },
-      { role: 'user', content: 'Third' },
-      { role: 'assistant', content: 'Different fourth' },
-    ];
-    
+
+    const messages1 = [...base, { role: 'assistant', content: 'Sixth' }];
+    const messages2 = [...base, { role: 'assistant', content: 'Different sixth' }];
+
     const hash1 = hashConversation(messages1, false);
     const hash2 = hashConversation(messages2, false);
-    
-    // Should be same because first 3 messages are identical
+
     expect(hash1).toBe(hash2);
   });
 
@@ -137,9 +133,9 @@ describe('Conversation Hashing', () => {
     const messages = [
       { role: 'user', content: 'Test' },
     ];
-    
+
     const hash = hashConversation(messages, false);
-    
+
     expect(hash).toMatch(/^[a-f0-9]{16}$/); // 16 hex characters
   });
 });
