@@ -15,6 +15,7 @@ interface MarkdownWithMermaidProps {
   content: string;
   className?: string;
   isStreaming?: boolean;
+  onFixDiagram?: (error: { source: string; message: string; fullContent: string }) => void;
 }
 
 // Loading placeholder for mermaid diagrams
@@ -51,7 +52,7 @@ function MermaidLoadingFallback() {
 // Track mermaid block count for limiting
 let mermaidBlockCount = 0;
 
-export default function MarkdownWithMermaid({ content, className = "", isStreaming = false }: MarkdownWithMermaidProps) {
+export default function MarkdownWithMermaid({ content, className = "", isStreaming = false, onFixDiagram }: MarkdownWithMermaidProps) {
   // Reset block count for this message
   mermaidBlockCount = 0;
 
@@ -107,7 +108,17 @@ export default function MarkdownWithMermaid({ content, className = "", isStreami
           // Render mermaid diagram
           return (
             <Suspense fallback={<MermaidLoadingFallback />}>
-              <MermaidRenderer source={codeContent} className="my-4" />
+              <MermaidRenderer 
+                source={codeContent} 
+                className="my-4"
+                onFixDiagram={onFixDiagram ? (error) => {
+                  onFixDiagram({
+                    source: codeContent,
+                    message: error,
+                    fullContent: content
+                  });
+                } : undefined}
+              />
             </Suspense>
           );
         }

@@ -128,6 +128,126 @@ export default function ChatInterface() {
     setWasBlocked(false);
   };
 
+  const handleFixDiagram = async (
+    messageIndex: number,
+    error: { source: string; message: string; fullContent: string }
+  ) => {
+    if (isLoading) return; // Don't allow fixes while loading
+
+    const messageToFix = messages[messageIndex];
+    if (!messageToFix || messageToFix.role !== "assistant") return;
+
+    setIsLoading(true);
+
+    try {
+      // Create a fix request that includes the error context
+      const fixPrompt = `IMPORTANT: A MERMAID DIAGRAM IN YOUR PREVIOUS RESPONSE FAILED TO RENDER.
+
+ERROR DETAILS:
+${error.message}
+
+FAILED MERMAID SOURCE CODE:
+\`\`\`mermaid
+${error.source}
+\`\`\`
+
+YOUR PREVIOUS RESPONSE (that contains the broken diagram):
+${error.fullContent}
+
+PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORRECTED DIAGRAM. Ensure the diagram follows valid Mermaid syntax and will render correctly.`;
+
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+          body: JSON.stringify({
+            messages: [
+              ...messages.slice(0, messageIndex),
+              { role: "user", content: fixPrompt }
+            ],
+            timeoutExpired: false,
+          }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || errorData.details || `Failed to fix diagram: ${response.status}`);
+      }
+
+      const contentType = response.headers.get('Content-Type');
+      
+      if (contentType?.includes('text/plain')) {
+        // Streaming response - update the message being fixed
+        let fixedContent = "";
+        const reader = response.body?.getReader();
+        const decoder = new TextDecoder();
+        
+        if (!reader) {
+          throw new Error("No response body");
+        }
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          
+          const chunk = decoder.decode(value, { stream: true });
+          fixedContent += chunk;
+          
+          // Update the message in real-time
+          setMessages((prev) => {
+            const updated = [...prev];
+            updated[messageIndex] = {
+              ...updated[messageIndex],
+              content: fixedContent,
+              streaming: true,
+            };
+            return updated;
+          });
+          scrollToBottom();
+        }
+
+        // Mark streaming as complete
+        setMessages((prev) => {
+          const updated = [...prev];
+          updated[messageIndex] = {
+            ...updated[messageIndex],
+            content: fixedContent,
+            streaming: false,
+          };
+          return updated;
+        });
+      } else {
+        // JSON response
+        const data = await response.json();
+        setMessages((prev) => {
+          const updated = [...prev];
+          updated[messageIndex] = {
+            ...updated[messageIndex],
+            content: data.message || data.error || "Failed to fix diagram.",
+            streaming: false,
+          };
+          return updated;
+        });
+      }
+    } catch (error) {
+      console.error("Error fixing diagram:", error);
+      // Show error but don't update message
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      // Add error indicator to the message
+      setMessages((prev) => {
+        const updated = [...prev];
+        updated[messageIndex] = {
+          ...updated[messageIndex],
+          content: updated[messageIndex].content + `\n\n[Error fixing diagram: ${errorMessage}]`,
+        };
+        return updated;
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault();
     if (!input.trim() || isLoading) return;
@@ -380,7 +500,13 @@ export default function ChatInterface() {
                 </p>
                 {message.role === "assistant" ? (
                   <div className="text-black leading-relaxed">
-                    <MarkdownWithMermaid content={message.content} isStreaming={message.streaming} />
+                    <MarkdownWithMermaid 
+                      content={message.content} 
+                      isStreaming={message.streaming}
+                      onFixDiagram={async (error) => {
+                        await handleFixDiagram(index, error);
+                      }}
+                    />
                   </div>
                 ) : (
                   <p className="text-black leading-relaxed">

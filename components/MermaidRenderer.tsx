@@ -7,14 +7,18 @@ import DiagramModal from "./DiagramModal";
 const MAX_MERMAID_LENGTH = 10000; // Maximum characters per Mermaid block
 const RENDER_TIMEOUT_MS = 5000; // Maximum time to wait for rendering
 
+// Cache version - increment this when sanitization logic changes to invalidate old caches
+const CACHE_VERSION = 4;
+
 // In-memory cache for rendered diagrams (persists across component instances)
 const diagramCache = new Map<string, string>();
 
-// Generate a stable hash for cache key
+// Generate a stable hash for cache key (includes version for cache invalidation)
 function hashCode(str: string): string {
   let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i);
+  const versionedStr = `v${CACHE_VERSION}:${str}`;
+  for (let i = 0; i < versionedStr.length; i++) {
+    const char = versionedStr.charCodeAt(i);
     hash = ((hash << 5) - hash) + char;
     hash = hash & hash; // Convert to 32-bit integer
   }
@@ -40,7 +44,8 @@ function sanitizeMermaidSource(source: string): string {
   
   // Detect and fix duplicated/corrupted content
   // Look for patterns like "graph TD A[...] graph TD A[...]" (duplicated start)
-  const graphStartPattern = /(graph|flowchart)\s+\w+/gi;
+  // IMPORTANT: Use word boundary \b to avoid matching "graph" inside "subgraph"
+  const graphStartPattern = /\b(graph|flowchart)\s+(TD|TB|BT|RL|LR)\b/gi;
   const matches = [...sanitized.matchAll(graphStartPattern)];
   
   // If we find multiple graph/flowchart declarations, keep only the first one
@@ -51,74 +56,30 @@ function sanitizeMermaidSource(source: string): string {
     sanitized = sanitized.substring(0, secondMatch.index).trim();
   }
   
-  // Split into lines for processing
+  // Split into lines for minimal processing
+  // IMPORTANT: Do NOT aggressively filter lines - complex diagrams have many similar-looking lines
   const lines = sanitized.split('\n');
   const processedLines: string[] = [];
-  const seenLines = new Set<string>(); // Track seen lines to remove duplicates
   
   for (let i = 0; i < lines.length; i++) {
-    let line = lines[i];
-    let trimmedLine = line.trim();
+    const line = lines[i];
+    const trimmedLine = line.trim();
     
-    // Skip completely empty lines (but preserve structure)
+    // Skip completely empty lines (but keep single empty lines for readability)
     if (!trimmedLine) {
-      // Only add empty line if previous line wasn't empty (avoid multiple empty lines)
       if (processedLines.length > 0 && processedLines[processedLines.length - 1] !== '') {
         processedLines.push('');
       }
       continue;
     }
     
-    // Remove standalone separator lines (just dashes, equals, or arrows)
-    if (/^[-=]{3,}$/.test(trimmedLine) || /^[-><]{3,}$/.test(trimmedLine)) {
+    // Remove standalone separator lines (just dashes, equals, or arrows - NOT valid Mermaid)
+    if (/^[-=]{5,}$/.test(trimmedLine)) {
       continue;
     }
     
-    // Fix missing opening bracket in node definitions
-    // Pattern: "E --> FStrategy]" should be "E --> F[Strategy]"
-    // Match: nodeId followed by text ending with ]
-    const missingBracketMatch = trimmedLine.match(/^([A-Z]\w*)\s*-->\s*([A-Z]\w+)([^\[]+)\]$/);
-    if (missingBracketMatch) {
-      const [, fromNode, toNode, label] = missingBracketMatch;
-      line = `${fromNode} --> ${toNode}[${label.trim()}]`;
-      trimmedLine = line.trim();
-    }
-    
-    // Fix the specific error case: lines ending with text followed by trailing dashes
-    // Pattern: "Cooper is unchanged. -----------------------"
-    // This causes parse errors because Mermaid expects an arrow after text, not trailing dashes
-    const trailingDashesMatch = trimmedLine.match(/^(.+?)\s*-{3,}\s*$/);
-    if (trailingDashesMatch) {
-      // Remove trailing dashes - keep only the text part
-      line = trailingDashesMatch[1].trim();
-      trimmedLine = line.trim();
-    }
-    
-    // Fix broken edges: if line ends with text and next line starts with arrow, join them
-    if (i < lines.length - 1) {
-      const nextLine = lines[i + 1].trim();
-      const arrowMatch = nextLine.match(/^(--?>|==>|<-<|<=<)/);
-      if (arrowMatch && !line.match(/[-=><]+$/)) {
-        // Current line ends with text, next line starts with arrow - join them
-        line = `${line.trim()} ${arrowMatch[1]}`;
-        // Skip the next line since we've incorporated it
-        i++;
-        // If there's more content after the arrow, add it
-        const restOfNextLine = nextLine.substring(arrowMatch[1].length).trim();
-        if (restOfNextLine) {
-          line = `${line} ${restOfNextLine}`;
-        }
-        trimmedLine = line.trim();
-      }
-    }
-    
-    // Remove duplicate lines (exact matches)
-    const normalizedLine = trimmedLine.toLowerCase().replace(/\s+/g, ' ');
-    if (seenLines.has(normalizedLine)) {
-      continue; // Skip duplicate
-    }
-    seenLines.add(normalizedLine);
-    
+    // Keep ALL other lines - don't try to "fix" or filter them
+    // Let Mermaid's parser handle the validation
     processedLines.push(trimmedLine);
   }
   
@@ -128,71 +89,20 @@ function sanitizeMermaidSource(source: string): string {
   // Clean up multiple consecutive empty lines (max 2)
   sanitized = sanitized.replace(/\n{3,}/g, '\n\n');
   
-  // Fix "sub" labels in subgraphs/clusters and nodes
-  // This prevents generic "sub" boxes from appearing in diagrams
-  // CRITICAL: Replace ALL instances of "sub" as a node ID or label to prevent empty boxes
+  // MINIMAL "sub" node fixes - only target very specific problematic patterns
+  // IMPORTANT: Do NOT aggressively replace "sub" as it breaks "subgraph" syntax
   
-  // Analyze context to infer better names for subgraphs
-  const contextLower = sanitized.toLowerCase();
-  let suggestedName = '"Group"';
-  if (/frontend|ui|interface|view|client/.test(contextLower)) {
-    suggestedName = '"Frontend"';
-  } else if (/backend|api|server|service|endpoint/.test(contextLower)) {
-    suggestedName = '"Backend"';
-  } else if (/database|db|data|storage|persist/.test(contextLower)) {
-    suggestedName = '"Database"';
-  } else if (/process|workflow|pipeline|flow/.test(contextLower)) {
-    suggestedName = '"Process"';
-  } else if (/component|module|layer/.test(contextLower)) {
-    suggestedName = '"Component"';
-  }
+  // Only fix standalone "sub" nodes that would render as empty boxes
+  // Pattern: A line that is exactly "sub" by itself (a node with no label)
+  sanitized = sanitized.replace(/^sub$/gm, 'Subsystem');
   
-  // Pattern 1: subgraph sub {...} or subgraph "sub" {...} - subgraph declarations
-  sanitized = sanitized.replace(/subgraph\s+(?:["'])?sub(?!\w)(?:["'])?\s*\{/gi, () => {
-    return `subgraph ${suggestedName} {`;
-  });
+  // Pattern: sub[] or sub[""] - empty node labels
+  sanitized = sanitized.replace(/\bsub\s*\[\s*\]/gi, 'Subsystem[Subsystem]');
+  sanitized = sanitized.replace(/\bsub\s*\[\s*["']\s*["']\s*\]/gi, 'Subsystem[Subsystem]');
   
-  // Pattern 2: subgraph sub1, sub2, etc. - numbered subgraphs
-  sanitized = sanitized.replace(/subgraph\s+(?:["'])?sub(\d+)(?:["'])?\s*\{/gi, (match, num) => {
-    return match.replace(/sub\d+/i, `"Group${num}"`);
-  });
-  
-  // Pattern 3: sub[Label] or sub["Label"] - node with "sub" as ID
-  // This is the most common cause of "sub" boxes appearing
-  sanitized = sanitized.replace(/\bsub(?!\w)\s*\[([^\]]*)\]/gi, (match, label) => {
-    const trimmedLabel = label.trim();
-    // Always replace "sub" node ID, but preserve meaningful labels
-    if (!trimmedLabel || trimmedLabel.toLowerCase() === 'sub' || trimmedLabel.length < 2) {
-      return `SubNode[Subsystem]`;
-    }
-    // Keep the label but change the node ID to avoid "sub" box
-    return `SubNode[${label}]`;
-  });
-  
-  // Pattern 4: sub1[Label], sub2[Label], etc. - numbered sub nodes
-  sanitized = sanitized.replace(/\bsub(\d+)\s*\[([^\]]*)\]/gi, (match, num, label) => {
-    const trimmedLabel = label.trim();
-    if (!trimmedLabel || trimmedLabel.toLowerCase() === `sub${num}` || trimmedLabel.length < 2) {
-      return `SubNode${num}[Subsystem ${num}]`;
-    }
-    return `SubNode${num}[${label}]`;
-  });
-  
-  // Pattern 5: sub --> or --> sub - edges involving "sub" node (but not "subgraph" keyword)
-  // Replace node references in edges
-  sanitized = sanitized.replace(/(?<!subgraph\s)(?<!subgraph")(?<!subgraph')\bsub(?!\w)\s*(?=-->|--|==>|==|<-<|<=<)/gi, 'SubNode');
-  sanitized = sanitized.replace(/(?<=-->|--|==>|==|<-<|<=<)\s*\bsub(?!\w)\b(?!\s*\[)/gi, ' SubNode');
-  
-  // Pattern 6: Standalone "sub" that might be a node reference without brackets
-  // Only replace if it's clearly a node (followed by arrow or whitespace, not part of a word)
-  sanitized = sanitized.replace(/\bsub(?!\w)(?=\s|$|-->|--|==>|==)/gm, 'SubNode');
-  
-  // Final safety check: ensure no "sub" nodes remain that would create empty boxes
-  // This catches any edge cases we might have missed
-  const remainingSubNodes = sanitized.match(/\bsub(?!\w)\s*\[/gi);
-  if (remainingSubNodes && remainingSubNodes.length > 0) {
-    // Force replace any remaining "sub" nodes
-    sanitized = sanitized.replace(/\bsub(?!\w)\s*\[([^\]]*)\]/gi, 'SubNode[Subsystem]');
+  // Debug log to help diagnose rendering issues
+  if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+    console.log('[MermaidRenderer] Sanitized source preview:', sanitized.substring(0, 500));
   }
   
   return sanitized.trim();
@@ -302,6 +212,7 @@ async function getMermaid(): Promise<typeof import("mermaid").default> {
 interface MermaidRendererProps {
   source: string;
   className?: string;
+  onFixDiagram?: (errorMessage: string) => void;
 }
 
 type RenderState =
@@ -326,7 +237,7 @@ function useIsMobile(): boolean {
   return isMobile;
 }
 
-export default function MermaidRenderer({ source, className = "" }: MermaidRendererProps) {
+export default function MermaidRenderer({ source, className = "", onFixDiagram }: MermaidRendererProps) {
   const [state, setState] = useState<RenderState>({ status: "idle" });
   const [showSource, setShowSource] = useState(false);
   const [showModal, setShowModal] = useState(false);
@@ -570,7 +481,15 @@ export default function MermaidRenderer({ source, className = "" }: MermaidRende
               <p className="text-sm text-red-400 font-medium">Diagram failed to render</p>
               <p className="text-xs text-red-500 mt-1 break-words">{state.message}</p>
               
-              <div className="mt-3 flex items-center space-x-3">
+              <div className="mt-3 flex items-center space-x-3 flex-wrap gap-2">
+                {onFixDiagram && (
+                  <button
+                    onClick={() => onFixDiagram(state.message)}
+                    className="text-xs bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded transition-colors font-medium"
+                  >
+                    Fix Diagram
+                  </button>
+                )}
                 <button
                   onClick={() => setShowSource(!showSource)}
                   className="text-xs text-red-400 hover:text-red-300 underline"

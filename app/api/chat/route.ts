@@ -24,18 +24,55 @@ const ignoreUserTool = {
 };
 
 // In-memory cache store for conversation caches
-// Key: conversation hash, Value: { cacheName: string, cachedMessageCount: number, createdAt: number }
-const conversationCacheStore = new Map<string, { cacheName: string; cachedMessageCount: number; createdAt: number }>();
+// Key: conversation hash, Value: { cacheName: string, cachedMessageCount: number, summary: string | null, summaryUpToIndex: number, createdAt: number }
+const conversationCacheStore = new Map<string, { 
+  cacheName: string; 
+  cachedMessageCount: number; 
+  summary: string | null;
+  summaryUpToIndex: number;
+  createdAt: number 
+}>();
 
 // Shared system prompt cache (created once, reused)
 let systemPromptCache: string | null = null;
 let systemPromptCachePromise: Promise<string | null> | null = null;
+let systemPromptHash: string | null = null; // Hash of the system prompt to detect changes
 
 // Cache TTL: 1 hour (3600 seconds)
 const CACHE_TTL_SECONDS = 3600;
 
 // Minimum messages before creating a conversation cache (to ensure we meet token minimums)
 const MIN_MESSAGES_FOR_CACHE = 3;
+
+// Message windowing: keep last N messages as raw history
+const MAX_RAW_MESSAGES = 20;
+
+// Token estimation: rough approximation (1 token ≈ 4 characters)
+const TOKENS_PER_CHAR = 0.25;
+const MAX_TOKENS = 30000; // Safety limit for context window
+
+// Summarization threshold: summarize when we exceed MAX_RAW_MESSAGES
+const SUMMARIZATION_THRESHOLD = MAX_RAW_MESSAGES;
+
+/**
+ * Estimates token count for a string (rough approximation: 1 token ≈ 4 chars)
+ */
+function estimateTokens(text: string): number {
+  return Math.ceil(text.length * TOKENS_PER_CHAR);
+}
+
+/**
+ * Estimates total tokens for an array of message parts
+ */
+function estimateMessageTokens(messages: Array<{ role: string; parts: Array<{ text: string }> }>): number {
+  let total = 0;
+  for (const msg of messages) {
+    for (const part of msg.parts) {
+      total += estimateTokens(part.text);
+    }
+  }
+  return total;
+}
 
 /**
  * Creates a hash of the conversation history to identify unique conversations
@@ -56,9 +93,71 @@ function hashConversation(messages: Array<{ role: string; content: string }>, ti
 }
 
 /**
+ * Summarizes old messages using Gemini API
+ * Returns a concise summary of the conversation history
+ */
+async function summarizeMessages(
+  ai: GoogleGenAI,
+  messages: Array<{ role: string; content: string }>
+): Promise<string> {
+  try {
+    // Build prompt for summarization
+    const conversationText = messages
+      .map((msg, idx) => `${msg.role === "user" ? "User" : "Fram"}: ${msg.content}`)
+      .join("\n\n");
+
+    const summaryPrompt = `Please provide a concise summary of the following conversation. Focus on key topics discussed, important information shared, and the overall context. Keep it brief but informative (aim for 200-400 words):
+
+${conversationText}
+
+Summary:`;
+
+    const result = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: [{
+        role: "user" as const,
+        parts: [{ text: summaryPrompt }],
+      }],
+    });
+
+    // Extract summary text from response
+    const summaryText = result.response?.text() || "Previous conversation context.";
+    console.log(`Generated summary (${summaryText.length} chars, ~${estimateTokens(summaryText)} tokens)`);
+    return summaryText;
+  } catch (error) {
+    console.error("Failed to summarize messages:", error);
+    // Fallback: return a simple note
+    return `Previous conversation with ${messages.length} messages.`;
+  }
+}
+
+/**
+ * Creates a hash of the system prompt to detect changes
+ */
+function hashSystemPrompt(prompt: string): string {
+  const hash = createHash('sha256').update(prompt).digest('hex');
+  return hash.substring(0, 16);
+}
+
+/**
  * Creates or retrieves the system prompt cache
+ * Automatically invalidates and recreates cache if system prompt changes
  */
 async function getSystemPromptCache(ai: GoogleGenAI): Promise<string | null> {
+  // Calculate current system prompt hash
+  const currentPromptHash = hashSystemPrompt(FRAM_SYSTEM_PROMPT);
+  
+  // If system prompt changed, invalidate the cache
+  if (systemPromptHash !== null && systemPromptHash !== currentPromptHash) {
+    console.log("System prompt changed, invalidating cache");
+    systemPromptCache = null;
+    systemPromptCachePromise = null;
+    // Note: We don't delete the old cache from Gemini API - it will expire naturally
+  }
+  
+  // Update hash to current
+  systemPromptHash = currentPromptHash;
+
   // If cache creation is in progress, wait for it
   if (systemPromptCachePromise) {
     return systemPromptCachePromise;
@@ -93,11 +192,13 @@ async function getSystemPromptCache(ai: GoogleGenAI): Promise<string | null> {
       // Check token count first (optional, but good practice)
       // Note: gemini-3-flash-preview might not support caching yet
       // We'll try to create cache, but fall back gracefully if it fails
+      // Include tools in cache so we don't need to pass them when using cached content
       const cache = await ai.caches.create({
         model: "gemini-3-flash-preview", // Try with preview model
         config: {
           systemInstruction: FRAM_SYSTEM_PROMPT,
           contents: systemContent,
+          tools: [{ functionDeclarations: [ignoreUserTool] }],
           ttl: `${CACHE_TTL_SECONDS}s`,
           displayName: "fram-system-prompt"
         }
@@ -126,12 +227,20 @@ async function getSystemPromptCache(ai: GoogleGenAI): Promise<string | null> {
 
 /**
  * Creates or retrieves a conversation cache for the given history
+ * Returns cache name and messages to send (summary context + recent messages)
  */
 async function getConversationCache(
   ai: GoogleGenAI,
   conversationHash: string,
-  history: Array<{ role: string; parts: Array<{ text: string }> }>
-): Promise<{ cacheName: string | null; newMessages: Array<{ role: string; parts: Array<{ text: string }> }> }> {
+  summary: string | null,
+  recentMessages: Array<{ role: string; parts: Array<{ text: string }> }>,
+  summaryUpToIndex: number
+): Promise<{ 
+  cacheName: string | null; 
+  summaryCacheName: string | null;
+  contentsToSend: Array<{ role: string; parts: Array<{ text: string }> }>;
+  summary: string | null;
+}> {
   const cached = conversationCacheStore.get(conversationHash);
 
   // Check if we have a valid cache
@@ -139,47 +248,85 @@ async function getConversationCache(
     const age = Date.now() - cached.createdAt;
     const ageSeconds = age / 1000;
     
-    // If cache is still valid and we have new messages
-    if (ageSeconds < CACHE_TTL_SECONDS && cached.cachedMessageCount < history.length) {
-      // Return only new messages that aren't cached
-      const newMessages = history.slice(cached.cachedMessageCount);
-      return { cacheName: cached.cacheName, newMessages };
-    } else if (ageSeconds < CACHE_TTL_SECONDS) {
-      // Cache is valid and up to date
-      return { cacheName: cached.cacheName, newMessages: [] };
+    // If cache is still valid
+    if (ageSeconds < CACHE_TTL_SECONDS) {
+      // Check if summary has changed (conversation grew beyond previous summary point)
+      if (summary && cached.summary !== summary) {
+        // Summary changed, need to update cache
+        console.log("Summary updated, recreating summary cache");
+        // Delete old cache
+        try {
+          if (ai.caches && typeof ai.caches.delete === 'function' && cached.cacheName) {
+            await ai.caches.delete({ name: cached.cacheName });
+          }
+        } catch (error) {
+          console.warn("Failed to delete old summary cache:", error instanceof Error ? error.message : String(error));
+        }
+        // Will fall through to create new cache below
+      } else {
+        // Cache is valid, return it with recent messages
+        return { 
+          cacheName: cached.cacheName, 
+          summaryCacheName: cached.summary ? cached.cacheName : null,
+          contentsToSend: recentMessages,
+          summary: cached.summary
+        };
+      }
     } else {
       // Cache expired, remove it
       conversationCacheStore.delete(conversationHash);
       try {
-        if (ai.caches && typeof ai.caches.delete === 'function') {
+        if (ai.caches && typeof ai.caches.delete === 'function' && cached.cacheName) {
           await ai.caches.delete({ name: cached.cacheName });
         }
       } catch (error) {
-        // Ignore deletion errors (cache may already be expired server-side)
         console.warn("Failed to delete expired cache:", error instanceof Error ? error.message : String(error));
       }
     }
   }
 
-  // Create new cache if we have enough messages
-  if (history.length >= MIN_MESSAGES_FOR_CACHE) {
+  // Create new cache if we have a summary to cache
+  if (summary) {
     try {
       // Check if caches API is available
       if (!ai.caches || typeof ai.caches.create !== 'function') {
         console.warn("Cache API not available in this SDK version");
-        return { cacheName: null, newMessages: history };
+        // Build contents with summary context
+        const contentsToSend: Array<{ role: string; parts: Array<{ text: string }> }> = [
+          {
+            role: "user",
+            parts: [{ text: `PREVIOUS CONVERSATION SUMMARY:\n\n${summary}\n\n---\n\nCONTINUING WITH RECENT MESSAGES:` }],
+          },
+          {
+            role: "model",
+            parts: [{ text: "ACKNOWLEDGED. CONTINUING FROM SUMMARY." }],
+          },
+          ...recentMessages
+        ];
+        return { cacheName: null, summaryCacheName: null, contentsToSend, summary };
       }
 
-      // Build cache content: system prompt + conversation history
-      const cacheContent = [...history];
+      // Build cache content: system prompt + summary acknowledgment
+      const cacheContent = [
+        {
+          role: "user" as const,
+          parts: [{ text: `PREVIOUS CONVERSATION SUMMARY:\n\n${summary}` }],
+        },
+        {
+          role: "model" as const,
+          parts: [{ text: "ACKNOWLEDGED. CONTINUING FROM SUMMARY." }],
+        }
+      ];
 
+      // Include tools in cache so we don't need to pass them when using cached content
       const cache = await ai.caches.create({
         model: "gemini-3-flash-preview",
         config: {
           systemInstruction: FRAM_SYSTEM_PROMPT,
           contents: cacheContent,
+          tools: [{ functionDeclarations: [ignoreUserTool] }],
           ttl: `${CACHE_TTL_SECONDS}s`,
-          displayName: `fram-conversation-${conversationHash}`
+          displayName: `fram-summary-${conversationHash}`
         }
       });
 
@@ -187,26 +334,46 @@ async function getConversationCache(
       const cacheName = cache.name || null;
       conversationCacheStore.set(conversationHash, {
         cacheName: cacheName || "",
-        cachedMessageCount: history.length,
+        cachedMessageCount: summaryUpToIndex,
+        summary: summary,
+        summaryUpToIndex: summaryUpToIndex,
         createdAt: Date.now()
       });
 
-      console.log(`Conversation cache created: ${cacheName} (${history.length} messages)`);
-      return { cacheName, newMessages: [] };
+      console.log(`Summary cache created: ${cacheName} (summary up to index ${summaryUpToIndex})`);
+      
+      // Return cache with recent messages to send
+      return { 
+        cacheName: cacheName, 
+        summaryCacheName: cacheName,
+        contentsToSend: recentMessages,
+        summary: summary
+      };
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       const errorStack = error instanceof Error ? error.stack : undefined;
-      console.warn("Failed to create conversation cache:", errorMessage);
+      console.warn("Failed to create summary cache:", errorMessage);
       if (errorStack) {
         console.warn("Stack trace:", errorStack);
       }
-      // Fall back to non-cached approach
-      return { cacheName: null, newMessages: history };
+      // Fall back to non-cached approach with summary
+      const contentsToSend: Array<{ role: string; parts: Array<{ text: string }> }> = [
+        {
+          role: "user",
+          parts: [{ text: `PREVIOUS CONVERSATION SUMMARY:\n\n${summary}\n\n---\n\nCONTINUING WITH RECENT MESSAGES:` }],
+        },
+        {
+          role: "model",
+          parts: [{ text: "ACKNOWLEDGED. CONTINUING FROM SUMMARY." }],
+        },
+        ...recentMessages
+      ];
+      return { cacheName: null, summaryCacheName: null, contentsToSend, summary };
     }
   }
 
-  // Not enough messages yet, return full history
-  return { cacheName: null, newMessages: history };
+  // No summary yet, return recent messages only
+  return { cacheName: null, summaryCacheName: null, contentsToSend: recentMessages, summary: null };
 }
 
 // Helper function to retry API calls with exponential backoff
@@ -273,36 +440,64 @@ export async function POST(request: Request) {
 
     const ai = new GoogleGenAI({ apiKey });
 
-    // Build conversation history in Gemini format
-    const history: Array<{ role: string; parts: Array<{ text: string }> }> = [];
-    
-    // Add system instruction as initial context
-    history.push({
-      role: "user",
-      parts: [{ text: FRAM_SYSTEM_PROMPT }],
-    });
-    history.push({
-      role: "model",
-      parts: [{ text: "UNDERSTOOD." }],
-    });
+    // Enable caching
+    const ENABLE_CACHING = true;
 
-    // If a timeout just expired, add context about it BEFORE the conversation history
-    // This ensures FRAM understands old offenses are "paid for"
+    // Get conversation hash for cache tracking
+    const conversationHash = hashConversation(messages, timeoutExpired);
+    const cached = conversationCacheStore.get(conversationHash);
+
+    // Implement message windowing: keep last MAX_RAW_MESSAGES messages
+    const totalMessages = messages.length;
+    let rawMessages: Array<{ role: string; content: string }>;
+    let messagesToSummarize: Array<{ role: string; content: string }> = [];
+    let summary: string | null = null;
+    let summaryUpToIndex = 0;
+
+    if (totalMessages > MAX_RAW_MESSAGES) {
+      // Split: old messages to summarize, recent messages to keep raw
+      const splitIndex = totalMessages - MAX_RAW_MESSAGES;
+      messagesToSummarize = messages.slice(0, splitIndex);
+      rawMessages = messages.slice(splitIndex);
+      summaryUpToIndex = splitIndex;
+
+      // Check if we need to generate/update summary
+      const needsNewSummary = !cached || !cached.summary || cached.summaryUpToIndex < splitIndex;
+
+      if (needsNewSummary) {
+        console.log(`Summarizing ${messagesToSummarize.length} old messages (keeping last ${MAX_RAW_MESSAGES} raw)`);
+        summary = await summarizeMessages(ai, messagesToSummarize);
+      } else {
+        // Reuse existing summary
+        summary = cached.summary;
+        console.log(`Reusing existing summary (up to index ${cached.summaryUpToIndex})`);
+      }
+    } else {
+      // Not enough messages to summarize yet
+      rawMessages = messages;
+      summary = null;
+      summaryUpToIndex = 0;
+    }
+
+    // Build recent messages in Gemini format (last MAX_RAW_MESSAGES)
+    const recentMessages: Array<{ role: string; parts: Array<{ text: string }> }> = [];
+
+    // If a timeout just expired, add context about it BEFORE the recent messages
     if (timeoutExpired) {
-      history.push({
+      recentMessages.push({
         role: "user",
         parts: [{ text: "IMPORTANT CONTEXT: A TIMEOUT HAS JUST EXPIRED. THE USER HAS SERVED THEIR TIME FOR PREVIOUS OFFENSES. OLD MESSAGES IN THE CONVERSATION HISTORY THAT LED TO THE TIMEOUT ARE CONSIDERED RESOLVED. ONLY EVALUATE THE USER BASED ON THEIR CURRENT AND RECENT BEHAVIOR AFTER THIS POINT. GIVE THEM A FRESH START UNLESS THEY COMMIT NEW OFFENSES." }],
       });
-      history.push({
+      recentMessages.push({
         role: "model",
         parts: [{ text: "ACKNOWLEDGED. TIMEOUT EXPIRED. EVALUATING ONLY CURRENT BEHAVIOR." }],
       });
     }
 
-    // Convert previous messages to Gemini format
-    for (const msg of messages) {
+    // Convert recent raw messages to Gemini format
+    for (const msg of rawMessages) {
       if (msg.content && msg.content.trim()) {
-        history.push({
+        recentMessages.push({
           role: msg.role === "assistant" ? "model" : "user",
           parts: [{ text: msg.content }],
         });
@@ -310,87 +505,134 @@ export async function POST(request: Request) {
     }
 
     // Try to use caching for better performance and cost savings
-    // Wrap in try-catch to ensure cache failures don't break the request
     let contentsToSend: Array<{ role: string; parts: Array<{ text: string }> }>;
     let cachedContent: string | undefined;
 
-    // Temporarily disable caching to debug the 500 error
-    // TODO: Re-enable caching once we verify the API supports it
-    const ENABLE_CACHING = false;
-
     if (ENABLE_CACHING) {
       try {
-        const conversationHash = hashConversation(messages, timeoutExpired);
+        // Get system prompt cache (layer 1)
         const systemCache = await getSystemPromptCache(ai);
-        const { cacheName: conversationCache, newMessages } = await getConversationCache(ai, conversationHash, history);
+        
+        // Get conversation cache with summary (layer 2) and recent messages (layer 3)
+        const { cacheName: summaryCacheName, contentsToSend: cachedContents, summary: cachedSummary } = 
+          await getConversationCache(ai, conversationHash, summary, recentMessages, summaryUpToIndex);
 
-        // Determine what content to send and whether to use cache
-        if (conversationCache) {
-          // Use conversation cache - only send new messages
-          // If no new messages but cache exists, send at least the current user message
-          if (newMessages.length > 0) {
-            contentsToSend = newMessages;
-          } else {
-            // Cache is up to date, but we still need to send the current user message
-            const lastMessage = messages[messages.length - 1];
-            if (lastMessage && lastMessage.role === "user") {
-              contentsToSend = [{
-                role: "user" as const,
-                parts: [{ text: lastMessage.content }],
-              }];
-            } else {
-              // Fallback: send empty array (shouldn't happen in normal flow)
-              contentsToSend = [];
-            }
-          }
-          cachedContent = conversationCache;
-          console.log(`Using conversation cache: ${conversationCache}, sending ${contentsToSend.length} new messages`);
-        } else if (systemCache && history.length < MIN_MESSAGES_FOR_CACHE) {
-          // Use system prompt cache only - send full conversation history
-          contentsToSend = history;
+        // Determine what content to send and which cache to use
+        if (summaryCacheName && cachedSummary) {
+          // Use summary cache - send recent messages only
+          contentsToSend = cachedContents;
+          cachedContent = summaryCacheName;
+          console.log(`Using summary cache: ${summaryCacheName}, sending ${contentsToSend.length} recent messages`);
+          console.log(`Context: ${cachedSummary.length} chars summary + ${recentMessages.length} recent messages`);
+        } else if (systemCache && !summary) {
+          // Use system prompt cache only - send recent messages
+          contentsToSend = recentMessages;
           cachedContent = systemCache;
-          console.log(`Using system prompt cache: ${systemCache}, sending full history (${history.length} messages)`);
+          console.log(`Using system prompt cache: ${systemCache}, sending ${contentsToSend.length} recent messages`);
         } else {
-          // No cache available - send full history
-          contentsToSend = history;
-          cachedContent = undefined;
-          console.log(`No cache available, sending full history (${history.length} messages)`);
+          // No cache available - send summary context + recent messages
+          if (summary) {
+            contentsToSend = [
+              {
+                role: "user",
+                parts: [{ text: `PREVIOUS CONVERSATION SUMMARY:\n\n${summary}\n\n---\n\nCONTINUING WITH RECENT MESSAGES:` }],
+              },
+              {
+                role: "model",
+                parts: [{ text: "ACKNOWLEDGED. CONTINUING FROM SUMMARY." }],
+              },
+              ...recentMessages
+            ];
+          } else {
+            contentsToSend = recentMessages;
+          }
+          cachedContent = systemCache || undefined;
+          console.log(`No summary cache available, sending ${contentsToSend.length} messages (${summary ? 'with summary' : 'no summary'})`);
+        }
+
+        // Log token estimates
+        const estimatedTokens = estimateMessageTokens(contentsToSend);
+        console.log(`Estimated tokens: ~${estimatedTokens} (limit: ${MAX_TOKENS})`);
+        if (estimatedTokens > MAX_TOKENS) {
+          console.warn(`WARNING: Estimated tokens (${estimatedTokens}) exceed safety limit (${MAX_TOKENS})`);
         }
       } catch (cacheError) {
         // If cache operations fail, fall back to non-cached approach
         console.warn("Cache operations failed, falling back to non-cached approach:", cacheError);
-        contentsToSend = history;
+        if (summary) {
+          contentsToSend = [
+            {
+              role: "user",
+              parts: [{ text: `PREVIOUS CONVERSATION SUMMARY:\n\n${summary}\n\n---\n\nCONTINUING WITH RECENT MESSAGES:` }],
+            },
+            {
+              role: "model",
+              parts: [{ text: "ACKNOWLEDGED. CONTINUING FROM SUMMARY." }],
+            },
+            ...recentMessages
+          ];
+        } else {
+          contentsToSend = recentMessages;
+        }
         cachedContent = undefined;
       }
     } else {
-      // Caching disabled - send full history
-      contentsToSend = history;
+      // Caching disabled - send summary + recent messages
+      if (summary) {
+        contentsToSend = [
+          {
+            role: "user",
+            parts: [{ text: `PREVIOUS CONVERSATION SUMMARY:\n\n${summary}\n\n---\n\nCONTINUING WITH RECENT MESSAGES:` }],
+          },
+          {
+            role: "model",
+            parts: [{ text: "ACKNOWLEDGED. CONTINUING FROM SUMMARY." }],
+          },
+          ...recentMessages
+        ];
+      } else {
+        contentsToSend = recentMessages;
+      }
       cachedContent = undefined;
-      console.log("Caching disabled, sending full history");
+      console.log("Caching disabled, sending summary + recent messages");
     }
 
     // Generate response with streaming (with retry logic)
     const stream = await retryWithBackoff(async () => {
-      console.log("Calling Gemini API with model: gemini-3-flash-preview (streaming)");
-      console.log("Contents to send:", contentsToSend.length, "messages");
+      const estimatedTokens = estimateMessageTokens(contentsToSend);
+      console.log("=== Gemini API Request ===");
+      console.log("Model: gemini-3-flash-preview (streaming)");
+      console.log("Messages to send:", contentsToSend.length);
+      console.log("Estimated tokens:", estimatedTokens);
       console.log("Using cached content:", cachedContent || "none");
+      console.log("Summary present:", summary ? `Yes (${summary.length} chars)` : "No");
+      console.log("Recent messages:", recentMessages.length);
+      if (summary) {
+        console.log(`Context breakdown: Summary (~${estimateTokens(summary)} tokens) + ${recentMessages.length} recent messages (~${estimateMessageTokens(recentMessages)} tokens)`);
+      }
 
+      // When using cached content, tools must be included in the cache, not in the request
+      // So we conditionally include tools based on whether we're using cached content
       const config: {
-        tools: Array<{ functionDeclarations: Array<typeof ignoreUserTool> }>;
+        tools?: Array<{ functionDeclarations: Array<typeof ignoreUserTool> }>;
         cachedContent?: string;
-      } = {
-        tools: [{ functionDeclarations: [ignoreUserTool] }]
-      };
+      } = {};
 
       // Add cached content reference if available
       // Only add if cachedContent is truthy and not empty
       if (cachedContent && cachedContent.trim()) {
         try {
+          // When using cached content, tools are already in the cache, so don't include them here
           config.cachedContent = cachedContent;
         } catch (e) {
           console.warn("Failed to set cachedContent in config:", e);
-          // Continue without cache
+          // Continue without cache - will add tools below
         }
+      }
+
+      // Only add tools if we're NOT using cached content (tools are in cache if cachedContent is set)
+      if (!cachedContent || !cachedContent.trim()) {
+        config.tools = [{ functionDeclarations: [ignoreUserTool] }];
       }
 
       const result = await ai.models.generateContentStream({
