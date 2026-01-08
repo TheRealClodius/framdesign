@@ -520,6 +520,9 @@ export async function POST(request: Request) {
     let summary: string | null = null;
     let summaryUpToIndex = 0;
 
+    // Background summarization promise (doesn't block streaming)
+    let summaryPromise: Promise<string | null> | null = null;
+
     if (totalMessages > MAX_RAW_MESSAGES) {
       // Split: old messages to summarize, recent messages to keep raw
       const splitIndex = totalMessages - MAX_RAW_MESSAGES;
@@ -531,8 +534,11 @@ export async function POST(request: Request) {
       const needsNewSummary = !cached || !cached.summary || cached.summaryUpToIndex < splitIndex;
 
       if (needsNewSummary) {
-        console.log(`Summarizing ${messagesToSummarize.length} old messages (keeping last ${MAX_RAW_MESSAGES} raw)`);
-        summary = await summarizeMessages(ai, messagesToSummarize);
+        console.log(`Scheduling background summarization of ${messagesToSummarize.length} old messages`);
+        // Start summarization in background, don't await it
+        summaryPromise = summarizeMessages(ai, messagesToSummarize);
+        // Use existing summary for now (if available)
+        summary = cached?.summary || null;
       } else {
         // Reuse existing summary
         summary = cached.summary;
@@ -571,32 +577,53 @@ export async function POST(request: Request) {
     }
 
     // Try to use caching for better performance and cost savings
+    // OPTIMIZATION: Use fast path with existing cache, update in background
     let contentsToSend: Array<{ role: string; parts: Array<{ text: string }> }>;
     let cachedContent: string | undefined;
 
     if (ENABLE_CACHING) {
       try {
-        // Get system prompt cache (layer 1)
-        const systemCache = await getSystemPromptCache(ai);
-        
-        // Get conversation cache with summary (layer 2) and recent messages (layer 3)
-        const { cacheName: summaryCacheName, contentsToSend: cachedContents, summary: cachedSummary } = 
-          await getConversationCache(ai, conversationHash, summary, recentMessages, summaryUpToIndex);
-
-        // Determine what content to send and which cache to use
-        if (summaryCacheName && cachedSummary) {
-          // Use summary cache - send recent messages only
-          contentsToSend = cachedContents;
-          cachedContent = summaryCacheName;
-          console.log(`Using summary cache: ${summaryCacheName}, sending ${contentsToSend.length} recent messages`);
-          console.log(`Context: ${cachedSummary.length} chars summary + ${recentMessages.length} recent messages`);
-        } else if (systemCache && !summary) {
-          // Use system prompt cache only - send recent messages
-          contentsToSend = recentMessages;
-          cachedContent = systemCache;
-          console.log(`Using system prompt cache: ${systemCache}, sending ${contentsToSend.length} recent messages`);
+        // Fast path: Check if we already have a valid cache
+        if (cached) {
+          const age = Date.now() - cached.createdAt;
+          const ageSeconds = age / 1000;
+          
+          if (ageSeconds < CACHE_TTL_SECONDS) {
+            // Use existing cache immediately, don't wait for updates
+            if (cached.summary) {
+              contentsToSend = recentMessages;
+              cachedContent = cached.cacheName;
+              console.log(`Fast path: Using existing summary cache (age: ${ageSeconds.toFixed(1)}s)`);
+            } else {
+              // Try to get system cache (fast operation)
+              const systemCache = await Promise.race([
+                getSystemPromptCache(ai),
+                new Promise<null>((resolve) => setTimeout(() => resolve(null), 100)) // 100ms timeout
+              ]);
+              contentsToSend = recentMessages;
+              cachedContent = systemCache || undefined;
+              console.log(`Fast path: Using system cache, no summary yet`);
+            }
+            
+            // Background: Update cache if needed (don't await)
+            if (summaryPromise) {
+              console.log("Background: Will update cache with new summary after streaming");
+            }
+          } else {
+            // Cache expired, fall through to slow path
+            console.log("Cache expired, using slow path");
+            throw new Error("Cache expired");
+          }
         } else {
-          // No cache available - send summary context + recent messages
+          // No existing cache, use slow path (but make it faster with timeouts)
+          console.log("No existing cache, initializing...");
+          
+          // Get system prompt cache with timeout
+          const systemCache = await Promise.race([
+            getSystemPromptCache(ai),
+            new Promise<null>((resolve) => setTimeout(() => resolve(null), 200)) // 200ms timeout
+          ]);
+          
           if (summary) {
             contentsToSend = [
               {
@@ -613,7 +640,13 @@ export async function POST(request: Request) {
             contentsToSend = recentMessages;
           }
           cachedContent = systemCache || undefined;
-          console.log(`No summary cache available, sending ${contentsToSend.length} messages (${summary ? 'with summary' : 'no summary'})`);
+          console.log(`Initialized cache, sending ${contentsToSend.length} messages`);
+          
+          // Background: Create conversation cache for next time (don't await)
+          if (summary) {
+            getConversationCache(ai, conversationHash, summary, recentMessages, summaryUpToIndex)
+              .catch((err) => console.warn("Background cache creation failed:", err));
+          }
         }
 
         // Log token estimates
@@ -693,6 +726,7 @@ export async function POST(request: Request) {
       const config: {
         tools?: Array<{ functionDeclarations: Array<typeof ignoreUserTool> }>;
         cachedContent?: string;
+        systemInstruction?: string;
       } = {};
 
       // Add cached content reference if available
@@ -725,37 +759,32 @@ export async function POST(request: Request) {
       return result;
     });
 
-    // Check for function calls across the full stream before sending output
+    // Check early chunks for function calls, then stream progressively to the client
     let functionCall: { name: string; args: { duration_seconds: number; farewell_message: string } } | null = null;
-    const textChunks: string[] = [];
+    const bufferedChunks: unknown[] = [];
+    const MAX_BUFFER_CHUNKS = 3;
+    const MAX_BUFFER_MS = 150; // Reduced from 750ms to 150ms for faster TTFT
 
     try {
-      for await (const chunk of stream as AsyncIterable<unknown>) {
-        const typed = chunk as { text?: string | (() => string); candidates?: Array<{ content?: { parts?: Array<{ text?: string; functionCall?: { name: string; args: { duration_seconds: number; farewell_message: string } } }> } }> };
-        const candidates = typed.candidates?.[0]?.content?.parts || [];
+      const iterator = stream[Symbol.asyncIterator]();
+      const bufferStart = Date.now();
 
-        // Detect function call anywhere in the stream
+      // Buffer a few chunks (or up to time limit) to detect function calls before streaming
+      while (bufferedChunks.length < MAX_BUFFER_CHUNKS && Date.now() - bufferStart < MAX_BUFFER_MS) {
+        const { value, done } = await iterator.next();
+        if (done) break;
+        bufferedChunks.push(value);
+
+        const typed = value as { candidates?: Array<{ content?: { parts?: Array<{ text?: string; functionCall?: { name: string; args: { duration_seconds: number; farewell_message: string } } }> } }> };
+        const candidates = typed.candidates?.[0]?.content?.parts || [];
         const callPart = candidates.find((part) => part.functionCall);
         if (callPart?.functionCall) {
           functionCall = callPart.functionCall;
           break;
         }
-
-        let text: string | undefined;
-        if (typeof typed.text === "function") {
-          text = typed.text();
-        } else if (typed.text) {
-          text = typed.text;
-        } else if (candidates?.[0]?.text) {
-          text = candidates[0].text;
-        }
-
-        if (text) {
-          textChunks.push(text);
-        }
       }
 
-      // If function call detected, handle it and return JSON
+      // If function call detected early, handle it and return JSON (no stream)
       if (functionCall?.name === "ignore_user") {
         const args = functionCall.args as { duration_seconds: number; farewell_message: string };
         const durationSeconds = args.duration_seconds;
@@ -772,22 +801,61 @@ export async function POST(request: Request) {
         });
       }
 
-      // No tool call: stream buffered text chunks to the client
+      // Otherwise, stream buffered chunks and then the rest as they arrive
       return new Response(
         new ReadableStream({
-          start(controller) {
+          async start(controller) {
             const encoder = new TextEncoder();
             let chunksProcessed = 0;
             let bytesSent = 0;
 
-            try {
-              for (const text of textChunks) {
+            const enqueueTextFromChunk = (chunk: unknown) => {
+              const typed = chunk as { text?: string | (() => string); candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
+              const candidates = typed.candidates?.[0]?.content?.parts || [];
+
+              let text: string | undefined;
+              if (typeof typed.text === "function") {
+                text = typed.text();
+              } else if (typed.text) {
+                text = typed.text;
+              } else if (candidates?.[0]?.text) {
+                text = candidates[0].text;
+              }
+
+              if (text) {
                 const encoded = encoder.encode(text);
                 bytesSent += encoded.length;
                 controller.enqueue(encoded);
                 chunksProcessed++;
               }
+            };
+
+            try {
+              // Flush buffered chunks first
+              for (const chunk of bufferedChunks) {
+                enqueueTextFromChunk(chunk);
+              }
+
+              // Continue streaming remaining chunks
+              while (true) {
+                const { value, done } = await iterator.next();
+                if (done) break;
+                enqueueTextFromChunk(value);
+              }
+
               console.log(`Stream completed: ${chunksProcessed} chunks, ${bytesSent} bytes`);
+              
+              // Background: Update cache with new summary if it was generated
+              if (summaryPromise) {
+                summaryPromise.then((newSummary) => {
+                  if (newSummary) {
+                    console.log("Background: Updating cache with new summary");
+                    getConversationCache(ai, conversationHash, newSummary, recentMessages, summaryUpToIndex)
+                      .catch((err) => console.warn("Background cache update failed:", err));
+                  }
+                }).catch((err) => console.warn("Background summarization failed:", err));
+              }
+              
               controller.close();
             } catch (error) {
               console.error("Error streaming response:", error);

@@ -113,14 +113,26 @@ export default function ChatInterface() {
     }
   }, []);
 
-  // Auto-save messages to localStorage on changes
+  // Auto-save messages to localStorage on changes (debounced to reduce blocking during streaming)
   useEffect(() => {
-    const messagesToSave = sanitizeForStorage(messages);
-    if (messagesToSave.length > 0) {
-      localStorage.setItem(MESSAGES_STORAGE_KEY, JSON.stringify(messagesToSave));
-    } else {
-      localStorage.removeItem(MESSAGES_STORAGE_KEY);
-    }
+    // Debounce localStorage writes to avoid blocking during streaming
+    const timeoutId = setTimeout(() => {
+      const messagesToSave = sanitizeForStorage(messages);
+      if (messagesToSave.length > 0) {
+        // Use requestIdleCallback if available to avoid blocking main thread
+        if ('requestIdleCallback' in window) {
+          requestIdleCallback(() => {
+            localStorage.setItem(MESSAGES_STORAGE_KEY, JSON.stringify(messagesToSave));
+          });
+        } else {
+          localStorage.setItem(MESSAGES_STORAGE_KEY, JSON.stringify(messagesToSave));
+        }
+      } else {
+        localStorage.removeItem(MESSAGES_STORAGE_KEY);
+      }
+    }, 300); // Debounce for 300ms
+
+    return () => clearTimeout(timeoutId);
   }, [messages]);
 
   useEffect(() => {
@@ -333,7 +345,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
         let buffer = "";
         let lastUpdateTime = Date.now();
         let lastChunkTime = Date.now();
-        const UPDATE_INTERVAL = 50; // Update UI every 50ms to reduce re-renders for long streams
+        const UPDATE_INTERVAL = 100; // Update UI every 100ms to reduce re-renders (was 50ms)
         const STREAM_TIMEOUT = 60000; // 60 second timeout for streams
         const CHUNK_TIMEOUT = 30000; // 30 second timeout between chunks
         

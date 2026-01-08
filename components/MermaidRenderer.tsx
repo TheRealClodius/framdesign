@@ -524,7 +524,6 @@ export default function MermaidRenderer({ source, className = "", onFixDiagram }
         data-mermaid-diagram="true"
         style={isMobile ? {
           backgroundColor: "rgba(26, 26, 26, 0.95)",
-          background: "rgba(26, 26, 26, 0.95)",
           borderRadius: "8px",
           width: "100%"
         } : undefined}
@@ -533,7 +532,6 @@ export default function MermaidRenderer({ source, className = "", onFixDiagram }
           className="overflow-x-auto py-0"
           style={isMobile ? {
             backgroundColor: "transparent",
-            background: "transparent",
             width: "100%"
           } : undefined}
         >
@@ -547,7 +545,6 @@ export default function MermaidRenderer({ source, className = "", onFixDiagram }
               backgroundColor: "transparent",
               display: "block",
               ...(isMobile ? {
-                background: "transparent",
                 backgroundColor: "transparent",
                 width: "100%",
                 maxWidth: "100%"
@@ -564,8 +561,7 @@ export default function MermaidRenderer({ source, className = "", onFixDiagram }
         <div 
           className="flex justify-end p-2"
           style={isMobile ? {
-            backgroundColor: "transparent",
-            background: "transparent"
+            backgroundColor: "transparent"
           } : undefined}
         >
           <button
