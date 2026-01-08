@@ -1,5 +1,20 @@
 "use client";
 
+/**
+ * CHAT SECTION COMPONENT
+ * 
+ * This component renders the chat interface section of the website, featuring:
+ * - Interactive chat interface with user and assistant messages
+ * - Streaming response support with real-time updates
+ * - Markdown and Mermaid diagram rendering for assistant responses
+ * - Timeout/blocking functionality for inappropriate user behavior
+ * - Auto-scrolling message container
+ * - Responsive design with mobile and desktop layouts
+ * 
+ * Location: components/ChatInterface.tsx
+ * Used in: app/[locale]/page.tsx (main landing page, below hero section)
+ * API Endpoint: /api/chat (handles chat requests and streaming responses)
+ */
 import { useState, useRef, useEffect } from "react";
 import MarkdownWithMermaid from "./MarkdownWithMermaid";
 
@@ -10,6 +25,7 @@ type Message = {
 };
 
 const TIMEOUT_STORAGE_KEY = "fram_timeout_until";
+const MESSAGES_STORAGE_KEY = "fram_conversation";
 const BLOCKED_MESSAGE = "Fram has decided not to respond to you anymore as you've been rude. Fram does not take shit from anybody.";
 
 export default function ChatInterface() {
@@ -55,6 +71,35 @@ export default function ChatInterface() {
       }
     }
   }, []);
+
+  // Load conversation from localStorage on mount
+  useEffect(() => {
+    const stored = localStorage.getItem(MESSAGES_STORAGE_KEY);
+    if (stored) {
+      try {
+        const parsedMessages = JSON.parse(stored);
+        if (Array.isArray(parsedMessages) && parsedMessages.length > 0) {
+          // Filter out streaming messages (they shouldn't be persisted)
+          const validMessages = parsedMessages.filter((msg: Message) => !msg.streaming);
+          if (validMessages.length > 0) {
+            setMessages(validMessages);
+          }
+        }
+      } catch (error) {
+        console.error("Failed to parse stored messages:", error);
+        localStorage.removeItem(MESSAGES_STORAGE_KEY);
+      }
+    }
+  }, []);
+
+  // Auto-save messages to localStorage on changes
+  useEffect(() => {
+    // Filter out streaming messages before saving
+    const messagesToSave = messages.filter((msg) => !msg.streaming);
+    if (messagesToSave.length > 0) {
+      localStorage.setItem(MESSAGES_STORAGE_KEY, JSON.stringify(messagesToSave));
+    }
+  }, [messages]);
 
   useEffect(() => {
     scrollToBottom();
@@ -309,13 +354,13 @@ export default function ChatInterface() {
   };
 
   return (
-    <section className="w-full max-w-[28rem] md:max-w-[950px] mx-auto px-4 pt-12 pb-9">
-      <div className="mb-10 text-center">
+    <section className="w-full max-w-[28rem] md:max-w-[950px] mx-auto px-4 pt-12 pb-9 h-fit md:flex-1 md:flex md:flex-col md:min-h-0">
+      <div className="mb-10 text-center flex-shrink-0">
         <p className="text-[0.75rem] font-mono text-gray-500 tracking-wider">FRAM ASSISTANT</p>
       </div>
 
-      <div className="flex flex-col h-[520px] md:h-[500px] font-mono text-[0.875rem]">
-        <div ref={messagesContainerRef} className="flex-1 overflow-y-auto mb-2 space-y-6 scrollbar-hide">
+      <div className="flex flex-col h-[600px] md:flex-1 md:min-h-0 font-mono text-[0.875rem]">
+        <div ref={messagesContainerRef} className="h-[600px] md:flex-1 md:min-h-0 overflow-y-auto mb-2 space-y-6 scrollbar-boxy">
           {messages.map((message, index) => (
             <div
               key={index}
@@ -361,7 +406,7 @@ export default function ChatInterface() {
         </div>
 
         {isBlocked ? (
-          <div className="text-center py-4 border-t border-gray-200">
+          <div className="text-center py-4 border-t border-gray-200 flex-shrink-0">
             <p className="text-gray-500 text-[0.8rem] leading-relaxed mb-3">
               {BLOCKED_MESSAGE}
             </p>
@@ -375,7 +420,7 @@ export default function ChatInterface() {
             )}
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="relative max-w-[500px] mx-auto w-full">
+          <form onSubmit={handleSubmit} className="relative max-w-[500px] mx-auto w-full flex-shrink-0">
             <textarea
               ref={textareaRef}
               rows={1}

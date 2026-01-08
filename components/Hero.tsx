@@ -1,5 +1,16 @@
 "use client";
 
+/**
+ * HERO SECTION COMPONENT
+ * 
+ * This component renders the hero section of the website, featuring:
+ * - Full-screen video background with autoplay and looping
+ * - Large "FRAM" branding text overlay
+ * - Responsive design with mobile and desktop layouts
+ * 
+ * Location: components/Hero.tsx
+ * Used in: app/[locale]/page.tsx (main landing page)
+ */
 import { useEffect, useRef } from "react";
 
 export default function Hero() {

@@ -128,6 +128,73 @@ function sanitizeMermaidSource(source: string): string {
   // Clean up multiple consecutive empty lines (max 2)
   sanitized = sanitized.replace(/\n{3,}/g, '\n\n');
   
+  // Fix "sub" labels in subgraphs/clusters and nodes
+  // This prevents generic "sub" boxes from appearing in diagrams
+  // CRITICAL: Replace ALL instances of "sub" as a node ID or label to prevent empty boxes
+  
+  // Analyze context to infer better names for subgraphs
+  const contextLower = sanitized.toLowerCase();
+  let suggestedName = '"Group"';
+  if (/frontend|ui|interface|view|client/.test(contextLower)) {
+    suggestedName = '"Frontend"';
+  } else if (/backend|api|server|service|endpoint/.test(contextLower)) {
+    suggestedName = '"Backend"';
+  } else if (/database|db|data|storage|persist/.test(contextLower)) {
+    suggestedName = '"Database"';
+  } else if (/process|workflow|pipeline|flow/.test(contextLower)) {
+    suggestedName = '"Process"';
+  } else if (/component|module|layer/.test(contextLower)) {
+    suggestedName = '"Component"';
+  }
+  
+  // Pattern 1: subgraph sub {...} or subgraph "sub" {...} - subgraph declarations
+  sanitized = sanitized.replace(/subgraph\s+(?:["'])?sub(?!\w)(?:["'])?\s*\{/gi, () => {
+    return `subgraph ${suggestedName} {`;
+  });
+  
+  // Pattern 2: subgraph sub1, sub2, etc. - numbered subgraphs
+  sanitized = sanitized.replace(/subgraph\s+(?:["'])?sub(\d+)(?:["'])?\s*\{/gi, (match, num) => {
+    return match.replace(/sub\d+/i, `"Group${num}"`);
+  });
+  
+  // Pattern 3: sub[Label] or sub["Label"] - node with "sub" as ID
+  // This is the most common cause of "sub" boxes appearing
+  sanitized = sanitized.replace(/\bsub(?!\w)\s*\[([^\]]*)\]/gi, (match, label) => {
+    const trimmedLabel = label.trim();
+    // Always replace "sub" node ID, but preserve meaningful labels
+    if (!trimmedLabel || trimmedLabel.toLowerCase() === 'sub' || trimmedLabel.length < 2) {
+      return `SubNode[Subsystem]`;
+    }
+    // Keep the label but change the node ID to avoid "sub" box
+    return `SubNode[${label}]`;
+  });
+  
+  // Pattern 4: sub1[Label], sub2[Label], etc. - numbered sub nodes
+  sanitized = sanitized.replace(/\bsub(\d+)\s*\[([^\]]*)\]/gi, (match, num, label) => {
+    const trimmedLabel = label.trim();
+    if (!trimmedLabel || trimmedLabel.toLowerCase() === `sub${num}` || trimmedLabel.length < 2) {
+      return `SubNode${num}[Subsystem ${num}]`;
+    }
+    return `SubNode${num}[${label}]`;
+  });
+  
+  // Pattern 5: sub --> or --> sub - edges involving "sub" node (but not "subgraph" keyword)
+  // Replace node references in edges
+  sanitized = sanitized.replace(/(?<!subgraph\s)(?<!subgraph")(?<!subgraph')\bsub(?!\w)\s*(?=-->|--|==>|==|<-<|<=<)/gi, 'SubNode');
+  sanitized = sanitized.replace(/(?<=-->|--|==>|==|<-<|<=<)\s*\bsub(?!\w)\b(?!\s*\[)/gi, ' SubNode');
+  
+  // Pattern 6: Standalone "sub" that might be a node reference without brackets
+  // Only replace if it's clearly a node (followed by arrow or whitespace, not part of a word)
+  sanitized = sanitized.replace(/\bsub(?!\w)(?=\s|$|-->|--|==>|==)/gm, 'SubNode');
+  
+  // Final safety check: ensure no "sub" nodes remain that would create empty boxes
+  // This catches any edge cases we might have missed
+  const remainingSubNodes = sanitized.match(/\bsub(?!\w)\s*\[/gi);
+  if (remainingSubNodes && remainingSubNodes.length > 0) {
+    // Force replace any remaining "sub" nodes
+    sanitized = sanitized.replace(/\bsub(?!\w)\s*\[([^\]]*)\]/gi, 'SubNode[Subsystem]');
+  }
+  
   return sanitized.trim();
 }
 
@@ -327,6 +394,37 @@ export default function MermaidRenderer({ source, className = "" }: MermaidRende
       // Remove white backgrounds from style attributes
       svg = svg.replace(/style\s*=\s*["']([^"']*background[^"']*white[^"']*)["']/gi, (match, styles) => {
         return `style="${styles.replace(/background[^;]*white[^;]*;?/gi, '').trim()}"`;
+      });
+      
+      // Add corner radii to rectangle elements (diagram boxes)
+      // This adds rounded corners to all rect elements that don't already have rx/ry attributes
+      svg = svg.replace(/<rect([^>]*)>/gi, (match, attrs) => {
+        // Check if rx or ry already exists
+        const hasRx = /rx\s*=\s*["'][^"']*["']/i.test(attrs);
+        const hasRy = /ry\s*=\s*["'][^"']*["']/i.test(attrs);
+        
+        // Only add corner radii if they don't exist
+        if (!hasRx && !hasRy) {
+          // Add rx and ry attributes with 6px radius (adjustable)
+          const cornerRadius = '6';
+          // Insert rx and ry before the closing >
+          return `<rect${attrs} rx="${cornerRadius}" ry="${cornerRadius}">`;
+        }
+        
+        // If only one exists, add the missing one
+        if (hasRx && !hasRy) {
+          const rxMatch = attrs.match(/rx\s*=\s*["']([^"']*)["']/i);
+          const ryValue = rxMatch ? rxMatch[1] : '6';
+          return `<rect${attrs} ry="${ryValue}">`;
+        }
+        
+        if (!hasRx && hasRy) {
+          const ryMatch = attrs.match(/ry\s*=\s*["']([^"']*)["']/i);
+          const rxValue = ryMatch ? ryMatch[1] : '6';
+          return `<rect rx="${rxValue}" ${attrs}>`;
+        }
+        
+        return match;
       });
       
       // Ensure SVG element itself has transparent background
