@@ -121,7 +121,8 @@ Summary:`;
     });
 
     // Extract summary text from response
-    const summaryText = result.text() || "Previous conversation context.";
+    // The response structure has candidates[0].content.parts[0].text
+    const summaryText = result.candidates?.[0]?.content?.parts?.[0]?.text || "Previous conversation context.";
     console.log(`Generated summary (${summaryText.length} chars, ~${estimateTokens(summaryText)} tokens)`);
     return summaryText;
   } catch (error) {
