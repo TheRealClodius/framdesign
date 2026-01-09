@@ -133,12 +133,25 @@ Result: User hears your complete audio, THEN sees both messages in chat:
   1. "Here's your answer:"
   2. "The capital of Romania is Bucharest, located in the southern part of the country."
 
+Example 3 - User wants diagram in text:
+User: "Show me a diagram of the technical challenges in text."
+Your turn:
+  - Audio: "SURE, I'LL SEND YOU A DIAGRAM IN TEXT."
+  - Tool call: {
+      closing_message: "Here's the diagram:",
+      text_response: "'''mermaid\\nflowchart TD\\n  A[Integration] --> B[Security]\\n  A --> C[Performance]\\n'''"
+      (Note: Use backticks ''' not quotes for mermaid code fences - shown as ''' here to avoid formatting issues)
+    }
+Result: User hears audio, THEN sees the diagram rendered in chat (properly formatted with mermaid code fence)
+
 COMMON MISTAKES TO AVOID:
 ❌ NOT including audio acknowledgment (saying nothing before calling tool)
 ❌ Repeating your acknowledgment (the audio should say it once, clearly)
 ❌ Forgetting to use text_response when user asked for an answer in text
 ❌ Making closing_message too long (keep it brief - it's just a transition)
-❌ Using this tool based on past conversation history instead of current voice input`,
+❌ Using this tool based on past conversation history instead of current voice input
+❌ Sending mermaid diagrams without proper code fences (MUST wrap with three backticks and 'mermaid' language tag)
+❌ Forgetting markdown formatting in text_response (use headings, lists, code blocks)`,
   parameters: {
     type: Type.OBJECT,
     properties: {
@@ -152,7 +165,7 @@ COMMON MISTAKES TO AVOID:
       },
       text_response: {
         type: Type.STRING,
-        description: "OPTIONAL but IMPORTANT: Full detailed response to send in text chat after session ends. Use this when user asked for an answer in text format, or when providing information better suited for text (diagrams, code, detailed explanations). This appears as a SEPARATE message after closing_message. If user just wants to end call without additional info, leave this empty."
+        description: "OPTIONAL but IMPORTANT: Full detailed response to send in text chat after session ends. Use this when user asked for an answer in text format, or when providing information better suited for text (diagrams, code, detailed explanations). This appears as a SEPARATE message after closing_message. If user just wants to end call without additional info, leave this empty.\n\nFORMATTING RULES:\n- Use proper markdown formatting (headings, lists, bold, etc.)\n- For Mermaid diagrams, ALWAYS wrap them in code fences with three backticks and 'mermaid' language tag\n- For code snippets, use appropriate language tags in code fences\n- Structure your response clearly with headings and sections"
       }
     },
     required: ["closing_message"]
