@@ -66,7 +66,52 @@ export class VoiceService extends EventTarget {
    */
   async start(conversationHistory: Array<{ role: string; content: string }>): Promise<void> {
     if (this.isActive) {
+      console.warn('Attempted to start voice session while already active');
       throw new Error('Voice session already active');
+    }
+
+    // Ensure any previous session is fully cleaned up before starting
+    // This is critical for proper reinitialization after stopping
+    if (this.ws || this.audioContext || this.mediaStream || this.audioWorkletNode) {
+      console.log('Previous session resources detected, cleaning up before starting new session...');
+      
+      // Store WebSocket reference before cleanup
+      const existingWs = this.ws;
+      
+      // Mark as intentionally stopping to prevent reconnection attempts
+      this.isIntentionallyStopping = true;
+      this.isActive = false;
+      
+      // Clean up resources
+      this.cleanup();
+      
+      // Wait for WebSocket to fully close if it existed
+      if (existingWs) {
+        await new Promise<void>((resolve) => {
+          if (existingWs.readyState === WebSocket.CLOSED) {
+            resolve();
+            return;
+          }
+          
+          const checkClosed = setInterval(() => {
+            if (existingWs.readyState === WebSocket.CLOSED) {
+              clearInterval(checkClosed);
+              resolve();
+            }
+          }, 50);
+          
+          // Timeout after 1 second
+          setTimeout(() => {
+            clearInterval(checkClosed);
+            resolve();
+          }, 1000);
+        });
+      }
+      
+      // Wait a brief moment to ensure all cleanup completes
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      console.log('Cleanup complete, starting new session');
     }
 
     // Validate WebSocket URL
@@ -82,6 +127,9 @@ export class VoiceService extends EventTarget {
     this.isIntentionallyStopping = false;
     this.reconnectAttempts = 0;
     this.conversationHistory = conversationHistory;
+    this.partialTranscripts = { user: [], assistant: [] };
+    this.audioPlaybackErrors = 0;
+    this.nextPlayTime = 0;
 
     // 1. Request microphone permission
     try {
@@ -853,15 +901,33 @@ export class VoiceService extends EventTarget {
       this.reconnectTimer = null;
     }
 
+    // Disconnect audio processing node first
+    if (this.audioWorkletNode) {
+      try {
+        this.audioWorkletNode.disconnect();
+      } catch (error) {
+        // Ignore errors if already disconnected
+        console.warn('Error disconnecting audioWorkletNode:', error);
+      }
+      this.audioWorkletNode = null;
+    }
+
     // Stop microphone
     if (this.mediaStream) {
       this.mediaStream.getTracks().forEach(track => track.stop());
       this.mediaStream = null;
     }
 
-    // Close audio context
+    // Close audio context (must be done after disconnecting nodes)
     if (this.audioContext) {
-      this.audioContext.close();
+      try {
+        // Check if context is not already closed
+        if (this.audioContext.state !== 'closed') {
+          this.audioContext.close();
+        }
+      } catch (error) {
+        console.warn('Error closing audio context:', error);
+      }
       this.audioContext = null;
     }
 
