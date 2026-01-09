@@ -788,7 +788,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
         
         {/* Voice Mode Controls */}
         {!isBlocked && (
-          <div className="flex flex-col items-end mt-4 space-y-2">
+          <div className="flex flex-col mt-4 space-y-2">
             {/* Voice Transcript Display */}
             {isVoiceMode && voiceTranscript && (
               <div className="w-full max-w-[500px] mx-auto px-4 py-2 bg-gray-50 border border-gray-200 rounded text-[0.75rem] font-mono text-gray-600 max-h-[100px] overflow-y-auto">
@@ -821,8 +821,9 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
               </div>
             )}
             
-            {/* Voice Button */}
-            <button
+            {/* Voice Button Container */}
+            <div className="max-w-[500px] mx-auto w-full flex justify-end">
+              <button
               onClick={async () => {
                 if (isVoiceMode) {
                   // End voice mode
@@ -893,7 +894,8 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
               ) : (
                 "VOICE"
               )}
-            </button>
+              </button>
+            </div>
           </div>
         )}
       </div>
