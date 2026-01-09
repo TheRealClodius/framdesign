@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
 import { contactFormSchema } from "@/lib/schemas";
+import { handleServerError } from "@/lib/errors";
 
 export async function POST(request: Request) {
   try {
@@ -33,10 +34,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true, data });
   } catch (error) {
     console.error("Error sending email:", error);
-    return NextResponse.json(
-      { error: "Internal Server Error" },
-      { status: 500 }
-    );
+    return handleServerError(error);
   }
 }
 

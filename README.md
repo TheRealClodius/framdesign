@@ -45,6 +45,40 @@ npm run build
 npm start
 ```
 
+## Deployment
+
+### Railway Deployment
+
+This project consists of two services that can be deployed to Railway:
+
+1. **Voice Server** - WebSocket server for Gemini Live API
+2. **Next.js Application** - Main website application
+
+For complete deployment instructions, see:
+- **[RAILWAY_DEPLOYMENT.md](./RAILWAY_DEPLOYMENT.md)** - Comprehensive deployment guide
+- **[DEPLOYMENT_CHECKLIST.md](./DEPLOYMENT_CHECKLIST.md)** - Step-by-step deployment checklist
+- **[voice-server/RAILWAY_DEPLOYMENT.md](./voice-server/RAILWAY_DEPLOYMENT.md)** - Voice server specific guide
+
+**Quick Start:**
+
+```bash
+# Deploy Voice Server
+cd voice-server
+../scripts/deploy-voice-server.sh  # Or follow manual steps in RAILWAY_DEPLOYMENT.md
+
+# Deploy Next.js App
+railway init
+railway link
+railway variables set NEXT_PUBLIC_VOICE_SERVER_URL="wss://your-voice-server.up.railway.app"
+railway up
+```
+
+**Environment Variables:**
+
+- See `.env.example` for required variables
+- See `voice-server/.env.example` for Voice Server variables
+- All secrets should be set in Railway dashboard or via `railway variables set`
+
 ## Analytics Setup
 
 This project uses Google Analytics 4 (GA4) to track website visitors and user behavior.

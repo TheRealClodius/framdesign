@@ -2,6 +2,13 @@ import { NextResponse } from "next/server";
 import { GoogleGenAI, Type } from "@google/genai";
 import { FRAM_SYSTEM_PROMPT } from "@/lib/config";
 import { createHash } from "crypto";
+import { handleServerError, isRetryableError } from "@/lib/errors";
+import {
+  CACHE_CONFIG,
+  MESSAGE_LIMITS,
+  TOKEN_CONFIG,
+  STREAM_CONFIG,
+} from "@/lib/constants";
 
 // Tool definition for Fram's ignore/timeout capability
 const ignoreUserTool = {
@@ -23,6 +30,17 @@ const ignoreUserTool = {
   }
 };
 
+// Tool definition for starting voice sessions
+const startVoiceSessionTool = {
+  name: "start_voice_session",
+  description: "Start a voice conversation session. Use this when the user wants to switch to voice mode or when voice communication would be more natural. This will activate the microphone and start a real-time voice conversation.",
+  parameters: {
+    type: Type.OBJECT,
+    properties: {},
+    required: []
+  }
+};
+
 // In-memory cache store for conversation caches
 // Key: conversation hash, Value: { cacheName: string, cachedMessageCount: number, summary: string | null, summaryUpToIndex: number, createdAt: number }
 const conversationCacheStore = new Map<string, { 
@@ -38,28 +56,11 @@ let systemPromptCache: string | null = null;
 let systemPromptCachePromise: Promise<string | null> | null = null;
 let systemPromptHash: string | null = null; // Hash of the system prompt to detect changes
 
-// Cache TTL: 1 hour (3600 seconds)
-const CACHE_TTL_SECONDS = 3600;
-
-// Minimum messages before creating a conversation cache (to ensure we meet token minimums)
-const MIN_MESSAGES_FOR_CACHE = 3;
-
-// Message windowing: keep last N messages as raw history
-const MAX_RAW_MESSAGES = 20;
-
-// Token estimation: rough approximation (1 token ≈ 4 characters)
-const TOKENS_PER_CHAR = 0.25;
-const MAX_TOKENS = 30000; // Safety limit for context window
-const SUMMARY_WORD_LIMIT = 80; // Hard cap for summaries when trimming
-
-// Summarization threshold: summarize when we exceed MAX_RAW_MESSAGES
-const SUMMARIZATION_THRESHOLD = MAX_RAW_MESSAGES;
-
 /**
  * Estimates token count for a string (rough approximation: 1 token ≈ 4 chars)
  */
 function estimateTokens(text: string): number {
-  return Math.ceil(text.length * TOKENS_PER_CHAR);
+  return Math.ceil(text.length * TOKEN_CONFIG.TOKENS_PER_CHAR);
 }
 
 /**
@@ -107,7 +108,7 @@ async function summarizeMessages(
   try {
     // Build prompt for summarization
     const conversationText = messages
-      .map((msg, idx) => `${msg.role === "user" ? "User" : "Fram"}: ${msg.content}`)
+      .map((msg) => `${msg.role === "user" ? "User" : "Fram"}: ${msg.content}`)
       .join("\n\n");
 
     const summaryPrompt = `Please provide a concise summary of the following conversation. Focus on key topics discussed, important information shared, and the overall context. Keep it brief but informative (aim for 200-400 words):
@@ -178,7 +179,7 @@ function enforceTokenBudget(
 
   // Trim summary first if present
   if (adjustedSummary) {
-    const trimmed = trimToWords(adjustedSummary, SUMMARY_WORD_LIMIT);
+    const trimmed = trimToWords(adjustedSummary, TOKEN_CONFIG.SUMMARY_WORD_LIMIT);
     if (trimmed !== adjustedSummary) {
       adjustedSummary = trimmed;
       adjustedContents = adjustedContents.map((msg) => {
@@ -264,8 +265,8 @@ async function getSystemPromptCache(ai: GoogleGenAI): Promise<string | null> {
         config: {
           systemInstruction: FRAM_SYSTEM_PROMPT,
           contents: systemContent,
-          tools: [{ functionDeclarations: [ignoreUserTool] }],
-          ttl: `${CACHE_TTL_SECONDS}s`,
+          tools: [{ functionDeclarations: [ignoreUserTool, startVoiceSessionTool] }],
+          ttl: `${CACHE_CONFIG.TTL_SECONDS}s`,
           displayName: "fram-system-prompt"
         }
       });
@@ -315,7 +316,7 @@ async function getConversationCache(
     const ageSeconds = age / 1000;
     
     // If cache is still valid
-    if (ageSeconds < CACHE_TTL_SECONDS) {
+    if (ageSeconds < CACHE_CONFIG.TTL_SECONDS) {
       // Check if summary has changed (conversation grew beyond previous summary point)
       if (summary && cached.summary !== summary) {
         // Summary changed, need to update cache
@@ -390,8 +391,8 @@ async function getConversationCache(
         config: {
           systemInstruction: FRAM_SYSTEM_PROMPT,
           contents: cacheContent,
-          tools: [{ functionDeclarations: [ignoreUserTool] }],
-          ttl: `${CACHE_TTL_SECONDS}s`,
+          tools: [{ functionDeclarations: [ignoreUserTool, startVoiceSessionTool] }],
+          ttl: `${CACHE_CONFIG.TTL_SECONDS}s`,
           displayName: `fram-summary-${conversationHash}`
         }
       });
@@ -455,17 +456,8 @@ async function retryWithBackoff<T>(
       return await fn();
     } catch (error: unknown) {
       lastError = error;
-      const errorMessage = error instanceof Error ? error.message.toLowerCase() : "";
       
-      // Check if it's a retryable error (overloaded, rate limit, etc.)
-      const isRetryable = 
-        errorMessage.includes("overloaded") ||
-        errorMessage.includes("rate limit") ||
-        errorMessage.includes("quota") ||
-        errorMessage.includes("503") ||
-        errorMessage.includes("429");
-      
-      if (!isRetryable || attempt === maxRetries - 1) {
+      if (!isRetryableError(error) || attempt === maxRetries - 1) {
         throw error;
       }
       
@@ -523,9 +515,9 @@ export async function POST(request: Request) {
     // Background summarization promise (doesn't block streaming)
     let summaryPromise: Promise<string | null> | null = null;
 
-    if (totalMessages > MAX_RAW_MESSAGES) {
+    if (totalMessages > MESSAGE_LIMITS.MAX_RAW_MESSAGES) {
       // Split: old messages to summarize, recent messages to keep raw
-      const splitIndex = totalMessages - MAX_RAW_MESSAGES;
+      const splitIndex = totalMessages - MESSAGE_LIMITS.MAX_RAW_MESSAGES;
       messagesToSummarize = messages.slice(0, splitIndex);
       rawMessages = messages.slice(splitIndex);
       summaryUpToIndex = splitIndex;
@@ -588,7 +580,7 @@ export async function POST(request: Request) {
           const age = Date.now() - cached.createdAt;
           const ageSeconds = age / 1000;
           
-          if (ageSeconds < CACHE_TTL_SECONDS) {
+          if (ageSeconds < CACHE_CONFIG.TTL_SECONDS) {
             // Use existing cache immediately, don't wait for updates
             if (cached.summary) {
               contentsToSend = recentMessages;
@@ -651,9 +643,9 @@ export async function POST(request: Request) {
 
         // Log token estimates
         const estimatedTokens = estimateMessageTokens(contentsToSend);
-        console.log(`Estimated tokens: ~${estimatedTokens} (limit: ${MAX_TOKENS})`);
-        if (estimatedTokens > MAX_TOKENS) {
-          console.warn(`WARNING: Estimated tokens (${estimatedTokens}) exceed safety limit (${MAX_TOKENS})`);
+        console.log(`Estimated tokens: ~${estimatedTokens} (limit: ${TOKEN_CONFIG.MAX_TOKENS})`);
+        if (estimatedTokens > TOKEN_CONFIG.MAX_TOKENS) {
+          console.warn(`WARNING: Estimated tokens (${estimatedTokens}) exceed safety limit (${TOKEN_CONFIG.MAX_TOKENS})`);
         }
       } catch (cacheError) {
         // If cache operations fail, fall back to non-cached approach
@@ -697,11 +689,11 @@ export async function POST(request: Request) {
     }
 
     // Enforce token budget after cache decisions
-    const budgetResult = enforceTokenBudget(contentsToSend, summary, MAX_TOKENS);
+    const budgetResult = enforceTokenBudget(contentsToSend, summary, TOKEN_CONFIG.MAX_TOKENS);
     contentsToSend = budgetResult.contents;
     summary = budgetResult.summary;
     if (budgetResult.summaryTrimmed) {
-      console.log(`Summary trimmed to ${SUMMARY_WORD_LIMIT} words for token budget`);
+      console.log(`Summary trimmed to ${TOKEN_CONFIG.SUMMARY_WORD_LIMIT} words for token budget`);
     }
     if (budgetResult.droppedMessages > 0) {
       console.log(`Dropped ${budgetResult.droppedMessages} oldest message(s) to fit token budget`);
@@ -760,22 +752,20 @@ export async function POST(request: Request) {
     });
 
     // Check early chunks for function calls, then stream progressively to the client
-    let functionCall: { name: string; args: { duration_seconds: number; farewell_message: string } } | null = null;
+    let functionCall: { name: string; args: Record<string, unknown> } | null = null;
     const bufferedChunks: unknown[] = [];
-    const MAX_BUFFER_CHUNKS = 3;
-    const MAX_BUFFER_MS = 150; // Reduced from 750ms to 150ms for faster TTFT
 
     try {
       const iterator = stream[Symbol.asyncIterator]();
       const bufferStart = Date.now();
 
       // Buffer a few chunks (or up to time limit) to detect function calls before streaming
-      while (bufferedChunks.length < MAX_BUFFER_CHUNKS && Date.now() - bufferStart < MAX_BUFFER_MS) {
+      while (bufferedChunks.length < STREAM_CONFIG.MAX_BUFFER_CHUNKS && Date.now() - bufferStart < STREAM_CONFIG.MAX_BUFFER_MS) {
         const { value, done } = await iterator.next();
         if (done) break;
         bufferedChunks.push(value);
 
-        const typed = value as { candidates?: Array<{ content?: { parts?: Array<{ text?: string; functionCall?: { name: string; args: { duration_seconds: number; farewell_message: string } } }> } }> };
+        const typed = value as { candidates?: Array<{ content?: { parts?: Array<{ text?: string; functionCall?: { name: string; args: Record<string, unknown> } }> } }> };
         const candidates = typed.candidates?.[0]?.content?.parts || [];
         const callPart = candidates.find((part) => part.functionCall);
         if (callPart?.functionCall) {
@@ -798,6 +788,33 @@ export async function POST(request: Request) {
             duration: durationSeconds,
             until: Date.now() + durationSeconds * 1000
           }
+        });
+      }
+
+      // Handle start_voice_session tool call
+      if (functionCall?.name === "start_voice_session") {
+        console.log("Fram used start_voice_session tool");
+
+        // Extract any text response from buffered chunks for the message
+        let messageText = "";
+        for (const chunk of bufferedChunks) {
+          const typed = chunk as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
+          const candidates = typed.candidates?.[0]?.content?.parts || [];
+          for (const part of candidates) {
+            if (part.text) {
+              messageText += part.text;
+            }
+          }
+        }
+
+        // If no message text found, use a default
+        if (!messageText.trim()) {
+          messageText = "Let's switch to voice mode.";
+        }
+
+        return NextResponse.json({
+          message: messageText,
+          startVoiceSession: true
         });
       }
 
@@ -879,50 +896,6 @@ export async function POST(request: Request) {
 
   } catch (error) {
     console.error("Error in chat route:", error);
-    const errorMessage = error instanceof Error ? error.message : "Unknown error";
-    const errorStack = error instanceof Error ? error.stack : undefined;
-    
-    // Log full error details for debugging
-    console.error("Error details:", {
-      message: errorMessage,
-      stack: errorStack,
-      name: error instanceof Error ? error.name : undefined,
-      error: String(error)
-    });
-    
-    // Ensure we always return a valid JSON response
-    try {
-      // Check if it's an overloaded error
-      if (errorMessage.toLowerCase().includes("overloaded")) {
-        return NextResponse.json(
-          { error: "The AI model is currently overloaded. Please try again in a moment." },
-          { status: 503 }
-        );
-      }
-      
-      // Check for API key errors
-      if (errorMessage.toLowerCase().includes("api key") || errorMessage.toLowerCase().includes("authentication") || errorMessage.toLowerCase().includes("401") || errorMessage.toLowerCase().includes("403")) {
-        return NextResponse.json(
-          { error: "Invalid API key. Please check your GEMINI_API_KEY environment variable.", details: errorMessage },
-          { status: 401 }
-        );
-      }
-      
-      // Return error with details
-      return NextResponse.json(
-        { error: "Internal Server Error", details: errorMessage },
-        { status: 500 }
-      );
-    } catch (jsonError) {
-      // If JSON serialization fails, return a simple error
-      console.error("Failed to serialize error response:", jsonError);
-      return new NextResponse(
-        JSON.stringify({ error: "Internal Server Error", details: "An unexpected error occurred" }),
-        { 
-          status: 500,
-          headers: { "Content-Type": "application/json" }
-        }
-      );
-    }
+    return handleServerError(error);
   }
 }

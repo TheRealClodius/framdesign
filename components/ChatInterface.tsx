@@ -17,34 +17,26 @@
  */
 import { useState, useRef, useEffect } from "react";
 import MarkdownWithMermaid from "./MarkdownWithMermaid";
-
-type Message = {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  streaming?: boolean;
-};
-
-const TIMEOUT_STORAGE_KEY = "fram_timeout_until";
-const MESSAGES_STORAGE_KEY = "fram_conversation";
-const MAX_PERSISTED_MESSAGES = 40;
-const MAX_SENT_MESSAGES = 50;
-const BLOCKED_MESSAGE = "Fram has decided not to respond to you anymore as you've been rude. Fram does not take shit from anybody.";
-
-const newId = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-
-const sanitizeForStorage = (msgs: Message[]) => {
-  const withIds = msgs
-    .filter((m) => !m.streaming)
-    .map((m) => (m.id ? m : { ...m, id: newId() }));
-  return withIds.slice(-MAX_PERSISTED_MESSAGES);
-};
-
-const prepareMessagesForSend = (msgs: Message[]) =>
-  msgs
-    .filter((m) => !m.streaming)
-    .slice(-MAX_SENT_MESSAGES)
-    .map((m) => ({ role: m.role, content: m.content }));
+import {
+  generateMessageId,
+  getTimeoutUntil,
+  setTimeoutUntil,
+  clearTimeout as clearTimeoutStorage,
+  loadMessagesFromStorage,
+  saveMessagesToStorage,
+  clearChatHistory,
+  type Message,
+} from "@/lib/storage";
+import {
+  MESSAGE_LIMITS,
+  BLOCKED_MESSAGE,
+} from "@/lib/constants";
+import {
+  streamChatResponse,
+  sendChatRequest,
+} from "@/lib/services/chat-service";
+import { OverloadedError } from "@/lib/errors";
+import { voiceService } from "@/lib/services/voice-service";
 
 export default function ChatInterface() {
   const [messages, setMessages] = useState<Message[]>([
@@ -52,8 +44,14 @@ export default function ChatInterface() {
   ]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [timeoutUntil, setTimeoutUntil] = useState<number | null>(null);
+  const [timeoutUntil, setTimeoutUntilState] = useState<number | null>(null);
   const [wasBlocked, setWasBlocked] = useState(false);
+  const [isVoiceMode, setIsVoiceMode] = useState(false);
+  const [isVoiceLoading, setIsVoiceLoading] = useState(false);
+  const [voiceTranscript, setVoiceTranscript] = useState<string>("");
+  const [voiceError, setVoiceError] = useState<string | null>(null);
+  const [isReconnecting, setIsReconnecting] = useState(false);
+  const [audioPlaybackDisabled, setAudioPlaybackDisabled] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -76,15 +74,15 @@ export default function ChatInterface() {
 
   // Check localStorage for existing timeout on mount
   useEffect(() => {
-    const stored = localStorage.getItem(TIMEOUT_STORAGE_KEY);
-    if (stored) {
-      const until = parseInt(stored, 10);
-      if (Date.now() < until) {
-        setTimeoutUntil(until);
-        setWasBlocked(true);
-      } else {
-        // Timeout has expired, clear it
-        localStorage.removeItem(TIMEOUT_STORAGE_KEY);
+    const until = getTimeoutUntil();
+    if (until) {
+      setTimeoutUntilState(until);
+      setWasBlocked(true);
+    } else {
+      // Check if timeout expired (was set but now cleared)
+      const hadTimeout = localStorage.getItem("fram_timeout_until");
+      if (hadTimeout) {
+        clearTimeoutStorage();
         setWasBlocked(true); // Mark that there was a timeout, so we can detect expiration
       }
     }
@@ -92,44 +90,16 @@ export default function ChatInterface() {
 
   // Load conversation from localStorage on mount
   useEffect(() => {
-    const stored = localStorage.getItem(MESSAGES_STORAGE_KEY);
-    if (stored) {
-      try {
-        const parsedMessages = JSON.parse(stored);
-        if (Array.isArray(parsedMessages) && parsedMessages.length > 0) {
-          // Filter out streaming messages (they shouldn't be persisted)
-          const validMessages = parsedMessages
-            .filter((msg: Message) => !msg.streaming)
-            .map((msg: Message) => (msg.id ? msg : { ...msg, id: newId() }))
-            .slice(-MAX_PERSISTED_MESSAGES);
-          if (validMessages.length > 0) {
-            setMessages(validMessages);
-          }
-        }
-      } catch (error) {
-        console.error("Failed to parse stored messages:", error);
-        localStorage.removeItem(MESSAGES_STORAGE_KEY);
-      }
+    const loadedMessages = loadMessagesFromStorage(MESSAGE_LIMITS.MAX_PERSISTED_MESSAGES);
+    if (loadedMessages.length > 0) {
+      setMessages(loadedMessages);
     }
   }, []);
 
   // Auto-save messages to localStorage on changes (debounced to reduce blocking during streaming)
   useEffect(() => {
-    // Debounce localStorage writes to avoid blocking during streaming
     const timeoutId = setTimeout(() => {
-      const messagesToSave = sanitizeForStorage(messages);
-      if (messagesToSave.length > 0) {
-        // Use requestIdleCallback if available to avoid blocking main thread
-        if ('requestIdleCallback' in window) {
-          requestIdleCallback(() => {
-            localStorage.setItem(MESSAGES_STORAGE_KEY, JSON.stringify(messagesToSave));
-          });
-        } else {
-          localStorage.setItem(MESSAGES_STORAGE_KEY, JSON.stringify(messagesToSave));
-        }
-      } else {
-        localStorage.removeItem(MESSAGES_STORAGE_KEY);
-      }
+      saveMessagesToStorage(messages, MESSAGE_LIMITS.MAX_PERSISTED_MESSAGES);
     }, 300); // Debounce for 300ms
 
     return () => clearTimeout(timeoutId);
@@ -139,12 +109,257 @@ export default function ChatInterface() {
     scrollToBottom();
   }, [messages]);
 
+  // Setup voice service event listeners
+  useEffect(() => {
+    const handleTranscript = (event: Event) => {
+      const customEvent = event as CustomEvent<{ role: 'user' | 'assistant'; text: string }>;
+      const { role, text } = customEvent.detail;
+      
+      // Add transcript as a message immediately in the chat UI
+      setMessages((prev) => [...prev, {
+        id: generateMessageId(),
+        role: role,
+        content: text
+      }]);
+      
+      // Also update transcript display for the voice session panel (for reference)
+      setVoiceTranscript((prev) => {
+        if (prev) {
+          return `${prev}\n${role === 'user' ? 'You' : 'FRAM'}: ${text}`;
+        }
+        return `${role === 'user' ? 'You' : 'FRAM'}: ${text}`;
+      });
+    };
+
+    const handleStarted = () => {
+      setIsVoiceMode(true);
+      setIsVoiceLoading(false);
+      setIsReconnecting(false);
+      setVoiceTranscript("");
+      setVoiceError(null);
+      setAudioPlaybackDisabled(false);
+    };
+
+    const handleComplete = async (event: Event) => {
+      const customEvent = event as CustomEvent<{ transcripts: { user: Array<{ text: string; timestamp: number }>; assistant: Array<{ text: string; timestamp: number }> } }>;
+      const { transcripts } = customEvent.detail;
+      
+      // Note: Transcripts are now added in real-time via handleTranscript
+      // This event is just for cleanup and finalization
+      // We don't add them to messages again to avoid duplicates
+      
+      console.log('Voice session complete. Total transcripts:', {
+        user: transcripts.user.length,
+        assistant: transcripts.assistant.length
+      });
+      
+      // Reset voice state
+      setIsVoiceMode(false);
+      setIsVoiceLoading(false);
+      setVoiceTranscript("");
+      setIsReconnecting(false);
+      setVoiceError(null);
+      setAudioPlaybackDisabled(false);
+    };
+
+    const handleError = (event: Event) => {
+      const customEvent = event as CustomEvent<{ 
+        message: string; 
+        originalError?: string;
+        canRetry?: boolean;
+        partialTranscripts?: { user: Array<{ text: string; timestamp: number }>; assistant: Array<{ text: string; timestamp: number }> };
+      }>;
+      const { message, canRetry } = customEvent.detail;
+      
+      console.error('Voice error:', message);
+      setIsVoiceLoading(false);
+      setIsReconnecting(false);
+      setVoiceError(message);
+      
+      // Note: Partial transcripts are already added via handleTranscript in real-time
+      // No need to add them again here
+      
+      // Show error message to user (only if not recoverable)
+      if (!canRetry) {
+        setIsVoiceMode(false);
+        setVoiceTranscript("");
+        setMessages((prev) => [
+          ...prev,
+          { 
+            id: generateMessageId(), 
+            role: "assistant", 
+            content: `VOICE ERROR: ${message}. PLEASE TRY AGAIN OR USE TEXT CHAT.` 
+          }
+        ]);
+      } else {
+        // Keep voice mode active if we can retry
+        setIsReconnecting(true);
+        // Don't show error message in chat - it's shown in the error banner
+      }
+    };
+
+    const handleReconnecting = (event: Event) => {
+      const customEvent = event as CustomEvent<{ attempt: number; maxAttempts: number }>;
+      setIsReconnecting(true);
+      setVoiceError(`Reconnecting... (${customEvent.detail.attempt}/${customEvent.detail.maxAttempts})`);
+    };
+
+    const handleAudioError = (event: Event) => {
+      const customEvent = event as CustomEvent<{ message: string; recoverable: boolean }>;
+      console.warn('Audio playback error:', customEvent.detail.message);
+      
+      if (!customEvent.detail.recoverable) {
+        setAudioPlaybackDisabled(true);
+        setMessages((prev) => [
+          ...prev,
+          { 
+            id: generateMessageId(), 
+            role: "assistant", 
+            content: `NOTE: AUDIO PLAYBACK DISABLED DUE TO FORMAT INCOMPATIBILITY. TRANSCRIPTS WILL STILL BE DISPLAYED.` 
+          }
+        ]);
+      } else {
+        // Recoverable error - show temporary message
+        setVoiceError(customEvent.detail.message);
+        setTimeout(() => setVoiceError(null), 5000);
+      }
+    };
+
+    const handlePartialTranscripts = (event: Event) => {
+      const customEvent = event as CustomEvent<{ transcripts: { user: Array<{ text: string; timestamp: number }>; assistant: Array<{ text: string; timestamp: number }> } }>;
+      const { transcripts } = customEvent.detail;
+      
+      // Note: Partial transcripts are already added via handleTranscript in real-time
+      // This event is just for logging/debugging purposes now
+      console.log('Partial transcripts received:', {
+        user: transcripts.user.length,
+        assistant: transcripts.assistant.length
+      });
+    };
+
+    const handleTimeout = async (event: Event) => {
+      const customEvent = event as CustomEvent<{ 
+        durationSeconds: number; 
+        timeoutUntil: number; 
+        farewellMessage: string;
+      }>;
+      const { timeoutUntil, farewellMessage } = customEvent.detail;
+      
+      console.log('User has been timed out:', customEvent.detail);
+      
+      // Set timeout in localStorage
+      setTimeoutUntil(timeoutUntil);
+      setTimeoutUntilState(timeoutUntil);
+      setWasBlocked(true);
+      
+      // Add farewell message to chat
+      setMessages((prev) => [
+        ...prev,
+        { 
+          id: generateMessageId(), 
+          role: "assistant", 
+          content: farewellMessage 
+        }
+      ]);
+      
+      // Stop voice session
+      try {
+        await voiceService.stop();
+      } catch (error) {
+        console.error('Error stopping voice session after timeout:', error);
+      }
+      
+      // Reset voice UI state
+      setIsVoiceMode(false);
+      setIsVoiceLoading(false);
+      setVoiceTranscript("");
+      setIsReconnecting(false);
+      setVoiceError(null);
+    };
+
+    const handleEndVoiceSession = async (event: Event) => {
+      const customEvent = event as CustomEvent<{ 
+        reason: string; 
+        closingMessage: string;
+        textResponse?: string | null;
+      }>;
+      const { reason, closingMessage, textResponse } = customEvent.detail;
+      
+      console.log(`Voice session ended by agent. Reason: ${reason}`);
+      
+      // Add closing message to chat
+      setMessages((prev) => [
+        ...prev,
+        { 
+          id: generateMessageId(), 
+          role: "assistant", 
+          content: closingMessage 
+        }
+      ]);
+      
+      // If there's a full text response (agent's actual answer), add it as a separate message
+      if (textResponse && textResponse.trim()) {
+        setMessages((prev) => [
+          ...prev,
+          { 
+            id: generateMessageId(), 
+            role: "assistant", 
+            content: textResponse 
+          }
+        ]);
+      }
+      
+      // Stop voice session gracefully
+      try {
+        await voiceService.stop();
+      } catch (error) {
+        console.error('Error stopping voice session after agent ended it:', error);
+      }
+      
+      // Reset voice UI state
+      setIsVoiceMode(false);
+      setIsVoiceLoading(false);
+      setVoiceTranscript("");
+      setIsReconnecting(false);
+      setVoiceError(null);
+    };
+
+    voiceService.addEventListener('transcript', handleTranscript);
+    voiceService.addEventListener('started', handleStarted);
+    voiceService.addEventListener('complete', handleComplete);
+    voiceService.addEventListener('error', handleError);
+    voiceService.addEventListener('reconnecting', handleReconnecting);
+    voiceService.addEventListener('audioError', handleAudioError);
+    voiceService.addEventListener('partialTranscripts', handlePartialTranscripts);
+    voiceService.addEventListener('timeout', handleTimeout);
+    voiceService.addEventListener('endVoiceSession', handleEndVoiceSession);
+
+    return () => {
+      voiceService.removeEventListener('transcript', handleTranscript);
+      voiceService.removeEventListener('started', handleStarted);
+      voiceService.removeEventListener('complete', handleComplete);
+      voiceService.removeEventListener('error', handleError);
+      voiceService.removeEventListener('reconnecting', handleReconnecting);
+      voiceService.removeEventListener('audioError', handleAudioError);
+      voiceService.removeEventListener('partialTranscripts', handlePartialTranscripts);
+      voiceService.removeEventListener('timeout', handleTimeout);
+      voiceService.removeEventListener('endVoiceSession', handleEndVoiceSession);
+      
+      // Cleanup: Stop voice session if active when component unmounts
+      if (voiceService.isSessionActive()) {
+        voiceService.stop().catch((error) => {
+          console.error('Error stopping voice session on unmount:', error);
+        });
+      }
+    };
+  }, []);
+
   // Monitor timeout expiration
   useEffect(() => {
     if (timeoutUntil && Date.now() >= timeoutUntil && wasBlocked) {
       // Timeout expired naturally - clear it
-      localStorage.removeItem(TIMEOUT_STORAGE_KEY);
-      setTimeoutUntil(null);
+      clearTimeoutStorage();
+      setTimeoutUntilState(null);
       // Keep wasBlocked true so we can detect expiration on next message
     }
   }, [timeoutUntil, wasBlocked]);
@@ -157,8 +372,8 @@ export default function ChatInterface() {
   const timeoutJustExpired = wasBlocked && !isBlocked;
 
   const resetTimeout = () => {
-    localStorage.removeItem(TIMEOUT_STORAGE_KEY);
-    setTimeoutUntil(null);
+    clearTimeoutStorage();
+    setTimeoutUntilState(null);
     setWasBlocked(false);
   };
 
@@ -190,45 +405,17 @@ ${error.fullContent}
 
 PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORRECTED DIAGRAM. Ensure the diagram follows valid Mermaid syntax and will render correctly.`;
 
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-          body: JSON.stringify({
-            messages: [
-              ...prepareMessagesForSend(messages.slice(0, messageIndex)),
-              { role: "user", content: fixPrompt }
-            ],
-            timeoutExpired: false,
-          }),
-      });
+      const fixMessages: Message[] = [
+        ...messages.slice(0, messageIndex),
+        { id: generateMessageId(), role: "user", content: fixPrompt }
+      ];
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || errorData.details || `Failed to fix diagram: ${response.status}`);
-      }
+      let fixedContent = "";
 
-      const contentType = response.headers.get('Content-Type');
-      
-      if (contentType?.includes('text/plain')) {
-        // Streaming response - update the message being fixed
-        let fixedContent = "";
-        const reader = response.body?.getReader();
-        const decoder = new TextDecoder();
-        
-        if (!reader) {
-          throw new Error("No response body");
-        }
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          
-          const chunk = decoder.decode(value, { stream: true });
+      await streamChatResponse(
+        { messages: fixMessages, timeoutExpired: false },
+        (chunk) => {
           fixedContent += chunk;
-          
-          // Update the message in real-time
           setMessages((prev) => {
             const updated = [...prev];
             updated[messageIndex] = {
@@ -239,31 +426,31 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
             return updated;
           });
           scrollToBottom();
-        }
+        },
+          (error) => {
+            console.error("Error fixing diagram:", error);
+            const errorMessage = error.message;
+            setMessages((prev) => {
+              const updated = [...prev];
+              updated[messageIndex] = {
+                ...updated[messageIndex],
+                content: updated[messageIndex].content + `\n\n[Error fixing diagram: ${errorMessage}]`,
+              };
+              return updated;
+            });
+          }
+      );
 
-        // Mark streaming as complete
-        setMessages((prev) => {
-          const updated = [...prev];
-          updated[messageIndex] = {
-            ...updated[messageIndex],
-            content: fixedContent,
-            streaming: false,
-          };
-          return updated;
-        });
-      } else {
-        // JSON response
-        const data = await response.json();
-        setMessages((prev) => {
-          const updated = [...prev];
-          updated[messageIndex] = {
-            ...updated[messageIndex],
-            content: data.message || data.error || "Failed to fix diagram.",
-            streaming: false,
-          };
-          return updated;
-        });
-      }
+      // Mark streaming as complete
+      setMessages((prev) => {
+        const updated = [...prev];
+        updated[messageIndex] = {
+          ...updated[messageIndex],
+          content: fixedContent,
+          streaming: false,
+        };
+        return updated;
+      });
     } catch (error) {
       console.error("Error fixing diagram:", error);
       // Show error but don't update message
@@ -284,7 +471,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
 
   const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault();
-    if (!input.trim() || isLoading) return;
+    if (!input.trim() || isLoading || isVoiceMode) return;
 
     // Check if user is timed out before sending
     if (isBlocked) {
@@ -294,226 +481,216 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
 
     const userMessage = input.trim();
     setInput("");
-    setMessages((prev) => [...prev, { id: newId(), role: "user", content: userMessage }]);
+    setMessages((prev) => [...prev, { id: generateMessageId(), role: "user", content: userMessage }]);
     setIsLoading(true);
 
     // Check if timeout just expired - if so, pass that context to the API
     const expired = timeoutJustExpired;
 
     try {
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          messages: [
-            ...prepareMessagesForSend(messages),
-            { role: "user", content: userMessage }
-          ],
-          timeoutExpired: expired || false,
-        }),
-      });
+      const requestMessages: Message[] = [
+        ...messages,
+        { id: generateMessageId(), role: "user", content: userMessage }
+      ];
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        console.error("API Error:", response.status, errorData);
-        
-        // Handle overloaded model error specifically
-        if (response.status === 503 || errorData.error?.toLowerCase().includes("overloaded")) {
-          throw new Error("The AI model is currently overloaded. Please try again in a moment.");
-        }
-        
-        throw new Error(errorData.error || errorData.details || `Failed to fetch response: ${response.status}`);
-      }
+      // Create placeholder assistant message for streaming
+      const assistantMessageId = generateMessageId();
+      setMessages((prev) => [...prev, { id: assistantMessageId, role: "assistant", content: "", streaming: true }]);
 
-      // Check if response is streaming or JSON
-      const contentType = response.headers.get('Content-Type');
-      
-      if (contentType?.includes('text/plain')) {
-        // Streaming response - create placeholder message with streaming flag
-        setMessages((prev) => [...prev, { id: newId(), role: "assistant", content: "", streaming: true }]);
-        
-        const reader = response.body?.getReader();
-        const decoder = new TextDecoder();
-        
-        if (!reader) {
-          throw new Error("No response body");
-        }
-        
-        let firstChunk = true;
-        let buffer = "";
-        let lastUpdateTime = Date.now();
-        let lastChunkTime = Date.now();
-        const UPDATE_INTERVAL = 100; // Update UI every 100ms to reduce re-renders (was 50ms)
-        const STREAM_TIMEOUT = 60000; // 60 second timeout for streams
-        const CHUNK_TIMEOUT = 30000; // 30 second timeout between chunks
-        
-        // Function to flush buffer to state
-        const flushBuffer = () => {
-          if (buffer) {
-            const contentToAdd = buffer;
-            buffer = "";
+      // Try streaming first
+      let streamedContent = "";
+      let streamCompleted = false;
+
+      try {
+        const response = await streamChatResponse(
+          { messages: requestMessages, timeoutExpired: expired || false },
+          (chunk) => {
+            if (!streamCompleted) {
+              streamedContent += chunk;
+              setMessages((prev) => {
+                const updated = [...prev];
+                const lastIndex = updated.length - 1;
+                if (lastIndex >= 0 && updated[lastIndex].id === assistantMessageId) {
+                  updated[lastIndex] = {
+                    ...updated[lastIndex],
+                    content: streamedContent,
+                    streaming: true,
+                  };
+                }
+                return updated;
+              });
+              scrollToBottom();
+            }
+          },
+          (error) => {
+            console.error("Stream error:", error);
+            setIsLoading(false);
             setMessages((prev) => {
               const updated = [...prev];
               const lastIndex = updated.length - 1;
-              // Create a NEW object to trigger React re-render
-              updated[lastIndex] = {
-                ...updated[lastIndex],
-                content: updated[lastIndex].content + contentToAdd,
-                streaming: true,
-              };
+              if (lastIndex >= 0 && updated[lastIndex].id === assistantMessageId) {
+                updated[lastIndex] = {
+                  ...updated[lastIndex],
+                  content: error.message,
+                  streaming: false,
+                };
+              }
               return updated;
             });
-            scrollToBottom();
           }
-        };
-        
-        // Set up timeout to detect hanging streams
-        const streamStartTime = Date.now();
-        const timeoutId = setTimeout(() => {
-          console.error("Stream timeout: No response received within", STREAM_TIMEOUT, "ms");
-          reader.cancel();
-          setMessages((prev) => {
-            const updated = [...prev];
-            const lastIndex = updated.length - 1;
-            const currentContent = updated[lastIndex].content;
-            const newContent = currentContent.trim() === ""
-              ? "ERROR: Stream timeout. The agent did not respond in time. Please try again."
-              : currentContent + "\n\n[Stream timed out - response may be incomplete]";
-            updated[lastIndex] = {
-              ...updated[lastIndex],
-              content: newContent,
-              streaming: false,
-            };
-            return updated;
-          });
-          setIsLoading(false);
-        }, STREAM_TIMEOUT);
-        
-        try {
-          while (true) {
-            // Check for chunk timeout (stream might be hanging)
-            const now = Date.now();
-            if (now - lastChunkTime > CHUNK_TIMEOUT) {
-              console.warn("Stream appears to be hanging - no chunks received for", CHUNK_TIMEOUT, "ms");
-              // Don't cancel yet, but log a warning
-            }
+        );
+
+        streamCompleted = true;
+        setIsLoading(false);
+
+        // Check if response is JSON (tool call) and handle startVoiceSession
+        if (response && response.startVoiceSession) {
+          // Start voice session - same logic as voice button click
+          try {
+            setIsVoiceLoading(true);
+            setVoiceTranscript("");
             
-            const { done, value } = await reader.read();
+            // Prepare conversation history for context injection
+            const conversationHistory = messages.map(m => ({
+              role: m.role,
+              content: m.content
+            }));
             
-            if (done) {
-              clearTimeout(timeoutId);
-              // Flush any remaining buffer before finishing
-              flushBuffer();
-              console.log("Stream completed successfully. Total time:", Date.now() - streamStartTime, "ms");
-              break;
-            }
-            
-            // Reset chunk timeout
-            lastChunkTime = Date.now();
-            
-            const chunk = decoder.decode(value, { stream: true });
-            
-            if (!chunk) {
-              console.warn("Received empty chunk");
-              continue;
-            }
-            
-            // Hide loading dots on first chunk
-            if (firstChunk) {
-              setIsLoading(false);
-              firstChunk = false;
-              console.log("First chunk received after", Date.now() - streamStartTime, "ms");
-            }
-            
-            // Accumulate chunks in buffer
-            buffer += chunk;
-            
-            // Throttle updates for long streams - only update UI every UPDATE_INTERVAL ms
-            if (now - lastUpdateTime >= UPDATE_INTERVAL) {
-              flushBuffer();
-              lastUpdateTime = now;
-            }
+            // Start voice session
+            await voiceService.start(conversationHistory);
+            // Session started event will update state
+          } catch (error) {
+            console.error('Error starting voice session:', error);
+            setIsVoiceLoading(false);
+            setVoiceError(error instanceof Error ? error.message : 'Failed to start voice session');
           }
-          
-          // Ensure final buffer is flushed
-          flushBuffer();
-          
-          // Mark streaming as complete
-          setMessages((prev) => {
-            const updated = [...prev];
-            const lastIndex = updated.length - 1;
-            updated[lastIndex] = {
-              ...updated[lastIndex],
-              streaming: false,
-            };
-            return updated;
-          });
-        } catch (streamError) {
-          clearTimeout(timeoutId);
-          console.error("Stream reading error:", streamError);
-          const errorMessage = streamError instanceof Error ? streamError.message : "Streaming error";
-          const errorStack = streamError instanceof Error ? streamError.stack : undefined;
-          console.error("Stream error details:", { errorMessage, errorStack });
-          
-          setMessages((prev) => {
-            const updated = [...prev];
-            const lastIndex = updated.length - 1;
-            const currentContent = updated[lastIndex].content;
-            const newContent = currentContent.trim() === ""
-              ? `ERROR: ${errorMessage}. PLEASE TRY AGAIN.`
-              : currentContent + `\n\n[ERROR: ${errorMessage}]`;
-            updated[lastIndex] = {
-              ...updated[lastIndex],
-              content: newContent,
-              streaming: false,
-            };
-            return updated;
-          });
-        } finally {
-          clearTimeout(timeoutId);
-          setIsLoading(false);
         }
-      } else {
-        // JSON response (timeout or error)
-        const data = await response.json();
-        
-        // Check if Fram decided to timeout the user
-        if (data.timeout) {
-          const { until } = data.timeout;
-          localStorage.setItem(TIMEOUT_STORAGE_KEY, until.toString());
+
+        // Check for timeout in response
+        if (response && response.timeout) {
+          const { until } = response.timeout;
           setTimeoutUntil(until);
+          setTimeoutUntilState(until);
           setWasBlocked(true);
         } else if (expired) {
           // Timeout expired and user sent a message - reset the flag
           setWasBlocked(false);
         }
-        
-        setMessages((prev) => [
-          ...prev,
-          { id: newId(), role: "assistant", content: data.message || data.error || "ERROR: COULD NOT GET RESPONSE." }
-        ]);
+
+        // Mark streaming as complete
+        setMessages((prev) => {
+          const updated = [...prev];
+          const lastIndex = updated.length - 1;
+          if (lastIndex >= 0 && updated[lastIndex].id === assistantMessageId) {
+            updated[lastIndex] = {
+              ...updated[lastIndex],
+              content: streamedContent,
+              streaming: false,
+            };
+          }
+          return updated;
+        });
+      } catch (streamError) {
+        // If streaming fails, try JSON fallback
+        if (streamError instanceof OverloadedError) {
+          setMessages((prev) => {
+            const updated = [...prev];
+            const lastIndex = updated.length - 1;
+            if (lastIndex >= 0 && updated[lastIndex].id === assistantMessageId) {
+              updated[lastIndex] = {
+                ...updated[lastIndex],
+                content: `ERROR: ${streamError.message}. PLEASE TRY AGAIN.`,
+                streaming: false,
+              };
+            }
+            return updated;
+          });
+          return;
+        }
+
+        // Fallback to JSON request
+        const data = await sendChatRequest({ messages: requestMessages, timeoutExpired: expired || false });
+
+        // Check if Fram decided to timeout the user
+        if (data.timeout) {
+          const { until } = data.timeout;
+          setTimeoutUntil(until);
+          setTimeoutUntilState(until);
+          setWasBlocked(true);
+        } else if (expired) {
+          // Timeout expired and user sent a message - reset the flag
+          setWasBlocked(false);
+        }
+
+        // Check if Fram wants to start voice session
+        if (data.startVoiceSession) {
+          // Start voice session - same logic as voice button click
+          try {
+            setIsVoiceLoading(true);
+            setVoiceTranscript("");
+            
+            // Prepare conversation history for context injection
+            const conversationHistory = messages.map(m => ({
+              role: m.role,
+              content: m.content
+            }));
+            
+            // Start voice session
+            await voiceService.start(conversationHistory);
+            // Session started event will update state
+          } catch (error) {
+            console.error('Error starting voice session:', error);
+            setIsVoiceLoading(false);
+            setVoiceError(error instanceof Error ? error.message : 'Failed to start voice session');
+          }
+        }
+
+        setMessages((prev) => {
+          const updated = [...prev];
+          const lastIndex = updated.length - 1;
+          if (lastIndex >= 0 && updated[lastIndex].id === assistantMessageId) {
+            updated[lastIndex] = {
+              ...updated[lastIndex],
+              content: data.message || data.error || "ERROR: COULD NOT GET RESPONSE.",
+              streaming: false,
+            };
+          }
+          return updated;
+        });
       }
     } catch (error) {
       console.error("Chat error:", error);
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      const errorStack = error instanceof Error ? error.stack : undefined;
-      console.error("Chat error details:", { errorMessage, errorStack, error });
       
       setMessages((prev) => [
         ...prev,
-        { id: newId(), role: "assistant", content: `ERROR: ${errorMessage}. PLEASE TRY AGAIN.` }
+        { id: generateMessageId(), role: "assistant", content: `ERROR: ${errorMessage}. PLEASE TRY AGAIN.` }
       ]);
     } finally {
       setIsLoading(false);
     }
   };
 
+  const handleClearChat = () => {
+    if (window.confirm("Are you sure you want to clear all chat history? This cannot be undone.")) {
+      clearChatHistory();
+      setMessages([
+        { id: "initial-assistant", role: "assistant", content: "HELLO. HOW CAN I HELP YOU TODAY?" }
+      ]);
+    }
+  };
+
   return (
     <section className="w-full max-w-[28rem] md:max-w-[950px] mx-auto px-4 pt-12 pb-9 h-fit md:flex-1 md:flex md:flex-col md:min-h-0">
-      <div className="mb-10 text-center flex-shrink-0">
+      <div className="mb-10 text-center flex-shrink-0 flex items-center justify-center gap-4">
         <p className="text-[0.75rem] font-mono text-gray-500 tracking-wider">FRAM ASSISTANT</p>
+        <button
+          onClick={handleClearChat}
+          className="text-[0.7rem] font-mono text-gray-400 hover:text-gray-600 uppercase tracking-wider transition-colors underline"
+          title="Clear chat history"
+        >
+          Clear
+        </button>
       </div>
 
       <div className="flex flex-col h-[600px] md:flex-1 md:min-h-0 font-mono text-[0.875rem]">
@@ -595,18 +772,129 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
                   handleSubmit();
                 }
               }}
-              disabled={isLoading}
-              className="w-full bg-transparent border-b border-gray-300 py-2 pr-12 focus:border-black focus:outline-none transition-colors rounded-none placeholder:text-gray-300 text-black resize-none overflow-y-auto max-h-[120px]"
-              placeholder="Type your message..."
+              disabled={isLoading || isVoiceMode}
+              className="w-full bg-transparent border-b border-gray-300 py-2 pr-12 focus:border-black focus:outline-none transition-colors rounded-none placeholder:text-gray-300 text-black resize-none overflow-y-auto max-h-[120px] disabled:opacity-50 disabled:cursor-not-allowed"
+              placeholder={isVoiceMode ? "Voice mode active..." : "Type your message..."}
             />
             <button
               type="submit"
-              disabled={isLoading || !input.trim()}
+              disabled={isLoading || isVoiceMode || !input.trim()}
               className="absolute right-0 top-2 text-[0.75rem] uppercase tracking-wider text-black disabled:text-gray-300 hover:text-gray-600 transition-colors"
             >
               Send
             </button>
           </form>
+        )}
+        
+        {/* Voice Mode Controls */}
+        {!isBlocked && (
+          <div className="flex flex-col items-end mt-4 space-y-2">
+            {/* Voice Transcript Display */}
+            {isVoiceMode && voiceTranscript && (
+              <div className="w-full max-w-[500px] mx-auto px-4 py-2 bg-gray-50 border border-gray-200 rounded text-[0.75rem] font-mono text-gray-600 max-h-[100px] overflow-y-auto">
+                <p className="uppercase text-[0.7rem] text-gray-400 mb-1 tracking-wider">
+                  Voice Session {isReconnecting && '(Reconnecting...)'}
+                </p>
+                <div className="whitespace-pre-wrap">{voiceTranscript}</div>
+              </div>
+            )}
+            
+            {/* Voice Error Display */}
+            {voiceError && (
+              <div className={`w-full max-w-[500px] mx-auto px-4 py-2 rounded text-[0.75rem] font-mono ${
+                isReconnecting 
+                  ? 'bg-yellow-50 border border-yellow-200 text-yellow-700' 
+                  : 'bg-red-50 border border-red-200 text-red-700'
+              }`}>
+                <p className="uppercase text-[0.7rem] mb-1 tracking-wider">
+                  {isReconnecting ? 'Reconnecting' : 'Error'}
+                </p>
+                <div>{voiceError}</div>
+              </div>
+            )}
+            
+            {/* Audio Playback Disabled Notice */}
+            {audioPlaybackDisabled && isVoiceMode && (
+              <div className="w-full max-w-[500px] mx-auto px-4 py-2 bg-yellow-50 border border-yellow-200 rounded text-[0.75rem] font-mono text-yellow-700">
+                <p className="uppercase text-[0.7rem] mb-1 tracking-wider">Audio Disabled</p>
+                <div>Audio playback unavailable. Transcripts will still be displayed.</div>
+              </div>
+            )}
+            
+            {/* Voice Button */}
+            <button
+              onClick={async () => {
+                if (isVoiceMode) {
+                  // End voice mode
+                  try {
+                    await voiceService.stop();
+                    // Transcripts will be integrated via the 'complete' event handler
+                  } catch (error) {
+                    console.error('Error stopping voice session:', error);
+                    setIsVoiceMode(false);
+                    setIsVoiceLoading(false);
+                    setVoiceTranscript("");
+                  }
+                } else {
+                  // Start voice mode
+                  try {
+                    setIsVoiceLoading(true);
+                    setVoiceTranscript("");
+                    
+                    // Prepare conversation history for context injection
+                    const conversationHistory = messages.map(m => ({
+                      role: m.role,
+                      content: m.content
+                    }));
+                    
+                    // Start voice session
+                    await voiceService.start(conversationHistory);
+                    // Session started event will update state
+                  } catch (error) {
+                    console.error('Error starting voice session:', error);
+                    setIsVoiceLoading(false);
+                    setIsVoiceMode(false);
+                    setVoiceTranscript("");
+                    
+                    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+                    let userFriendlyMessage = errorMessage;
+                    
+                    // Provide specific guidance based on error type
+                    if (errorMessage.includes('permission') || errorMessage.includes('denied')) {
+                      userFriendlyMessage = 'Microphone permission denied. Please grant microphone access in your browser settings and try again.';
+                    } else if (errorMessage.includes('WebSocket') || errorMessage.includes('connection')) {
+                      userFriendlyMessage = 'Could not connect to voice server. Please check your internet connection and try again.';
+                    } else if (errorMessage.includes('Invalid WebSocket URL')) {
+                      userFriendlyMessage = 'Voice server not configured. Please contact support.';
+                    }
+                    
+                    setMessages((prev) => [
+                      ...prev,
+                      { 
+                        id: generateMessageId(), 
+                        role: "assistant", 
+                        content: `VOICE ERROR: ${userFriendlyMessage}. YOU CAN CONTINUE USING TEXT CHAT.` 
+                      }
+                    ]);
+                  }
+                }
+              }}
+              disabled={isVoiceLoading || isLoading}
+              className={`text-[0.75rem] uppercase tracking-wider transition-colors ${
+                isVoiceMode
+                  ? "text-red-600 hover:text-red-700"
+                  : "text-black hover:text-gray-600"
+              } ${isVoiceLoading || isLoading ? "opacity-50 cursor-not-allowed" : ""}`}
+            >
+              {isVoiceLoading ? (
+                "Starting..."
+              ) : isVoiceMode ? (
+                "END"
+              ) : (
+                "VOICE"
+              )}
+            </button>
+          </div>
         )}
       </div>
     </section>

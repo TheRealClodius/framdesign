@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { contactFormSchema, ContactFormData } from "@/lib/schemas";
+import { sendContactForm } from "@/lib/services/contact-service";
 
 export default function Contact() {
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -23,18 +24,7 @@ export default function Contact() {
     setSubmitStatus("idle");
 
     try {
-      const response = await fetch("/api/send", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(data),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to send message");
-      }
-
+      await sendContactForm(data);
       setSubmitStatus("success");
       reset();
     } catch (error) {
