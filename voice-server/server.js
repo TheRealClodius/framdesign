@@ -139,10 +139,22 @@ Your turn:
   - Audio: "SURE, I'LL SEND YOU A DIAGRAM IN TEXT."
   - Tool call: {
       closing_message: "Here's the diagram:",
-      text_response: "'''mermaid\\nflowchart TD\\n  A[Integration] --> B[Security]\\n  A --> C[Performance]\\n'''"
-      (Note: Use backticks ''' not quotes for mermaid code fences - shown as ''' here to avoid formatting issues)
+      text_response: "[Three backticks]mermaid[newline]flowchart TD[newline]  A[Integration] --> B[Security][newline]  A --> C[Performance][newline][Three backticks]"
     }
 Result: User hears audio, THEN sees the diagram rendered in chat (properly formatted with mermaid code fence)
+Note: Replace [Three backticks] with actual backticks and [newline] with actual newline character (\\n)
+
+CRITICAL MERMAID FORMATTING RULES:
+- ALWAYS wrap mermaid diagrams in code fences: three backticks + mermaid + three backticks
+- Use ACTUAL newlines (\\n) in the text_response string value, NOT double-escaped newlines
+- Each node and connection should be on its own line for readability
+- Use proper indentation (2 spaces) for diagram content
+- Example format (shown with escaped characters for clarity):
+  Three backticks + mermaid + newline
+  flowchart TD + newline
+  Two spaces + A[Start] --> B[Process] + newline
+  Two spaces + B --> C[End] + newline
+  Three backticks
 
 COMMON MISTAKES TO AVOID:
 ❌ NOT including audio acknowledgment (saying nothing before calling tool)
@@ -165,7 +177,7 @@ COMMON MISTAKES TO AVOID:
       },
       text_response: {
         type: Type.STRING,
-        description: "OPTIONAL but IMPORTANT: Full detailed response to send in text chat after session ends. Use this when user asked for an answer in text format, or when providing information better suited for text (diagrams, code, detailed explanations). This appears as a SEPARATE message after closing_message. If user just wants to end call without additional info, leave this empty.\n\nFORMATTING RULES:\n- Use proper markdown formatting (headings, lists, bold, etc.)\n- For Mermaid diagrams, ALWAYS wrap them in code fences with three backticks and 'mermaid' language tag\n- For code snippets, use appropriate language tags in code fences\n- Structure your response clearly with headings and sections"
+        description: "OPTIONAL but IMPORTANT: Full detailed response to send in text chat after session ends. Use this when user asked for an answer in text format, or when providing information better suited for text (diagrams, code, detailed explanations). This appears as a SEPARATE message after closing_message. If user just wants to end call without additional info, leave this empty.\n\nFORMATTING RULES:\n- Use proper markdown formatting (headings, lists, bold, etc.)\n- For Mermaid diagrams, ALWAYS wrap them in code fences with three backticks and 'mermaid' language tag\n- Use actual newline characters (\\n) in the text_response string value\n- Each mermaid node and connection should be on its own line for readability\n- Example mermaid format (use actual newlines, not escaped):\n  Three backticks + mermaid + newline + flowchart TD + newline + two spaces + A[Start] --> B[Process] + newline + two spaces + B --> C[End] + newline + three backticks\n- For code snippets, use appropriate language tags in code fences\n- Structure your response clearly with headings and sections"
       }
     },
     required: ["closing_message"]
@@ -205,7 +217,7 @@ if (USE_VERTEX_AI) {
       process.env.GOOGLE_APPLICATION_CREDENTIALS = tempFile;
       console.log('✓ Using service account credentials from GOOGLE_APPLICATION_CREDENTIALS (JSON string)');
       console.log(`  Service account: ${credentials.client_email}`);
-    } catch (error) {
+    } catch {
       // If not JSON, assume it's a file path
       console.log('Using GOOGLE_APPLICATION_CREDENTIALS as file path');
       console.log(`  Path: ${GOOGLE_APPLICATION_CREDENTIALS}`);
@@ -475,7 +487,41 @@ wss.on('connection', async (ws, req) => {
 
       // Turn complete
       if (content.turnComplete) {
-        console.log(`[${clientId}] Turn complete (sent ${audioChunkCounter} audio chunks this turn)`);
+        const turnCompleteReason = content.turnCompleteReason;
+        console.log(`[${clientId}] Turn complete (sent ${audioChunkCounter} audio chunks this turn)${turnCompleteReason ? `, reason: ${turnCompleteReason}` : ''}`);
+        
+        // Handle malformed function calls - this happens when the model tries to call a tool but the call is invalid
+        if (turnCompleteReason === 'MALFORMED_FUNCTION_CALL') {
+          console.error(`[${clientId}] ⚠️ MALFORMED_FUNCTION_CALL detected! Model tried to call a function but the call was invalid.`);
+          console.error(`[${clientId}] Full message:`, JSON.stringify(message, null, 2));
+          
+          // Try to recover by sending an empty tool response to unblock the model
+          // This allows the conversation to continue even if the function call was malformed
+          try {
+            if (geminiSession) {
+              // Send a generic error response to unblock the model
+              // We'll try to send responses for both possible tools to cover all cases
+              geminiSession.sendToolResponse({
+                functionResponses: [
+                  {
+                    name: 'end_voice_session',
+                    response: {
+                      error: 'Function call was malformed. Please try again.'
+                    }
+                  }
+                ]
+              });
+              console.log(`[${clientId}] Sent recovery tool response to unblock model after malformed function call`);
+            }
+          } catch (error) {
+            console.error(`[${clientId}] Error sending recovery tool response:`, error);
+          }
+          
+          // Reset state to allow conversation to continue
+          shouldSuppressAudio = false;
+          pendingEndVoiceSession = null;
+        }
+        
         isModelGenerating = false;
         userAudioChunkCount = 0;
         interruptionSent = false;
@@ -569,11 +615,23 @@ wss.on('connection', async (ws, req) => {
 
     // Tool calls
     if (message.toolCall) {
-      console.log(`[${clientId}] Tool call requested:`, JSON.stringify(message.toolCall));
+      console.log(`[${clientId}] Tool call requested:`, JSON.stringify(message.toolCall, null, 2));
       
       // Handle tool calls
       if (message.toolCall.functionCalls) {
         for (const call of message.toolCall.functionCalls) {
+          // Validate tool call structure
+          if (!call.name) {
+            console.error(`[${clientId}] ⚠️ Invalid tool call: missing name`, JSON.stringify(call, null, 2));
+            continue;
+          }
+          
+          // Validate args exist (even if empty)
+          if (call.args === undefined) {
+            console.warn(`[${clientId}] ⚠️ Tool call missing args, using empty object:`, call.name);
+            call.args = {};
+          }
+          
           if (call.name === 'ignore_user') {
             console.log(`[${clientId}] Executing ignore_user tool:`, call.args);
             
@@ -653,8 +711,28 @@ wss.on('connection', async (ws, req) => {
               pendingEndVoiceSession = null;
               shouldSuppressAudio = false;
             }
+          } else {
+            // Unknown tool name - log and send error response
+            console.error(`[${clientId}] ⚠️ Unknown tool call: ${call.name}`, JSON.stringify(call, null, 2));
+            try {
+              if (geminiSession) {
+                geminiSession.sendToolResponse({
+                  functionResponses: [{
+                    name: call.name,
+                    response: {
+                      error: `Unknown tool: ${call.name}`
+                    }
+                  }]
+                });
+              }
+            } catch (error) {
+              console.error(`[${clientId}] Error sending error response for unknown tool:`, error);
+            }
           }
         }
+      } else {
+        // Tool call received but no functionCalls array
+        console.warn(`[${clientId}] ⚠️ Tool call received but no functionCalls array:`, JSON.stringify(message.toolCall, null, 2));
       }
     }
 
@@ -689,8 +767,8 @@ wss.on('connection', async (ws, req) => {
               speechConfig: {
                 voiceConfig: {
                   prebuiltVoiceConfig: {
-                    voiceName: 'Kore' // Firm voice - trying for polar bear!
-                    // Other deep voice options: 'Gacrux' (mature/deep), 'Algenib' (gravelly), 'Charon' (informative), 'Rasalgethi' (informative)
+                    voiceName: 'Algenib' // Deepest voice available - ~184 Hz average pitch, gravelly tenor-baritone range
+                    // Other deep voice options: 'Alnilam' (firm), 'Rasalgethi' (informative), 'Charon' (informative), 'Schedar' (even), 'Gacrux' (mature/deep female)
                   }
                 }
               },

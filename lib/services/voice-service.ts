@@ -685,18 +685,30 @@ export class VoiceService extends EventTarget {
         throw new Error('Invalid audio buffer duration');
       }
       
+      // Apply pitch shifting for deep voice effect
+      let playbackRate = 1.0;
+      if (VOICE_CONFIG.ENABLE_PITCH_SHIFT && VOICE_CONFIG.PITCH_SHIFT_SEMITONES !== 0) {
+        // Convert semitones to playback rate: rate = 2^(semitones/12)
+        // Negative semitones = deeper voice (lower pitch)
+        playbackRate = Math.pow(2, VOICE_CONFIG.PITCH_SHIFT_SEMITONES / 12);
+        console.log(`Applying pitch shift: ${VOICE_CONFIG.PITCH_SHIFT_SEMITONES} semitones (playbackRate: ${playbackRate.toFixed(3)})`);
+      }
+      
       // Queue for playback
       const source = this.audioContext.createBufferSource();
       source.buffer = audioBuffer;
+      source.playbackRate.value = playbackRate;
       source.connect(this.audioContext.destination);
       
       // Schedule playback to avoid gaps
+      // Adjust timing for pitch shift: slower playback = longer duration
       const now = this.audioContext.currentTime;
       const startTime = Math.max(now, this.nextPlayTime);
+      const adjustedDuration = audioBuffer.duration / playbackRate;
       
       try {
         source.start(startTime);
-        this.nextPlayTime = startTime + audioBuffer.duration;
+        this.nextPlayTime = startTime + adjustedDuration;
         
         this.audioQueue.push(source);
         
@@ -718,7 +730,8 @@ export class VoiceService extends EventTarget {
           try {
             await this.audioContext.resume();
             source.start(startTime);
-            this.nextPlayTime = startTime + audioBuffer.duration;
+            const adjustedDuration = audioBuffer.duration / playbackRate;
+            this.nextPlayTime = startTime + adjustedDuration;
             this.audioQueue.push(source);
           } catch (resumeError) {
             console.error('Failed to resume audio context:', resumeError);

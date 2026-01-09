@@ -38,6 +38,95 @@ import {
 import { OverloadedError } from "@/lib/errors";
 import { voiceService } from "@/lib/services/voice-service";
 
+/**
+ * Normalize text response from voice agent, especially fixing mermaid diagram formatting
+ * - Converts escaped newlines (\n) to actual newlines
+ * - Ensures mermaid code blocks are properly formatted
+ * - Fixes diagrams that are on a single line or poorly formatted
+ */
+function normalizeTextResponse(text: string): string {
+  // First, convert escaped newlines to actual newlines
+  let normalized = text.replace(/\\n/g, '\n');
+  
+  // Fix mermaid diagrams that might be malformed
+  // Pattern: matches mermaid code blocks (with or without proper formatting)
+  const mermaidBlockPattern = /```\s*mermaid\s*\n?([\s\S]*?)```/gi;
+  
+  normalized = normalized.replace(mermaidBlockPattern, (match, diagramContent) => {
+    // Clean up the diagram content
+    let cleanContent = diagramContent.trim();
+    
+    // Normalize arrow styles (→ to -->, - to -->)
+    cleanContent = cleanContent
+      .replace(/→/g, '-->')
+      .replace(/\s*-\s*>/g, ' --> ')
+      .replace(/\s*->\s*/g, ' --> ');
+    
+    // If the diagram appears to be on one line or poorly formatted, try to format it
+    const hasMultipleLines = cleanContent.includes('\n');
+    const needsFormatting = !hasMultipleLines || cleanContent.match(/\s+[A-Z]\w*\[|\s+[A-Z]\w*\{/);
+    
+    if (needsFormatting) {
+      // Split by common patterns that indicate new statements
+      // Pattern 1: After flowchart/graph declaration
+      cleanContent = cleanContent.replace(/(flowchart\s+\w+|graph\s+\w+)\s+/gi, '$1\n  ');
+      
+      // Pattern 2: Before node definitions (A[...], B{...})
+      cleanContent = cleanContent.replace(/\s+([A-Z]\w*\[[^\]]*\])/g, '\n  $1');
+      cleanContent = cleanContent.replace(/\s+([A-Z]\w*\{[^\}]*\})/g, '\n  $1');
+      
+      // Pattern 3: Before connections (A --> B, A & B --> C)
+      // Handle both single and multiple source connections
+      cleanContent = cleanContent.replace(/\s+([A-Z]\w*(?:\s*&\s*[A-Z]\w*)?\s*-->\s*[A-Z]\w*[^\s]*)/g, '\n  $1');
+      
+      // Pattern 4: Clean up any remaining inline connections
+      cleanContent = cleanContent.replace(/([A-Z]\w*[\]\}])\s+([A-Z]\w*\[|\{)/g, '$1\n  $2');
+      
+      // Clean up multiple consecutive newlines and spaces
+      cleanContent = cleanContent
+        .replace(/\n{3,}/g, '\n\n')
+        .replace(/  +/g, '  ') // Normalize indentation
+        .trim();
+    }
+    
+    // Ensure proper formatting: split into lines and clean each
+    const lines = cleanContent.split('\n').map((line: string) => {
+      line = line.trim();
+      // Ensure proper spacing around arrows
+      line = line.replace(/\s*-->\s*/g, ' --> ');
+      line = line.replace(/\s*&\s*/g, ' & ');
+      return line;
+    }).filter((line: string) => line.length > 0);
+    
+    // Reconstruct with proper indentation (2 spaces for readability)
+    cleanContent = lines.map((line: string) => {
+      // Don't indent the first line (flowchart/graph declaration)
+      if (line.match(/^(flowchart|graph|sequenceDiagram|classDiagram|stateDiagram|erDiagram|journey|gantt|pie|gitgraph)/i)) {
+        return line;
+      }
+      // Indent other lines
+      return '  ' + line;
+    }).join('\n');
+    
+    return `\`\`\`mermaid\n${cleanContent}\n\`\`\``;
+  });
+  
+  // Also handle cases where mermaid might be mentioned without code fences
+  // Look for patterns like "mermaid flowchart" or "mermaid graph" without proper fences
+  const looseMermaidPattern = /(?:^|\n)(mermaid\s+(?:flowchart|graph|sequenceDiagram|classDiagram|stateDiagram|erDiagram|journey|gantt|pie|gitgraph)\s+[\s\S]*?)(?=\n\n|\n```|$)/gi;
+  
+  normalized = normalized.replace(looseMermaidPattern, (match, diagramContent) => {
+    // Only wrap if not already wrapped
+    if (!match.trim().startsWith('```')) {
+      const cleaned = diagramContent.trim().replace(/^mermaid\s+/i, '');
+      return `\n\`\`\`mermaid\n${cleaned}\n\`\`\``;
+    }
+    return match;
+  });
+  
+  return normalized;
+}
+
 export default function ChatInterface() {
   const [messages, setMessages] = useState<Message[]>([
     { id: "initial-assistant", role: "assistant", content: "HELLO. HOW CAN I HELP YOU TODAY?" }
@@ -299,12 +388,15 @@ export default function ChatInterface() {
       
       // If there's a full text response (agent's actual answer), add it as a separate message
       if (textResponse && textResponse.trim()) {
+        // Normalize the text response to fix formatting issues (especially mermaid diagrams)
+        const normalizedResponse = normalizeTextResponse(textResponse);
+        
         setMessages((prev) => [
           ...prev,
           { 
             id: generateMessageId(), 
             role: "assistant", 
-            content: textResponse 
+            content: normalizedResponse 
           }
         ]);
       }
@@ -695,41 +787,48 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
 
       <div className="flex flex-col h-[600px] md:flex-1 md:min-h-0 font-mono text-[0.875rem]">
         <div ref={messagesContainerRef} className="h-[600px] md:flex-1 md:min-h-0 overflow-y-auto mb-2 space-y-6 scrollbar-boxy">
-          {messages.map((message, index) => (
-            <div
-              key={message.id || index}
-              className={`flex ${
-                message.role === "user" ? "justify-end" : "justify-start"
-              }`}
-            >
+          {messages.map((message, index) => {
+            // Skip rendering empty streaming assistant messages - they'll be shown via loading indicator
+            if (message.role === "assistant" && message.streaming && !message.content.trim()) {
+              return null;
+            }
+            
+            return (
               <div
-                className={`max-w-[85%] ${
-                  message.role === "user"
-                    ? "text-right"
-                    : "text-left"
+                key={message.id || index}
+                className={`flex ${
+                  message.role === "user" ? "justify-end" : "justify-start"
                 }`}
               >
-                <p className="uppercase text-[0.75rem] text-gray-400 mb-1 tracking-wider">
-                  {message.role === "user" ? "You" : "FRAM"}
-                </p>
-                {message.role === "assistant" ? (
-                  <div className="text-black leading-relaxed">
-                    <MarkdownWithMermaid 
-                      content={message.content} 
-                      isStreaming={message.streaming}
-                      onFixDiagram={async (error) => {
-                        await handleFixDiagram(index, error);
-                      }}
-                    />
-                  </div>
-                ) : (
-                  <p className="text-black leading-relaxed">
-                    {message.content}
+                <div
+                  className={`max-w-[85%] ${
+                    message.role === "user"
+                      ? "text-right"
+                      : "text-left"
+                  }`}
+                >
+                  <p className="uppercase text-[0.75rem] text-gray-400 mb-1 tracking-wider">
+                    {message.role === "user" ? "You" : "FRAM"}
                   </p>
-                )}
+                  {message.role === "assistant" ? (
+                    <div className="text-black leading-relaxed">
+                      <MarkdownWithMermaid 
+                        content={message.content} 
+                        isStreaming={message.streaming}
+                        onFixDiagram={async (error) => {
+                          await handleFixDiagram(index, error);
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <p className="text-black leading-relaxed">
+                      {message.content}
+                    </p>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
           {isLoading && (
              <div className="flex justify-start">
                <div className="max-w-[85%] text-left">
