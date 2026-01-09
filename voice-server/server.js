@@ -84,12 +84,21 @@ DO NOT USE:
 
 HOW THIS TOOL WORKS (Read Carefully):
 
-You will generate an audio response AND call this tool IN THE SAME TURN. This is normal.
-However, the system has multi-layered timing safeguards to ensure your audio finishes playing before the session ends.
+CRITICAL - AUDIO RESPONSE RULES:
+Generate EXACTLY ONE brief audio acknowledgment, then call this tool. Do NOT generate multiple audio responses or repeat yourself.
+
+✓ CORRECT (One brief acknowledgment):
+  Audio: "SURE, I'LL SEND THAT IN TEXT."
+  Tool: end_voice_session
+
+✗ WRONG (Multiple audio responses):
+  Audio: "GOT IT!"
+  Audio: "I'LL SEND YOU A TEXT MESSAGE."
+  Tool: end_voice_session
 
 YOUR TURN SHOULD INCLUDE:
-1. Audio response: Natural acknowledgment (e.g., "Sure, I'll send that in text")
-2. Tool call: This end_voice_session tool with appropriate parameters
+1. ONE brief audio acknowledgment (5-10 words max, say it ONCE)
+2. Tool call with this end_voice_session tool
 
 WHAT HAPPENS BEHIND THE SCENES (You don't need to manage this):
 - System waits for turnComplete (all audio chunks generated)
@@ -249,6 +258,9 @@ wss.on('connection', async (ws, req) => {
   let userAudioChunkCount = 0; // Count consecutive audio chunks to detect sustained speech
   let interruptionSent = false; // Track if we've already sent interruption for current model turn
   let pendingEndVoiceSession = null; // Store end_voice_session details until turn completes
+  let shouldSuppressAudio = false; // Suppress audio after end_voice_session tool is called to prevent double acknowledgements
+  let audioChunkCounter = 0; // Track total audio chunks sent
+  let lastAudioFingerprint = null; // Track last audio chunk to detect duplicates
   
   // Initialize GoogleGenAI with appropriate credentials
   // Note: Don't set apiVersion for Vertex AI - the SDK handles it
@@ -288,14 +300,12 @@ wss.on('connection', async (ws, req) => {
               private_key: keyData.private_key.replace(/\\n/g, '\n')
             }
           };
-        } else {
-          // It's an API key string - try using it directly
-          // Note: Vertex AI may not support API keys in all contexts
-          aiConfig.apiKey = VERTEXAI_API_KEY;
         }
+        // Note: API keys are not compatible with Vertex AI project/location mode
+        // If using Vertex AI, only service account credentials are supported
       } catch {
-        // Not JSON, treat as API key string
-        aiConfig.apiKey = VERTEXAI_API_KEY;
+        // Not JSON - ignore, will use Application Default Credentials
+        console.log('VERTEXAI_API_KEY is not valid JSON, using Application Default Credentials');
       }
     }
     // If neither is provided, SDK will use Application Default Credentials
@@ -378,6 +388,8 @@ wss.on('connection', async (ws, req) => {
         isModelGenerating = true;
         userAudioChunkCount = 0; // Reset audio chunk counter when model starts generating
         interruptionSent = false; // Reset interruption flag for new model turn
+        shouldSuppressAudio = false; // Reset audio suppression for new model turn
+        // Don't reset audioChunkCounter or lastAudioFingerprint here - keep them to track across the whole turn
       }
       
       // Log full serverContent for debugging
@@ -397,11 +409,34 @@ wss.on('connection', async (ws, req) => {
           // Audio output
           if (part.inlineData) {
             const audioSize = part.inlineData.data?.length || 0;
-            console.log(`[${clientId}] ✓ AUDIO RESPONSE RECEIVED! Sending to client (${audioSize} chars base64, ~${Math.round(audioSize * 3 / 4)} bytes, mimeType: ${part.inlineData.mimeType})`);
-            ws.send(JSON.stringify({
-              type: 'audio',
-              data: part.inlineData.data // Base64 PCM24 from Gemini
-            }));
+            const audioData = part.inlineData.data;
+            
+            // Create a fingerprint of the audio chunk to detect duplicates
+            // Use first 100 chars + size as a simple fingerprint
+            const fingerprint = audioData ? `${audioData.substring(0, 100)}_${audioSize}` : null;
+            
+            // Check if this is a duplicate of the last audio chunk
+            const isDuplicate = fingerprint && fingerprint === lastAudioFingerprint;
+            
+            if (isDuplicate) {
+              console.log(`[${clientId}] 🚫 DUPLICATE AUDIO DETECTED! Blocking duplicate chunk (${audioSize} chars) - same as previous chunk`);
+            } else if (shouldSuppressAudio) {
+              console.log(`[${clientId}] ⚠️ AUDIO SUPPRESSED (${audioSize} chars) - end_voice_session tool was called, preventing duplicate acknowledgement`);
+            } else {
+              audioChunkCounter++;
+              lastAudioFingerprint = fingerprint;
+              console.log(`[${clientId}] ✓ AUDIO CHUNK #${audioChunkCounter} RECEIVED! Sending to client (${audioSize} chars base64, ~${Math.round(audioSize * 3 / 4)} bytes, mimeType: ${part.inlineData.mimeType})`);
+              
+              // Warn if multiple audio chunks in same turn (potential double acknowledgement)
+              if (audioChunkCounter > 1) {
+                console.warn(`[${clientId}] ⚠️ WARNING: Multiple audio chunks detected in same turn (${audioChunkCounter} total). This may cause double acknowledgements if end_voice_session is called.`);
+              }
+              
+              ws.send(JSON.stringify({
+                type: 'audio',
+                data: audioData // Base64 PCM24 from Gemini
+              }));
+            }
           }
           
           // Text output
@@ -427,10 +462,12 @@ wss.on('connection', async (ws, req) => {
 
       // Turn complete
       if (content.turnComplete) {
-        console.log(`[${clientId}] Turn complete`);
+        console.log(`[${clientId}] Turn complete (sent ${audioChunkCounter} audio chunks this turn)`);
         isModelGenerating = false;
         userAudioChunkCount = 0;
         interruptionSent = false;
+        audioChunkCounter = 0; // Reset for next turn
+        lastAudioFingerprint = null; // Reset for next turn
         
         // If end_voice_session tool was called, now is the time to send it (after all audio is generated)
         if (pendingEndVoiceSession) {
@@ -454,15 +491,22 @@ wss.on('connection', async (ws, req) => {
           }, 1000); // 1 second buffer for WebSocket transmission and queueing
           
           pendingEndVoiceSession = null; // Clear the pending state
+          shouldSuppressAudio = false; // Reset audio suppression flag
+        } else {
+          // Reset audio suppression even if no pending end session (for safety)
+          shouldSuppressAudio = false;
         }
       }
 
       // Interrupted
       if (content.interrupted) {
-        console.log(`[${clientId}] Response interrupted by user input`);
+        console.log(`[${clientId}] Response interrupted by user input (sent ${audioChunkCounter} audio chunks before interruption)`);
         isModelGenerating = false;
         userAudioChunkCount = 0;
         interruptionSent = false;
+        shouldSuppressAudio = false; // Reset audio suppression on interruption
+        audioChunkCounter = 0; // Reset for next turn
+        lastAudioFingerprint = null; // Reset for next turn
         
         // Notify client to stop audio playback (if not already sent)
         if (!interruptionSent) {
@@ -570,6 +614,11 @@ wss.on('connection', async (ws, req) => {
             // We'll wait for the current turn to complete, then send to client
             pendingEndVoiceSession = { reason, closingMessage, textResponse };
             
+            // CRITICAL: Suppress any subsequent audio generation after this tool call
+            // This prevents double acknowledgements (one before tool call, one after)
+            shouldSuppressAudio = true;
+            console.log(`[${clientId}] Audio suppression enabled to prevent duplicate acknowledgements`);
+            
             // Send tool response back to Gemini
             // Use minimal, non-conversational response to avoid triggering additional audio generation
             try {
@@ -589,6 +638,7 @@ wss.on('connection', async (ws, req) => {
               console.error(`[${clientId}] Error sending tool response:`, error);
               // Clear pending state on error
               pendingEndVoiceSession = null;
+              shouldSuppressAudio = false;
             }
           }
         }
@@ -626,7 +676,8 @@ wss.on('connection', async (ws, req) => {
               speechConfig: {
                 voiceConfig: {
                   prebuiltVoiceConfig: {
-                    voiceName: 'Puck'
+                    voiceName: 'Kore' // Firm voice - trying for polar bear!
+                    // Other deep voice options: 'Gacrux' (mature/deep), 'Algenib' (gravelly), 'Charon' (informative), 'Rasalgethi' (informative)
                   }
                 }
               },
@@ -798,6 +849,9 @@ ${conversationHistory.map(turn => `${turn.role === 'user' ? 'User' : 'You'}: ${t
               audioBuffer = [];
               conversationTranscripts = { user: [], assistant: [] };
               pendingEndVoiceSession = null; // Clear any pending end session
+              shouldSuppressAudio = false; // Reset audio suppression flag
+              audioChunkCounter = 0; // Reset audio counter
+              lastAudioFingerprint = null; // Reset audio fingerprint
               
               ws.send(JSON.stringify({ type: 'stopped' }));
             } catch (error) {
@@ -815,6 +869,9 @@ ${conversationHistory.map(turn => `${turn.role === 'user' ? 'User' : 'You'}: ${t
             audioBuffer = [];
             conversationTranscripts = { user: [], assistant: [] };
             pendingEndVoiceSession = null; // Clear any pending end session
+            shouldSuppressAudio = false; // Reset audio suppression flag
+            audioChunkCounter = 0; // Reset audio counter
+            lastAudioFingerprint = null; // Reset audio fingerprint
           }
           break;
 
