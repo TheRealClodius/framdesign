@@ -19,6 +19,7 @@ export interface ChatResponse {
     until: number;
   };
   startVoiceSession?: boolean;
+  pendingRequest?: string | null; // Pending user request to address when voice starts
 }
 
 /**

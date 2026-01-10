@@ -47,6 +47,7 @@ export class VoiceService extends EventTarget {
   private reconnectTimer: NodeJS.Timeout | null = null;
   private heartbeatTimer: NodeJS.Timeout | null = null;
   private conversationHistory: Array<{ role: string; content: string }> = [];
+  private pendingRequest: string | null = null;
   private isIntentionallyStopping = false;
   private startPromiseResolve: ((value: void) => void) | null = null;
   private startPromiseReject: ((reason?: unknown) => void) | null = null;
@@ -63,11 +64,18 @@ export class VoiceService extends EventTarget {
 
   /**
    * Start voice session with conversation context
+   * @param conversationHistory - Previous chat messages for context
+   * @param pendingRequest - Optional pending user request to address immediately (from text agent handoff)
    */
-  async start(conversationHistory: Array<{ role: string; content: string }>): Promise<void> {
+  async start(conversationHistory: Array<{ role: string; content: string }>, pendingRequest: string | null = null): Promise<void> {
     if (this.isActive) {
       console.warn('Attempted to start voice session while already active');
       throw new Error('Voice session already active');
+    }
+    
+    this.pendingRequest = pendingRequest;
+    if (pendingRequest) {
+      console.log(`📌 Voice session will address pending request: "${pendingRequest}"`);
     }
 
     // Ensure any previous session is fully cleaned up before starting
@@ -184,10 +192,11 @@ export class VoiceService extends EventTarget {
           this.isActive = true;
           console.log('Session marked as active, audio processing will now work');
           
-          // 6. Send start message with conversation history
+          // 6. Send start message with conversation history and pending request
           this.ws!.send(JSON.stringify({
             type: 'start',
-            conversationHistory: this.conversationHistory
+            conversationHistory: this.conversationHistory,
+            pendingRequest: this.pendingRequest
           }));
 
           // Start heartbeat to detect disconnections

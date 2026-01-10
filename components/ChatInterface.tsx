@@ -738,8 +738,12 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
               content: m.content
             }));
             
-            // Start voice session
-            await voiceService.start(conversationHistory);
+            // Start voice session with pending request if specified
+            const pendingRequest = response.pendingRequest || null;
+            if (pendingRequest) {
+              console.log(`📌 Voice session starting with pending request: "${pendingRequest}"`);
+            }
+            await voiceService.start(conversationHistory, pendingRequest);
             // Session started event will update state
           } catch (error) {
             console.error('Error starting voice session:', error);
@@ -820,8 +824,12 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
               content: m.content
             }));
             
-            // Start voice session
-            await voiceService.start(conversationHistory);
+            // Start voice session with pending request if specified
+            const pendingRequest = data.pendingRequest || null;
+            if (pendingRequest) {
+              console.log(`📌 Voice session starting with pending request: "${pendingRequest}"`);
+            }
+            await voiceService.start(conversationHistory, pendingRequest);
             // Session started event will update state
           } catch (error) {
             console.error('Error starting voice session:', error);

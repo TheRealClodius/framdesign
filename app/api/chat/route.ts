@@ -33,10 +33,15 @@ const ignoreUserTool = {
 // Tool definition for starting voice sessions
 const startVoiceSessionTool = {
   name: "start_voice_session",
-  description: "Start a voice conversation session. Use this when the user wants to switch to voice mode or when voice communication would be more natural. This will activate the microphone and start a real-time voice conversation.",
+  description: "Start a voice conversation session. Use this when the user wants to switch to voice mode or when voice communication would be more natural. This will activate the microphone and start a real-time voice conversation. IMPORTANT: If the user asks for something beyond just starting voice mode (like 'start voice and tell me a joke' or 'switch to voice mode and explain X'), you MUST specify that request in pending_request so the voice agent addresses it immediately.",
   parameters: {
     type: Type.OBJECT,
-    properties: {},
+    properties: {
+      pending_request: {
+        type: Type.STRING,
+        description: "Any pending user request that should be addressed immediately when voice starts. For example, if user says 'start voice mode and tell me a joke', set this to 'tell a joke'. If user just says 'start voice mode' with no additional request, leave this empty."
+      }
+    },
     required: []
   }
 };
@@ -793,7 +798,8 @@ export async function POST(request: Request) {
 
       // Handle start_voice_session tool call
       if (functionCall?.name === "start_voice_session") {
-        console.log("Fram used start_voice_session tool");
+        const pendingRequest = functionCall.args?.pending_request || null;
+        console.log("Fram used start_voice_session tool", pendingRequest ? `with pending_request: "${pendingRequest}"` : "(no pending request)");
 
         // Extract any text response from buffered chunks for the message
         let messageText = "";
@@ -814,7 +820,8 @@ export async function POST(request: Request) {
 
         return NextResponse.json({
           message: messageText,
-          startVoiceSession: true
+          startVoiceSession: true,
+          pendingRequest: pendingRequest
         });
       }
 

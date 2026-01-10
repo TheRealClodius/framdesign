@@ -279,6 +279,7 @@ wss.on('connection', async (ws, req) => {
   let audioBuffer = [];  // Buffer audio chunks until session is ready
   let conversationTranscripts = { user: [], assistant: [] };
   let conversationHistory = []; // Store for context injection
+  let pendingRequest = null; // Store pending user request from text agent handoff
   let isModelGenerating = false; // Track if model is currently generating a response
   let userAudioChunkCount = 0; // Count consecutive audio chunks to detect sustained speech
   let interruptionSent = false; // Track if we've already sent interruption for current model turn
@@ -404,31 +405,19 @@ wss.on('connection', async (ws, req) => {
               parts: turn.parts
             }));
             
-            // Determine if there's a pending user request
+            // Determine if voice agent should respond immediately
+            // Use explicit pendingRequest from text agent handoff (scalable approach)
+            // Fallback: respond if last turn was user (unanswered message)
             const lastTurn = historyTurns[historyTurns.length - 1];
-            let shouldRespond = lastTurn.role === 'user';
+            const shouldRespond = !!pendingRequest || lastTurn.role === 'user';
             
-            // If model spoke last, check if it was just a mode-switch acknowledgment
-            if (!shouldRespond && historyTurns.length >= 2) {
-              const modelResponse = lastTurn.parts[0]?.text || '';
-              const userMessage = historyTurns[historyTurns.length - 2]?.parts[0]?.text || '';
-              
-              const isTransitional = (
-                modelResponse.length < 100 && (
-                  /\b(voice|switch|switching|let'?s)\b/i.test(modelResponse) ||
-                  /\b(sure|okay|ok|alright|got it)\b/i.test(modelResponse)
-                )
-              );
-              
-              const hasPendingRequest = (
-                /\?/.test(userMessage) ||
-                /\b(tell|show|explain|describe|what|how|why|can you|could you|please)\b/i.test(userMessage)
-              );
-              
-              if (isTransitional && hasPendingRequest) {
-                shouldRespond = true;
-                console.log(`[${clientId}] Detected pending request after transitional response`);
-              }
+            // If there's a pending request, append it as context for the agent
+            if (pendingRequest) {
+              historyTurns.push({
+                role: 'user',
+                parts: [{ text: `[Continue with: ${pendingRequest}]` }]
+              });
+              console.log(`[${clientId}] 📌 Appended pending request to history: "${pendingRequest}"`);
             }
             
             geminiSession.sendClientContent({ 
@@ -436,9 +425,23 @@ wss.on('connection', async (ws, req) => {
               turnComplete: shouldRespond 
             });
             
-            console.log(`[${clientId}] History injected: ${historyTurns.length} turns, lastRole=${lastTurn.role}, willRespond=${shouldRespond}`);
+            console.log(`[${clientId}] History injected: ${historyTurns.length} turns, pendingRequest=${!!pendingRequest}, willRespond=${shouldRespond}`);
           } catch (error) {
             console.error(`[${clientId}] Error sending conversation history:`, error);
+          }
+        } else if (pendingRequest) {
+          // No history but there's a pending request - send it as a user message
+          try {
+            geminiSession.sendClientContent({ 
+              turns: [{
+                role: 'user',
+                parts: [{ text: `[Continue with: ${pendingRequest}]` }]
+              }],
+              turnComplete: true 
+            });
+            console.log(`[${clientId}] 📌 No history, but sent pending request: "${pendingRequest}"`);
+          } catch (error) {
+            console.error(`[${clientId}] Error sending pending request:`, error);
           }
         }
         
@@ -648,9 +651,10 @@ wss.on('connection', async (ws, req) => {
               lastAudioFingerprint = fingerprint;
               console.log(`[${clientId}] ✓ AUDIO CHUNK #${audioChunkCounter} RECEIVED! Sending to client (${audioSize} chars base64, ~${Math.round(audioSize * 3 / 4)} bytes, mimeType: ${part.inlineData.mimeType})`);
               
-              // Warn if multiple audio chunks in same turn (potential double acknowledgement)
-              if (audioChunkCounter > 1) {
-                console.warn(`[${clientId}] ⚠️ WARNING: Multiple audio chunks detected in same turn (${audioChunkCounter} total). This may cause double acknowledgements if end_voice_session is called.`);
+              // Only warn if end_voice_session is pending AND we have multiple chunks
+              // Multiple chunks are normal - we only warn if there's a risk of double acknowledgement
+              if (audioChunkCounter > 1 && pendingEndVoiceSession) {
+                console.warn(`[${clientId}] ⚠️ WARNING: Multiple audio chunks detected (${audioChunkCounter} total) with pending end_voice_session. Suppression should prevent duplicates, but monitor for issues.`);
               }
               
               ws.send(JSON.stringify({
@@ -837,12 +841,19 @@ wss.on('connection', async (ws, req) => {
         case 'start':
           console.log(`[${clientId}] Starting Gemini Live session`);
           
-          // Store conversation history (currently not sent to Gemini, reserved for future use)
+          // Store conversation history for context injection
           conversationHistory = (data.conversationHistory || []).map(msg => ({
             role: msg.role === 'assistant' ? 'model' : 'user',
             parts: [{ text: msg.content }]
           }));
+          
+          // Store pending request from text agent handoff (if any)
+          pendingRequest = data.pendingRequest || null;
+          
           console.log(`[${clientId}] Conversation history stored: ${conversationHistory.length} messages`);
+          if (pendingRequest) {
+            console.log(`[${clientId}] 📌 Pending request from text agent: "${pendingRequest}"`);
+          }
 
           try {
             // Prepare session config with audio input/output enabled
