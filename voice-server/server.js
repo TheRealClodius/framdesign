@@ -284,6 +284,7 @@ wss.on('connection', async (ws, req) => {
   let interruptionSent = false; // Track if we've already sent interruption for current model turn
   let pendingEndVoiceSession = null; // Store end_voice_session details until turn completes
   let shouldSuppressAudio = false; // Suppress audio after end_voice_session tool is called to prevent double acknowledgements
+  let shouldSuppressTranscript = false; // Suppress output transcripts after end_voice_session tool is called to prevent duplicate messages
   let audioChunkCounter = 0; // Track total audio chunks sent
   let lastAudioFingerprint = null; // Track last audio chunk to detect duplicates
   
@@ -312,6 +313,7 @@ wss.on('connection', async (ws, req) => {
         };
       } catch {
         // If not JSON, assume it's a file path (already handled above)
+        // SDK will use it via process.env.GOOGLE_APPLICATION_CREDENTIALS
       }
     } else if (VERTEXAI_API_KEY) {
       // Check if VERTEXAI_API_KEY is a service account JSON
@@ -376,9 +378,11 @@ wss.on('connection', async (ws, req) => {
     // Setup complete
     if (message.setupComplete) {
       console.log(`[${clientId}] Setup complete - session ID: ${message.setupComplete.sessionId}`);
-      sessionReady = true;
       
-      // NOW tell the client session is ready FIRST (before flushing buffer)
+      // DON'T set sessionReady yet - we need to inject history first
+      // Otherwise new audio chunks will bypass the buffer and reach Gemini before context
+      
+      // Tell the client session is ready (they can start sending audio, we'll buffer it)
       if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({
           type: 'started',
@@ -386,25 +390,212 @@ wss.on('connection', async (ws, req) => {
         }));
       }
       
-      // Flush buffered audio chunks with small delays to avoid overwhelming the API
-      if (audioBuffer.length > 0) {
-        console.log(`[${clientId}] Flushing ${audioBuffer.length} buffered audio chunks`);
-        const chunksToFlush = [...audioBuffer];
-        audioBuffer = [];
+      // CRITICAL: Inject history FIRST, then set sessionReady, then flush audio
+      const historyDelay = 50; // Small delay to ensure session is stable
+      
+      const injectHistoryAndFlush = () => {
+        if (!geminiSession) return;
         
-        // Send chunks with small delays
-        chunksToFlush.forEach((chunk, index) => {
-          setTimeout(() => {
-            if (geminiSession) {
-              sendAudioToGemini(chunk);
+        // 1. Inject history if present
+        if (conversationHistory.length > 0) {
+          try {
+            const historyTurns = conversationHistory.map(turn => ({
+              role: turn.role,
+              parts: turn.parts
+            }));
+            
+            // Determine if there's a pending user request
+            const lastTurn = historyTurns[historyTurns.length - 1];
+            let shouldRespond = lastTurn.role === 'user';
+            
+            // If model spoke last, check if it was just a mode-switch acknowledgment
+            if (!shouldRespond && historyTurns.length >= 2) {
+              const modelResponse = lastTurn.parts[0]?.text || '';
+              const userMessage = historyTurns[historyTurns.length - 2]?.parts[0]?.text || '';
+              
+              const isTransitional = (
+                modelResponse.length < 100 && (
+                  /\b(voice|switch|switching|let'?s)\b/i.test(modelResponse) ||
+                  /\b(sure|okay|ok|alright|got it)\b/i.test(modelResponse)
+                )
+              );
+              
+              const hasPendingRequest = (
+                /\?/.test(userMessage) ||
+                /\b(tell|show|explain|describe|what|how|why|can you|could you|please)\b/i.test(userMessage)
+              );
+              
+              if (isTransitional && hasPendingRequest) {
+                shouldRespond = true;
+                console.log(`[${clientId}] Detected pending request after transitional response`);
+              }
             }
-          }, index * 10); // 10ms delay between chunks
-        });
-      }
+            
+            geminiSession.sendClientContent({ 
+              turns: historyTurns,
+              turnComplete: shouldRespond 
+            });
+            
+            console.log(`[${clientId}] History injected: ${historyTurns.length} turns, lastRole=${lastTurn.role}, willRespond=${shouldRespond}`);
+          } catch (error) {
+            console.error(`[${clientId}] Error sending conversation history:`, error);
+          }
+        }
+        
+        // 2. NOW set sessionReady - new audio will go directly to Gemini
+        sessionReady = true;
+        console.log(`[${clientId}] Session now ready for audio`);
+        
+        // 3. Flush any buffered audio (collected while waiting for history)
+        if (audioBuffer.length > 0) {
+          console.log(`[${clientId}] Flushing ${audioBuffer.length} buffered audio chunks`);
+          const chunksToFlush = [...audioBuffer];
+          audioBuffer = [];
+          
+          chunksToFlush.forEach((chunk, index) => {
+            setTimeout(() => {
+              if (geminiSession) {
+                sendAudioToGemini(chunk);
+              }
+            }, index * 10);
+          });
+        }
+      };
+      
+      setTimeout(injectHistoryAndFlush, historyDelay);
       return;
     }
 
+    // CRITICAL: Process tool calls FIRST before serverContent
+    // This ensures suppression flags are set before we process transcripts
+    // (toolCall and serverContent can arrive in the same message)
+    if (message.toolCall) {
+      console.log(`[${clientId}] Tool call requested:`, JSON.stringify(message.toolCall, null, 2));
+      
+      // Handle tool calls
+      if (message.toolCall.functionCalls) {
+        for (const call of message.toolCall.functionCalls) {
+          // Validate tool call structure
+          if (!call.name) {
+            console.error(`[${clientId}] ⚠️ Invalid tool call: missing name`, JSON.stringify(call, null, 2));
+            continue;
+          }
+          
+          // Validate args exist (even if empty)
+          if (call.args === undefined) {
+            console.warn(`[${clientId}] ⚠️ Tool call missing args, using empty object:`, call.name);
+            call.args = {};
+          }
+          
+          if (call.name === 'ignore_user') {
+            console.log(`[${clientId}] Executing ignore_user tool:`, call.args);
+            
+            // Extract parameters
+            const durationSeconds = call.args?.duration_seconds || 60;
+            const farewellMessage = call.args?.farewell_message || "I'M ENDING THIS CONVERSATION.";
+            const timeoutUntil = Date.now() + (durationSeconds * 1000);
+            
+            // Send timeout command to client (client will set localStorage and block UI)
+            ws.send(JSON.stringify({
+              type: 'timeout',
+              durationSeconds: durationSeconds,
+              timeoutUntil: timeoutUntil,
+              farewellMessage: farewellMessage
+            }));
+            
+            console.log(`[${clientId}] User timed out for ${durationSeconds} seconds until ${new Date(timeoutUntil).toISOString()}`);
+            
+            // Send tool response back to Gemini to acknowledge execution
+            // Use minimal, non-conversational response to avoid triggering additional audio generation
+            try {
+              if (geminiSession) {
+                geminiSession.sendToolResponse({
+                  functionResponses: [{
+                    name: 'ignore_user',
+                    response: {
+                      success: true
+                    }
+                  }]
+                });
+              }
+            } catch (error) {
+              console.error(`[${clientId}] Error sending tool response:`, error);
+            }
+            
+            // Session will be closed by client after receiving timeout message
+          } else if (call.name === 'end_voice_session') {
+            console.log(`[${clientId}] Executing end_voice_session tool:`, call.args);
+            
+            // Extract parameters
+            const reason = call.args?.reason || 'unspecified';
+            const closingMessage = call.args?.closing_message || "I'LL END OUR VOICE SESSION HERE.";
+            const textResponse = call.args?.text_response || null; // Optional full text response
+            
+            console.log(`[${clientId}] Voice session ending gracefully. Reason: ${reason}`);
+            if (textResponse) {
+              console.log(`[${clientId}] Text response will be sent to chat: ${textResponse.substring(0, 100)}...`);
+            }
+            
+            // Store the end_voice_session details - DON'T send to client yet
+            // We'll wait for the current turn to complete, then send to client
+            pendingEndVoiceSession = { reason, closingMessage, textResponse };
+            
+            // CRITICAL: Suppress any subsequent audio and transcripts after this tool call
+            // This prevents double acknowledgements (one before tool call, one after)
+            // and duplicate messages in chat (transcript + closing_message)
+            shouldSuppressAudio = true;
+            shouldSuppressTranscript = true;
+            console.log(`[${clientId}] Audio and transcript suppression enabled to prevent duplicate acknowledgements and messages`);
+            
+            // Send tool response back to Gemini
+            // Use minimal, non-conversational response to avoid triggering additional audio generation
+            try {
+              if (geminiSession) {
+                geminiSession.sendToolResponse({
+                  functionResponses: [{
+                    name: 'end_voice_session',
+                    response: {
+                      success: true
+                    }
+                  }]
+                });
+                
+                console.log(`[${clientId}] Tool response sent (minimal to avoid extra audio generation)`);
+              }
+            } catch (error) {
+              console.error(`[${clientId}] Error sending tool response:`, error);
+              // Clear pending state on error
+              pendingEndVoiceSession = null;
+              shouldSuppressAudio = false;
+              shouldSuppressTranscript = false;
+            }
+          } else {
+            // Unknown tool name - log and send error response
+            console.error(`[${clientId}] ⚠️ Unknown tool call: ${call.name}`, JSON.stringify(call, null, 2));
+            try {
+              if (geminiSession) {
+                geminiSession.sendToolResponse({
+                  functionResponses: [{
+                    name: call.name,
+                    response: {
+                      error: `Unknown tool: ${call.name}`
+                    }
+                  }]
+                });
+              }
+            } catch (error) {
+              console.error(`[${clientId}] Error sending error response for unknown tool:`, error);
+            }
+          }
+        }
+      } else {
+        // Tool call received but no functionCalls array
+        console.warn(`[${clientId}] ⚠️ Tool call received but no functionCalls array:`, JSON.stringify(message.toolCall, null, 2));
+      }
+    }
+
     // Server content (audio/text responses)
+    // IMPORTANT: Processed AFTER toolCall so suppression flags are set first
     if (message.serverContent) {
       const content = message.serverContent;
       
@@ -414,6 +605,7 @@ wss.on('connection', async (ws, req) => {
         userAudioChunkCount = 0; // Reset audio chunk counter when model starts generating
         interruptionSent = false; // Reset interruption flag for new model turn
         shouldSuppressAudio = false; // Reset audio suppression for new model turn
+        shouldSuppressTranscript = false; // Reset transcript suppression for new model turn
         // Don't reset audioChunkCounter or lastAudioFingerprint here - keep them to track across the whole turn
       }
       
@@ -423,7 +615,11 @@ wss.on('connection', async (ws, req) => {
         modelTurnPartsCount: content.modelTurn?.parts?.length || 0,
         turnComplete: content.turnComplete,
         generationComplete: content.generationComplete,
-        interrupted: content.interrupted
+        interrupted: content.interrupted,
+        hasInputTranscription: !!content.inputTranscription?.text,
+        hasOutputTranscription: !!content.outputTranscription?.text,
+        inputTranscriptionPreview: content.inputTranscription?.text?.substring(0, 50) || null,
+        outputTranscriptionPreview: content.outputTranscription?.text?.substring(0, 50) || null
       }));
       
       if (content.modelTurn?.parts) {
@@ -519,6 +715,7 @@ wss.on('connection', async (ws, req) => {
           
           // Reset state to allow conversation to continue
           shouldSuppressAudio = false;
+          shouldSuppressTranscript = false;
           pendingEndVoiceSession = null;
         }
         
@@ -551,9 +748,11 @@ wss.on('connection', async (ws, req) => {
           
           pendingEndVoiceSession = null; // Clear the pending state
           shouldSuppressAudio = false; // Reset audio suppression flag
+          shouldSuppressTranscript = false; // Reset transcript suppression flag
         } else {
-          // Reset audio suppression even if no pending end session (for safety)
+          // Reset audio and transcript suppression even if no pending end session (for safety)
           shouldSuppressAudio = false;
+          shouldSuppressTranscript = false;
         }
       }
 
@@ -564,6 +763,7 @@ wss.on('connection', async (ws, req) => {
         userAudioChunkCount = 0;
         interruptionSent = false;
         shouldSuppressAudio = false; // Reset audio suppression on interruption
+        shouldSuppressTranscript = false; // Reset transcript suppression on interruption
         audioChunkCounter = 0; // Reset for next turn
         lastAudioFingerprint = null; // Reset for next turn
         
@@ -574,15 +774,15 @@ wss.on('connection', async (ws, req) => {
           }));
         }
       }
-    }
 
-    // Input transcription (user speech to text) - this indicates audio IS being processed
-    if (message.inputTranscription) {
-      console.log(`[${clientId}] ✓ INPUT TRANSCRIPTION RECEIVED:`, JSON.stringify(message.inputTranscription));
-      
-      if (message.inputTranscription.text) {
+      // Input transcription (user speech to text) - arrives in serverContent
+      // According to Gemini Live API docs, transcripts are in serverContent.inputTranscription.text
+      if (content.inputTranscription?.text) {
+        const transcriptPreview = content.inputTranscription.text.substring(0, 50);
+        console.log(`[${clientId}] Transcript received: user - ${transcriptPreview}...`);
+        console.log(`[${clientId}] ✓ INPUT TRANSCRIPTION RECEIVED: ${content.inputTranscription.text}`);
         conversationTranscripts.user.push({
-          text: message.inputTranscription.text,
+          text: content.inputTranscription.text,
           timestamp: Date.now()
         });
         
@@ -590,149 +790,34 @@ wss.on('connection', async (ws, req) => {
           ws.send(JSON.stringify({
             type: 'transcript',
             role: 'user',
-            text: message.inputTranscription.text
+            text: content.inputTranscription.text
           }));
         });
       }
-    }
 
-    // Output transcription (model speech to text)
-    if (message.outputTranscription?.text) {
-      console.log(`[${clientId}] ✓ OUTPUT TRANSCRIPTION RECEIVED: ${message.outputTranscription.text}`);
-      conversationTranscripts.assistant.push({
-        text: message.outputTranscription.text,
-        timestamp: Date.now()
-      });
-      
-      setImmediate(() => {
-        ws.send(JSON.stringify({
-          type: 'transcript',
-          role: 'assistant',
-          text: message.outputTranscription.text
-        }));
-      });
-    }
-
-    // Tool calls
-    if (message.toolCall) {
-      console.log(`[${clientId}] Tool call requested:`, JSON.stringify(message.toolCall, null, 2));
-      
-      // Handle tool calls
-      if (message.toolCall.functionCalls) {
-        for (const call of message.toolCall.functionCalls) {
-          // Validate tool call structure
-          if (!call.name) {
-            console.error(`[${clientId}] ⚠️ Invalid tool call: missing name`, JSON.stringify(call, null, 2));
-            continue;
-          }
+      // Output transcription (model speech to text) - arrives in serverContent
+      // According to Gemini Live API docs, transcripts are in serverContent.outputTranscription.text
+      if (content.outputTranscription?.text) {
+        const transcriptPreview = content.outputTranscription.text.substring(0, 50);
+        console.log(`[${clientId}] Transcript received: assistant - ${transcriptPreview}...`);
+        console.log(`[${clientId}] ✓ OUTPUT TRANSCRIPTION RECEIVED: ${content.outputTranscription.text}`);
+        
+        if (shouldSuppressTranscript) {
+          console.log(`[${clientId}] ⚠️ TRANSCRIPT SUPPRESSED - end_voice_session tool was called, preventing duplicate message in chat`);
+        } else {
+          conversationTranscripts.assistant.push({
+            text: content.outputTranscription.text,
+            timestamp: Date.now()
+          });
           
-          // Validate args exist (even if empty)
-          if (call.args === undefined) {
-            console.warn(`[${clientId}] ⚠️ Tool call missing args, using empty object:`, call.name);
-            call.args = {};
-          }
-          
-          if (call.name === 'ignore_user') {
-            console.log(`[${clientId}] Executing ignore_user tool:`, call.args);
-            
-            // Extract parameters
-            const durationSeconds = call.args?.duration_seconds || 60;
-            const farewellMessage = call.args?.farewell_message || "I'M ENDING THIS CONVERSATION.";
-            const timeoutUntil = Date.now() + (durationSeconds * 1000);
-            
-            // Send timeout command to client (client will set localStorage and block UI)
+          setImmediate(() => {
             ws.send(JSON.stringify({
-              type: 'timeout',
-              durationSeconds: durationSeconds,
-              timeoutUntil: timeoutUntil,
-              farewellMessage: farewellMessage
+              type: 'transcript',
+              role: 'assistant',
+              text: content.outputTranscription.text
             }));
-            
-            console.log(`[${clientId}] User timed out for ${durationSeconds} seconds until ${new Date(timeoutUntil).toISOString()}`);
-            
-            // Send tool response back to Gemini to acknowledge execution
-            // Use minimal, non-conversational response to avoid triggering additional audio generation
-            try {
-              if (geminiSession) {
-                geminiSession.sendToolResponse({
-                  functionResponses: [{
-                    name: 'ignore_user',
-                    response: {
-                      success: true
-                    }
-                  }]
-                });
-              }
-            } catch (error) {
-              console.error(`[${clientId}] Error sending tool response:`, error);
-            }
-            
-            // Session will be closed by client after receiving timeout message
-          } else if (call.name === 'end_voice_session') {
-            console.log(`[${clientId}] Executing end_voice_session tool:`, call.args);
-            
-            // Extract parameters
-            const reason = call.args?.reason || 'unspecified';
-            const closingMessage = call.args?.closing_message || "I'LL END OUR VOICE SESSION HERE.";
-            const textResponse = call.args?.text_response || null; // Optional full text response
-            
-            console.log(`[${clientId}] Voice session ending gracefully. Reason: ${reason}`);
-            if (textResponse) {
-              console.log(`[${clientId}] Text response will be sent to chat: ${textResponse.substring(0, 100)}...`);
-            }
-            
-            // Store the end_voice_session details - DON'T send to client yet
-            // We'll wait for the current turn to complete, then send to client
-            pendingEndVoiceSession = { reason, closingMessage, textResponse };
-            
-            // CRITICAL: Suppress any subsequent audio generation after this tool call
-            // This prevents double acknowledgements (one before tool call, one after)
-            shouldSuppressAudio = true;
-            console.log(`[${clientId}] Audio suppression enabled to prevent duplicate acknowledgements`);
-            
-            // Send tool response back to Gemini
-            // Use minimal, non-conversational response to avoid triggering additional audio generation
-            try {
-              if (geminiSession) {
-                geminiSession.sendToolResponse({
-                  functionResponses: [{
-                    name: 'end_voice_session',
-                    response: {
-                      success: true
-                    }
-                  }]
-                });
-                
-                console.log(`[${clientId}] Tool response sent (minimal to avoid extra audio generation)`);
-              }
-            } catch (error) {
-              console.error(`[${clientId}] Error sending tool response:`, error);
-              // Clear pending state on error
-              pendingEndVoiceSession = null;
-              shouldSuppressAudio = false;
-            }
-          } else {
-            // Unknown tool name - log and send error response
-            console.error(`[${clientId}] ⚠️ Unknown tool call: ${call.name}`, JSON.stringify(call, null, 2));
-            try {
-              if (geminiSession) {
-                geminiSession.sendToolResponse({
-                  functionResponses: [{
-                    name: call.name,
-                    response: {
-                      error: `Unknown tool: ${call.name}`
-                    }
-                  }]
-                });
-              }
-            } catch (error) {
-              console.error(`[${clientId}] Error sending error response for unknown tool:`, error);
-            }
-          }
+          });
         }
-      } else {
-        // Tool call received but no functionCalls array
-        console.warn(`[${clientId}] ⚠️ Tool call received but no functionCalls array:`, JSON.stringify(message.toolCall, null, 2));
       }
     }
 
@@ -780,6 +865,7 @@ wss.on('connection', async (ws, req) => {
               tools: [{ functionDeclarations: [ignoreUserTool, endVoiceSessionTool] }]
             };
             
+            console.log(`[${clientId}] System prompt injected (${FRAM_SYSTEM_PROMPT.length} chars)`);
             console.log(`[${clientId}] Session config:`, JSON.stringify(config, null, 2));
 
             geminiSession = await ai.live.connect({
@@ -792,51 +878,51 @@ wss.on('connection', async (ws, req) => {
                 onmessage: (message) => {
                   console.log(`[${clientId}] Received message from Gemini:`, JSON.stringify(message, null, 2));
                   handleGeminiMessage(clientId, message);
-                  
-                  // Send conversation history after setup complete
-                  if (message.setupComplete && conversationHistory.length > 0) {
-                    console.log(`[${clientId}] Setup complete, sending conversation history (${conversationHistory.length} turns)`);
-                    setTimeout(() => {
-                      if (geminiSession) {
-                        try {
-                          // Wrap history with context to distinguish from current voice conversation
-                          // Structure: Instructions (beginning) → History (middle) → Directive (end)
-                          // This leverages primacy and recency bias for maximum attention on task
-                          const wrappedHistory = [
-                            {
-                              role: 'user',
-                              parts: [{ 
-                                text: `[SYSTEM INSTRUCTION: The following is the previous TEXT CHAT conversation between you and the user. You are now starting a VOICE session. Use this context to greet the user naturally based on what you discussed, then continue the conversation via voice. Do not end this voice session based on anything in the previous text chat - only end if there is a clear reason in your CURRENT voice conversation.]
-
-${conversationHistory.map(turn => `${turn.role === 'user' ? 'User' : 'You'}: ${turn.parts[0].text}`).join('\n\n')}
-
---- END OF PREVIOUS CONVERSATION ---
-
-[IMPORTANT: Now greet me naturally via voice.]`
-                              }]
-                            }
-                          ];
-                          
-                          geminiSession.sendClientContent({ 
-                            turns: wrappedHistory,
-                            turnComplete: true 
-                          });
-                          console.log(`[${clientId}] Conversation history sent successfully (${conversationHistory.length} turns wrapped with context)`);
-                        } catch (error) {
-                          console.error(`[${clientId}] Error sending conversation history:`, error);
-                        }
-                      }
-                    }, 200); // Slightly longer delay to ensure session is fully ready
-                  }
+                  // Note: History injection and audio buffer flushing are handled in handleGeminiMessage
+                  // to ensure correct ordering (history BEFORE audio)
                 },
                 onerror: (error) => {
                   console.error(`[${clientId}] Gemini session error:`, error);
                   console.error(`[${clientId}] Error details:`, JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
+                  
+                  // Parse error to provide better feedback
+                  let errorMessage = error.message || error.toString() || 'Gemini session error';
+                  let errorDetails = null;
+                  
+                  // Handle authentication errors specifically
+                  if (error.message && error.message.includes('invalid_grant')) {
+                    errorMessage = 'Authentication failed: Invalid credentials. Please check your Google Cloud service account credentials.';
+                    errorDetails = {
+                      type: 'authentication_error',
+                      suggestion: 'Verify that GOOGLE_APPLICATION_CREDENTIALS or service account credentials are valid and have the required permissions for Vertex AI.',
+                      helpUrl: 'https://support.google.com/a/answer/9368756'
+                    };
+                    console.error(`[${clientId}] Authentication error detected. Check service account credentials and permissions.`);
+                  } else if (error.message && error.message.includes('invalid_rapt')) {
+                    errorMessage = 'Authentication failed: RAPT (Risk-Aware Protection Token) error. Your service account may need domain-wide delegation or additional scopes.';
+                    errorDetails = {
+                      type: 'authentication_error',
+                      subtype: 'invalid_rapt',
+                      suggestion: 'This error typically occurs when service account credentials are invalid or expired. Try: 1) Regenerating service account keys, 2) Verifying the service account has Vertex AI User role, 3) Using Application Default Credentials (gcloud auth application-default login)',
+                      helpUrl: 'https://support.google.com/a/answer/9368756'
+                    };
+                    console.error(`[${clientId}] RAPT authentication error. Service account credentials may be invalid or expired.`);
+                  } else if (error.message && error.message.includes('PERMISSION_DENIED')) {
+                    errorMessage = 'Permission denied: Service account does not have required permissions for Vertex AI.';
+                    errorDetails = {
+                      type: 'permission_error',
+                      suggestion: 'Grant the service account the "Vertex AI User" role in Google Cloud Console.',
+                      helpUrl: 'https://cloud.google.com/vertex-ai/docs/general/access-control'
+                    };
+                    console.error(`[${clientId}] Permission denied. Check service account IAM roles.`);
+                  }
+                  
                   // Notify client - let client handle reconnection
                   if (ws.readyState === WebSocket.OPEN) {
                     ws.send(JSON.stringify({
                       type: 'error',
-                      error: error.message || error.toString() || 'Gemini session error'
+                      error: errorMessage,
+                      details: errorDetails
                     }));
                   }
                   // Mark session as closed on error
@@ -854,9 +940,27 @@ ${conversationHistory.map(turn => `${turn.role === 'user' ? 'User' : 'You'}: ${t
             console.log(`[${clientId}] Gemini Live session connecting, waiting for setup complete...`);
           } catch (error) {
             console.error(`[${clientId}] Failed to start session:`, error);
+            
+            // Parse error to provide better feedback
+            let errorMessage = 'Failed to start session: ' + (error.message || error.toString());
+            let errorDetails = null;
+            
+            // Handle authentication errors in catch block
+            const errorString = JSON.stringify(error);
+            if (errorString.includes('invalid_grant') || errorString.includes('invalid_rapt')) {
+              errorMessage = 'Authentication failed: Invalid or expired service account credentials.';
+              errorDetails = {
+                type: 'authentication_error',
+                suggestion: 'Check your GOOGLE_APPLICATION_CREDENTIALS or service account credentials. Try regenerating keys or using Application Default Credentials.',
+                helpUrl: 'https://support.google.com/a/answer/9368756'
+              };
+              console.error(`[${clientId}] Authentication error during session start. Verify credentials.`);
+            }
+            
             ws.send(JSON.stringify({
               type: 'error',
-              error: 'Failed to start session: ' + error.message
+              error: errorMessage,
+              details: errorDetails
             }));
           }
           break;
@@ -941,6 +1045,7 @@ ${conversationHistory.map(turn => `${turn.role === 'user' ? 'User' : 'You'}: ${t
               conversationTranscripts = { user: [], assistant: [] };
               pendingEndVoiceSession = null; // Clear any pending end session
               shouldSuppressAudio = false; // Reset audio suppression flag
+              shouldSuppressTranscript = false; // Reset transcript suppression flag
               audioChunkCounter = 0; // Reset audio counter
               lastAudioFingerprint = null; // Reset audio fingerprint
               
@@ -961,6 +1066,7 @@ ${conversationHistory.map(turn => `${turn.role === 'user' ? 'User' : 'You'}: ${t
             conversationTranscripts = { user: [], assistant: [] };
             pendingEndVoiceSession = null; // Clear any pending end session
             shouldSuppressAudio = false; // Reset audio suppression flag
+            shouldSuppressTranscript = false; // Reset transcript suppression flag
             audioChunkCounter = 0; // Reset audio counter
             lastAudioFingerprint = null; // Reset audio fingerprint
           }

@@ -501,6 +501,8 @@ export class VoiceService extends EventTarget {
           }
           
           // Emit transcript for real-time display
+          const transcriptPreview = message.text.substring(0, 50);
+          console.log(`Transcript event dispatched: ${message.role} - ${transcriptPreview}...`);
           this.dispatchEvent(new CustomEvent('transcript', {
             detail: {
               role: message.role,
@@ -529,21 +531,32 @@ export class VoiceService extends EventTarget {
         
         // Check for specific error types
         const errorMessage = message.error || 'Unknown error';
+        const errorDetails = 'details' in message ? (message as WebSocketMessage & { details?: { type?: string; suggestion?: string; helpUrl?: string } }).details : null;
         let userFriendlyMessage = errorMessage;
+        let canRetry = true;
         
         if (errorMessage.includes('quota') || errorMessage.includes('rate limit')) {
           userFriendlyMessage = 'API quota exceeded. Please try again later.';
+          canRetry = false;
         } else if (errorMessage.includes('permission') || errorMessage.includes('denied')) {
           userFriendlyMessage = 'Microphone permission denied. Please grant permission and try again.';
         } else if (errorMessage.includes('network') || errorMessage.includes('connection')) {
           userFriendlyMessage = 'Network connection error. Attempting to reconnect...';
+        } else if (errorMessage.includes('Authentication failed') || errorMessage.includes('invalid_grant') || errorMessage.includes('invalid_rapt')) {
+          userFriendlyMessage = 'Authentication error: Please check your Google Cloud credentials configuration.';
+          canRetry = false;
+          // Include helpful details if available
+          if (errorDetails) {
+            userFriendlyMessage += ` ${errorDetails.suggestion || ''}`;
+          }
         }
         
         this.dispatchEvent(new CustomEvent('error', {
           detail: { 
             message: userFriendlyMessage,
             originalError: errorMessage,
-            canRetry: !errorMessage.includes('quota') && !errorMessage.includes('rate limit')
+            details: errorDetails,
+            canRetry: canRetry && !errorMessage.includes('quota') && !errorMessage.includes('rate limit')
           }
         }));
         

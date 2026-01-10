@@ -137,13 +137,16 @@ export default function ChatInterface() {
   const [wasBlocked, setWasBlocked] = useState(false);
   const [isVoiceMode, setIsVoiceMode] = useState(false);
   const [isVoiceLoading, setIsVoiceLoading] = useState(false);
-  const [voiceTranscript, setVoiceTranscript] = useState<string>("");
   const [voiceError, setVoiceError] = useState<string | null>(null);
   const [isReconnecting, setIsReconnecting] = useState(false);
   const [audioPlaybackDisabled, setAudioPlaybackDisabled] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  
+  // Track if we should start a new message turn (for transcript grouping)
+  // Set to true when: user interrupts, session ends, or session restarts
+  const shouldStartNewTurn = useRef<boolean>(true);
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -204,19 +207,53 @@ export default function ChatInterface() {
       const customEvent = event as CustomEvent<{ role: 'user' | 'assistant'; text: string }>;
       const { role, text } = customEvent.detail;
       
-      // Add transcript as a message immediately in the chat UI
-      setMessages((prev) => [...prev, {
-        id: generateMessageId(),
-        role: role,
-        content: text
-      }]);
+      const transcriptPreview = text.substring(0, 50);
+      console.log('='.repeat(60));
+      console.log(`📝 Transcript received in UI: ${role} - ${transcriptPreview}...`);
       
-      // Also update transcript display for the voice session panel (for reference)
-      setVoiceTranscript((prev) => {
-        if (prev) {
-          return `${prev}\n${role === 'user' ? 'You' : 'FRAM'}: ${text}`;
+      // Capture the flag value BEFORE setState to avoid React Strict Mode issues
+      const isNewTurn = shouldStartNewTurn.current;
+      console.log(`🚩 shouldStartNewTurn flag captured: ${isNewTurn}`);
+      
+      // Reset flag immediately if it was true (we're starting a new turn)
+      if (isNewTurn) {
+        shouldStartNewTurn.current = false;
+        console.log(`🟢 FLAG RESET: shouldStartNewTurn = FALSE (before setState)`);
+      }
+      
+      // Group transcript chunks based on turns (respecting interruptions and session boundaries)
+      setMessages((prev) => {
+        const lastMessage = prev[prev.length - 1];
+        const lastMessagePreview = lastMessage ? `${lastMessage.role}: "${lastMessage.content.substring(0, 30)}..."` : 'none';
+        console.log(`Last message: ${lastMessagePreview}`);
+        
+        // Should we append to the last message or create a new one?
+        // Use the captured flag value (not the ref) to ensure consistency in React Strict Mode
+        const shouldAppend = lastMessage && 
+                            lastMessage.role === role && 
+                            !isNewTurn;
+        
+        console.log(`Decision: shouldAppend=${shouldAppend} (lastMessage=${!!lastMessage}, sameRole=${lastMessage?.role === role}, !isNewTurn=${!isNewTurn})`);
+        
+        if (shouldAppend) {
+          console.log(`✓ Appending to existing ${role} message (same turn)`);
+          const updated = [...prev];
+          updated[prev.length - 1] = {
+            ...lastMessage,
+            content: lastMessage.content + ' ' + text
+          };
+          return updated;
+        } else {
+          // Create a new message (new turn)
+          const newTotal = prev.length + 1;
+          console.log(`✓ Creating new ${role} message (new turn, total: ${newTotal})`);
+          
+          return [...prev, {
+            id: generateMessageId(),
+            role: role,
+            content: text
+          }];
         }
-        return `${role === 'user' ? 'You' : 'FRAM'}: ${text}`;
       });
     };
 
@@ -224,9 +261,11 @@ export default function ChatInterface() {
       setIsVoiceMode(true);
       setIsVoiceLoading(false);
       setIsReconnecting(false);
-      setVoiceTranscript("");
       setVoiceError(null);
       setAudioPlaybackDisabled(false);
+      
+      // Note: shouldStartNewTurn flag is already set before voiceService.start() is called
+      console.log('Voice session started');
     };
 
     const handleComplete = async (event: Event) => {
@@ -245,22 +284,29 @@ export default function ChatInterface() {
       // Reset voice state
       setIsVoiceMode(false);
       setIsVoiceLoading(false);
-      setVoiceTranscript("");
       setIsReconnecting(false);
       setVoiceError(null);
       setAudioPlaybackDisabled(false);
+      
+      // Session ended - if it restarts, next transcript should be a new message
+      shouldStartNewTurn.current = true;
+      console.log('🔴 FLAG SET: Voice session ended - shouldStartNewTurn = TRUE');
     };
 
     const handleError = (event: Event) => {
       const customEvent = event as CustomEvent<{ 
         message: string; 
         originalError?: string;
+        details?: { type?: string; suggestion?: string; helpUrl?: string };
         canRetry?: boolean;
         partialTranscripts?: { user: Array<{ text: string; timestamp: number }>; assistant: Array<{ text: string; timestamp: number }> };
       }>;
-      const { message, canRetry } = customEvent.detail;
+      const { message, details, canRetry } = customEvent.detail;
       
       console.error('Voice error:', message);
+      if (details) {
+        console.error('Error details:', details);
+      }
       setIsVoiceLoading(false);
       setIsReconnecting(false);
       setVoiceError(message);
@@ -271,13 +317,27 @@ export default function ChatInterface() {
       // Show error message to user (only if not recoverable)
       if (!canRetry) {
         setIsVoiceMode(false);
-        setVoiceTranscript("");
+        
+        // Session ended due to error - if it restarts, next transcript should be a new message
+        shouldStartNewTurn.current = true;
+        console.log('🔴 FLAG SET: Voice session ended due to error - shouldStartNewTurn = TRUE');
+        
+        // Build error message with helpful details
+        let errorContent = `VOICE ERROR: ${message}`;
+        if (details?.suggestion) {
+          errorContent += `\n\nSuggestion: ${details.suggestion}`;
+        }
+        if (details?.helpUrl) {
+          errorContent += `\n\nHelp: ${details.helpUrl}`;
+        }
+        errorContent += `\n\nPLEASE TRY AGAIN OR USE TEXT CHAT.`;
+        
         setMessages((prev) => [
           ...prev,
           { 
             id: generateMessageId(), 
             role: "assistant", 
-            content: `VOICE ERROR: ${message}. PLEASE TRY AGAIN OR USE TEXT CHAT.` 
+            content: errorContent
           }
         ]);
       } else {
@@ -326,6 +386,12 @@ export default function ChatInterface() {
       });
     };
 
+    const handleInterrupted = () => {
+      // User interrupted the agent - next transcript should start a new turn
+      shouldStartNewTurn.current = true;
+      console.log('🔴 FLAG SET: Agent was interrupted - shouldStartNewTurn = TRUE');
+    };
+
     const handleTimeout = async (event: Event) => {
       const customEvent = event as CustomEvent<{ 
         durationSeconds: number; 
@@ -361,9 +427,12 @@ export default function ChatInterface() {
       // Reset voice UI state
       setIsVoiceMode(false);
       setIsVoiceLoading(false);
-      setVoiceTranscript("");
       setIsReconnecting(false);
       setVoiceError(null);
+      
+      // Session ended due to timeout - if it restarts, next transcript should be a new message
+      shouldStartNewTurn.current = true;
+      console.log('🔴 FLAG SET: Voice session timed out - shouldStartNewTurn = TRUE');
     };
 
     const handleEndVoiceSession = async (event: Event) => {
@@ -411,9 +480,12 @@ export default function ChatInterface() {
       // Reset voice UI state
       setIsVoiceMode(false);
       setIsVoiceLoading(false);
-      setVoiceTranscript("");
       setIsReconnecting(false);
       setVoiceError(null);
+      
+      // Session ended by agent - if it restarts, next transcript should be a new message
+      shouldStartNewTurn.current = true;
+      console.log('🔴 FLAG SET: Voice session ended by agent - shouldStartNewTurn = TRUE');
     };
 
     voiceService.addEventListener('transcript', handleTranscript);
@@ -423,6 +495,7 @@ export default function ChatInterface() {
     voiceService.addEventListener('reconnecting', handleReconnecting);
     voiceService.addEventListener('audioError', handleAudioError);
     voiceService.addEventListener('partialTranscripts', handlePartialTranscripts);
+    voiceService.addEventListener('interrupted', handleInterrupted);
     voiceService.addEventListener('timeout', handleTimeout);
     voiceService.addEventListener('endVoiceSession', handleEndVoiceSession);
 
@@ -434,6 +507,7 @@ export default function ChatInterface() {
       voiceService.removeEventListener('reconnecting', handleReconnecting);
       voiceService.removeEventListener('audioError', handleAudioError);
       voiceService.removeEventListener('partialTranscripts', handlePartialTranscripts);
+      voiceService.removeEventListener('interrupted', handleInterrupted);
       voiceService.removeEventListener('timeout', handleTimeout);
       voiceService.removeEventListener('endVoiceSession', handleEndVoiceSession);
       
@@ -580,10 +654,23 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
     const expired = timeoutJustExpired;
 
     try {
+      // Count transcripts from voice sessions (messages added during voice mode)
+      // Note: This is a simple heuristic - in production, you might want to track this more explicitly
+      const transcriptCount = messages.filter(m => 
+        m.content && (m.content.includes('You:') || m.content.includes('FRAM:'))
+      ).length;
+      
+      console.log(`Preparing requestMessages: ${messages.length} messages (including ${transcriptCount} from voice session)`);
+      
       const requestMessages: Message[] = [
         ...messages,
         { id: generateMessageId(), role: "user", content: userMessage }
       ];
+      
+      const userTranscripts = requestMessages.filter(m => m.role === 'user').length;
+      const assistantTranscripts = requestMessages.filter(m => m.role === 'assistant').length;
+      console.log(`Sending to text API: ${requestMessages.length} messages with ${transcriptCount} voice transcripts`);
+      console.log(`Voice transcripts included in API call: user=${userTranscripts}, assistant=${assistantTranscripts}`);
 
       // Create placeholder assistant message for streaming
       const assistantMessageId = generateMessageId();
@@ -640,7 +727,10 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
           // Start voice session - same logic as voice button click
           try {
             setIsVoiceLoading(true);
-            setVoiceTranscript("");
+            
+            // Agent starting voice session - next transcript should be a new message
+            shouldStartNewTurn.current = true;
+            console.log('🔴 FLAG SET: Agent starting voice mode (streaming) - shouldStartNewTurn = TRUE');
             
             // Prepare conversation history for context injection
             const conversationHistory = messages.map(m => ({
@@ -719,7 +809,10 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
           // Start voice session - same logic as voice button click
           try {
             setIsVoiceLoading(true);
-            setVoiceTranscript("");
+            
+            // Agent starting voice session - next transcript should be a new message
+            shouldStartNewTurn.current = true;
+            console.log('🔴 FLAG SET: Agent starting voice mode (JSON) - shouldStartNewTurn = TRUE');
             
             // Prepare conversation history for context injection
             const conversationHistory = messages.map(m => ({
@@ -888,16 +981,6 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
         {/* Voice Mode Controls */}
         {!isBlocked && (
           <div className="flex flex-col mt-4 space-y-2">
-            {/* Voice Transcript Display */}
-            {isVoiceMode && voiceTranscript && (
-              <div className="w-full max-w-[500px] mx-auto px-4 py-2 bg-gray-50 border border-gray-200 rounded text-[0.75rem] font-mono text-gray-600 max-h-[100px] overflow-y-auto">
-                <p className="uppercase text-[0.7rem] text-gray-400 mb-1 tracking-wider">
-                  Voice Session {isReconnecting && '(Reconnecting...)'}
-                </p>
-                <div className="whitespace-pre-wrap">{voiceTranscript}</div>
-              </div>
-            )}
-            
             {/* Voice Error Display */}
             {voiceError && (
               <div className={`w-full max-w-[500px] mx-auto px-4 py-2 rounded text-[0.75rem] font-mono ${
@@ -933,13 +1016,15 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
                     console.error('Error stopping voice session:', error);
                     setIsVoiceMode(false);
                     setIsVoiceLoading(false);
-                    setVoiceTranscript("");
                   }
                 } else {
                   // Start voice mode
                   try {
                     setIsVoiceLoading(true);
-                    setVoiceTranscript("");
+                    
+                    // User manually starting voice - next transcript should be a new message
+                    shouldStartNewTurn.current = true;
+                    console.log('🔴 FLAG SET: User starting voice mode - shouldStartNewTurn = TRUE');
                     
                     // Prepare conversation history for context injection
                     const conversationHistory = messages.map(m => ({
@@ -954,7 +1039,6 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
                     console.error('Error starting voice session:', error);
                     setIsVoiceLoading(false);
                     setIsVoiceMode(false);
-                    setVoiceTranscript("");
                     
                     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
                     let userFriendlyMessage = errorMessage;
