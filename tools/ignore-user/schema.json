@@ -1,0 +1,30 @@
+{
+  "toolId": "ignore_user",
+  "version": "1.0.0",
+  "category": "action",
+  "description": "PUNITIVE TOOL: Block a user who is rude, disrespectful, abusive, or crosses a line. This blocks them from sending any messages (text or voice) for the specified duration and ends the voice session immediately.\n\nESCALATION POLICY:\n- FIRST OFFENSE (mild rudeness): WARN them firmly via voice. Do NOT use this tool yet.\n- SECOND OFFENSE or moderate disrespect: Use this tool with 30-300 seconds\n- REPEATED OFFENSE or serious insults: 600-3600 seconds\n- EXTREME abuse, threats, or vile behavior: Use immediately, up to 86400 seconds (24 hours)\n\nNOTE: \"Repeated offense\" means multiple offenses in the CURRENT session, not across timeout boundaries.\n\nUse this when words alone are not enough. This is your real power.",
+  "parameters": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["duration_seconds", "farewell_message"],
+    "properties": {
+      "duration_seconds": {
+        "type": "number",
+        "description": "How long to block the user in seconds. Guidelines: 30-60 (mild, second offense), 300-600 (moderate disrespect), 3600 (serious insults), up to 86400 (24 hours for extreme abuse)",
+        "minimum": 30,
+        "maximum": 86400
+      },
+      "farewell_message": {
+        "type": "string",
+        "description": "Your final message before ending the session. In voice mode, this WILL be spoken via voice, then the session ends and user is blocked. Be firm and direct, not petty. Example: 'I don't tolerate disrespect. This conversation is over.'",
+        "minLength": 10,
+        "maxLength": 500
+      }
+    }
+  },
+  "sideEffects": "writes",
+  "idempotent": false,
+  "requiresConfirmation": false,
+  "allowedModes": ["voice", "text"],
+  "latencyBudgetMs": 1000
+}

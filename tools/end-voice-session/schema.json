@@ -1,0 +1,29 @@
+{
+  "toolId": "end_voice_session",
+  "version": "1.0.0",
+  "category": "action",
+  "description": "GRACEFUL VOICE SESSION TERMINATION TOOL (Voice Mode Only)\n\nWHEN TO USE:\n- User explicitly asks to end the voice session or switch to text\n- Conversation has naturally concluded and user indicates they're done\n- You need to show something that requires text mode (complex diagrams, detailed explanations, code)\n- User asks a question but wants the answer delivered in text chat instead of voice\n\nDO NOT USE:\n- User just pauses or stops talking (wait for them)\n- You're in the middle of answering a question\n- As punishment (use ignore_user for that)\n\nEFFECT: Ends voice session gracefully, allowing conversation to continue in text mode if desired.",
+  "parameters": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["reason"],
+    "properties": {
+      "reason": {
+        "type": "string",
+        "enum": ["user_request", "task_complete", "switch_to_text"],
+        "description": "Why the session is ending: user_request (user asked to end), task_complete (conversation finished), switch_to_text (showing content better suited for text)"
+      },
+      "final_message": {
+        "type": "string",
+        "description": "Optional brief farewell message to speak before ending. Keep it short (1-2 sentences). Example: 'Ending voice session. Feel free to continue in text chat.'",
+        "minLength": 5,
+        "maxLength": 200
+      }
+    }
+  },
+  "sideEffects": "writes",
+  "idempotent": true,
+  "requiresConfirmation": false,
+  "allowedModes": ["voice"],
+  "latencyBudgetMs": 500
+}

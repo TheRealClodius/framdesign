@@ -1,7 +1,7 @@
 ---
 name: Tool Registry Architecture
 overview: |
-  Build production-grade tool registry with retrieval-first architecture. System evolves from "2 moderation tools" to growing ecosystem of retrieval + action + utility tools. Registry enforces orchestration policies (latency budgets, mode restrictions, confirmation requirements) without modifying prompts. Tools authored in markdown, compiled to JSON, validated with real JSON Schema, versioned per session.
+  Build production-grade tool registry with retrieval-first architecture. System evolves from "2 moderation tools" to growing ecosystem of retrieval + action + utility tools. Registry provides metadata; orchestrator enforces policies (latency budgets, mode restrictions, confirmation requirements) without modifying prompts. Tools defined in JSON Schema + markdown docs; compiled into a build artifact, validated with Ajv, versioned per session.
 
   Key architectural shift: Agent's job becomes "get more context, then act" - registry supports this with 1) retrieval tools (agent's eyes), 2) action tools (agent's hands), 3) orchestrator policies that keep voice fast and text flexible.
 todos:
@@ -63,7 +63,7 @@ todos:
 
 **SOFT SPOT 1: Confirmation Flow** → Implemented as first-class error type (`CONFIRMATION_REQUIRED`)
 **SOFT SPOT 2: Idempotency** → Rigorous hash-based fallback with per-session + per-turn tracking
-**SOFT SPOT 3: generateSDKSchema Footgun** → New implementation uses provider adapters from start (old bug avoided)
+**SOFT SPOT 3: Schema Conversion** → Provider adapters at build time, no runtime conversion (maintainable)
 
 ### High-Leverage Recommendations Integrated
 
@@ -130,7 +130,11 @@ Everything else stays the same!
 
 ### Provider Adapters
 
-**`voice-server/tools/provider-adapters/openai.js`** (PREFERRED)
+**Important:** Both adapters run at build time (not optional). The build script requires `@google/genai` installed even if you only use OpenAI at runtime. The "optional" part is at runtime - the transport layer chooses which schema to use (`getProviderSchemas('openai')` vs `getProviderSchemas('geminiNative')`).
+
+**Why both are built:** Pre-computing both schemas is cheap (happens once), simplifies the build logic, and keeps the door open for runtime provider switching without rebuilding.
+
+**`voice-server/tools/provider-adapters/openai.js`** (PREFERRED at runtime)
 
 ```javascript
 /**
@@ -149,7 +153,7 @@ export function toOpenAI(toolDefinition) {
 }
 ```
 
-**`voice-server/tools/provider-adapters/gemini-native.js`** (OPTIONAL)
+**`voice-server/tools/provider-adapters/gemini-native.js`**
 
 ```javascript
 import { Type } from '@google/genai';
@@ -236,11 +240,13 @@ export class OpenAITransport extends ToolTransport {
   }
   
   async sendToolResult({ id, name, result }) {
+    // CRITICAL: Send full ToolResponse envelope (NOT just result.data)
+    // result = { ok, data?, error?, intents?, meta? }
     await this.client.sendMessage(this.conversationId, {
       role: "tool",
       tool_call_id: id,
       name: name,
-      content: JSON.stringify(result.ok ? result.data : { error: result.error })
+      content: JSON.stringify(result) // Full { ok, data/error, intents, meta }
     });
   }
 }
@@ -268,10 +274,12 @@ export class GeminiLiveTransport extends ToolTransport {
   }
   
   async sendToolResult({ id, name, result }) {
+    // CRITICAL: Send full ToolResponse envelope (NOT just result.data)
+    // result = { ok, data?, error?, intents?, meta? }
     this.geminiSession.sendToolResponse({
       functionResponses: [{
         name: name,
-        response: result.ok ? result.data : { error: result.error }
+        response: result // Full { ok, data/error, intents, meta }
       }]
     });
   }
@@ -290,6 +298,8 @@ function buildTool(toolDirName) {
   // ... existing validation ...
   
   // KEY CHANGE: Generate provider schemas at build time
+  // BOTH schemas are ALWAYS generated (not conditional)
+  // Runtime decides which to use via transport layer
   const providerSchemas = {
     openai: toOpenAI(schema),
     geminiNative: toGeminiNative(schema)
@@ -303,7 +313,7 @@ function buildTool(toolDirName) {
   };
 }
 
-// FIX: Use real fs.existsSync
+// Use real fs.existsSync (doesn't throw) - no try/catch needed
 import { existsSync, statSync } from 'fs';
 
 function checkFileExists(path) {
@@ -379,13 +389,13 @@ import { createHash } from 'crypto';
 await toolRegistry.load();
 
 wss.on('connection', async (ws, req) => {
-  // FIX: Store mode explicitly
+  // CRITICAL: Store mode explicitly (NEVER infer from geminiSession presence)
   const sessionMode = USE_GEMINI_LIVE ? 'voice' : 'text';
   
-  // FIX: Use state controller (not buggy applyIntent)
+  // Use state controller with explicit mode
   const state = createStateController({
     isActive: true,
-    mode: sessionMode,
+    mode: sessionMode,  // Explicit mode, not inferred
     pendingEndVoiceSession: null,
     shouldSuppressAudio: false,
     shouldSuppressTranscript: false
@@ -406,20 +416,32 @@ wss.on('connection', async (ws, req) => {
     // transport = new OpenAITransport(client, clientId);
   }
   
-  // FIX: Hash-based idempotency
+  // FIX: Hash-based idempotency with canonical JSON
   function generateIdempotencyKey(call, sessionTurnId) {
     if (call.id && call.id.length > 8) {
       return `provider:${call.id}`;
     }
     
-    const canonical = JSON.stringify({
+    // Use canonical stringify to ensure stable hashing (sorted keys recursively)
+    const canonical = canonicalStringify({
       tool: call.name,
       args: call.args,
       turn: sessionTurnId
-    }, Object.keys(call.args || {}).sort());
+    });
     
-    const hash = createHash('sha256').update(canonical).digest('hex').substring(0, 16);
+    const hash = createHash('sha256').update(JSON.stringify(canonical)).digest('hex').substring(0, 16);
     return `hash:${hash}`;
+  }
+  
+  function canonicalStringify(obj) {
+    if (obj === null || typeof obj !== 'object') return obj;
+    if (Array.isArray(obj)) return obj.map(canonicalStringify);
+    
+    const sorted = {};
+    Object.keys(obj).sort().forEach(key => {
+      sorted[key] = canonicalStringify(obj[key]);
+    });
+    return sorted;
   }
   
   async function handleModelMessage(message) {
@@ -448,10 +470,10 @@ wss.on('connection', async (ws, req) => {
 
 **NOTE:** These bugs existed in the original hardcoded implementation. The new registry-based architecture fixes them from the start.
 
-**1. generateSDKSchema - Nested Objects/Arrays Bug (ORIGINAL CODE)**
+**1. Schema Conversion - Build vs Runtime (ARCHITECTURAL DECISION)**
 
-- **Problem**: Original implementation dropped nested properties, items, enum, formats
-- **Solution**: New implementation uses provider adapters with recursive conversion
+- **Problem**: Runtime schema conversion couples registry to provider SDKs and adds complexity
+- **Solution**: Provider adapters convert schemas at build time, registry returns pre-computed schemas
 - **Why it matters**: Retrieval tool `filters` won't work properly without nested structure
 
 **2. applyIntent - State Mutation Bug (ORIGINAL CODE)**
@@ -489,8 +511,8 @@ wss.on('connection', async (ws, req) => {
 **7. On-Demand Docs Mechanism**
 
 - **Problem**: Mentions `reg_describe(tool)` but no actual implementation
-- **Solution**: Orchestrator pre-injects `doc.md` before tool execution (Option A - simpler for 10-15 tools)
-- **Why it matters**: Agent needs way to get full docs for complex tools
+- **Solution**: Inject summaries-only for voice (hard constraint); text mode can use fuller docs if needed (Option A acceptable for text-mode with small toolsets, explicitly forbidden for voice)
+- **Why it matters**: Agent needs way to get full docs for complex tools, but voice mode must stay fast
 
 **8. Ajv Configuration**
 
@@ -546,11 +568,16 @@ Based on detailed feedback, the following improvements have been incorporated to
 - **Solution**: SHA256 hash of tools+schemas+docs, plus git commit tracking
 - **Benefits**: Deterministic, meaningful versions, audit trail
 
-### 6. Standardized Response Envelope ✅
+### 6. Formalized ToolResponse Contract ✅
 
-- **Problem**: Mixed response formats across tools
-- **Solution**: Uniform `ToolResponse` with `ok`, `data/error`, `meta` (includes versions + duration)
-- **Benefits**: Orchestrator always knows where to look, automatic version tracking
+- **Problem**: Mixed response formats across tools, implicit contract, no validation
+- **Solution**: Formal `ToolResponse` schema (v1.0.0) with validation, versioning, and clear layer responsibilities
+- **Benefits**: 
+  - Registry validates structure before returning to orchestrator
+  - Clear rules about which layer generates which ErrorType
+  - Version tracking enables future evolution (retries, background execution)
+  - Explicit retryability and partial side effects support
+  - See Section 3 "ToolResponse Schema (FORMAL CONTRACT)" for full specification
 
 ### 7. Strict Parameter Validation ✅
 
@@ -566,10 +593,11 @@ Based on detailed feedback, the following improvements have been incorporated to
 
 ### 9. Clear Source of Truth Separation ✅
 
-- **Schema (`schema.json`)**: Source of truth for API contract (parameters, types, constraints)
-- **Docs (`doc_summary.md` + `doc.md`)**: Source of truth for usage guidance (when to use, examples, footguns)
-- **Policy (`core.md`)**: Source of truth for global policies (escalation, behavior, tone)
-- **Benefits**: No accidental mixing of contract details into docs, clear ownership
+- **Schema (`schema.json`)**: Source of truth for executable contract (parameters, types, constraints, orchestration metadata)
+- **Docs (`doc_summary.md` + `doc.md`)**: Human-readable documentation (when to use, examples, failure modes, mistakes)
+- **Policy (`core.md`)**: Source of truth for global agent policies (escalation, behavior, tone)
+- **Benefits**: Schema is executable, docs are guidance; no mixing of contract into prose, clear ownership
+- **Key principle**: If it affects execution, it's in `schema.json`; if it affects understanding, it's in markdown
 
 ### 10. Build-Time Linting ✅
 
@@ -577,11 +605,12 @@ Based on detailed feedback, the following improvements have been incorporated to
 - **Solution**: Build fails if missing required sections, name mismatches, invalid schemas
 - **Benefits**: Catch issues before deployment
 
-### 11. Capabilities Pattern ✅
+### 11. Capabilities vs Intents Pattern ✅
 
-- **Problem**: Tools access raw `ws`, `geminiSession` (tight coupling)
-- **Solution**: Context provides `messaging`, `voice`, `audio`, `audit` capabilities
-- **Benefits**: Testable, composable, abstracts implementation details
+- **Problem**: Tools access raw `ws`, `geminiSession` (tight coupling), manufacture intents via helpers (leaky abstraction)
+- **Solution**: Context provides capabilities for work (`messaging`, `audit`); tools return intents for state changes
+- **Benefits**: Clear separation - capabilities do work, intents declare state changes, tools return both
+- **Architectural invariant**: Intents come ONLY from tool results, never from context helpers
 
 ## 1. Current Implementation Analysis
 
@@ -636,12 +665,27 @@ flowchart TD
 
 **Design Decisions (Based on Requirements):**
 
-1. **Markdown as source of truth** - Tools authored in `.md` files (version controlled, PR reviewed, diff-friendly)
-2. **Build-time generation** - Registry JSON generated as build artifact from markdown + schema
+1. **JSON Schema as source of truth; Markdown as reviewed documentation** - Contract in `schema.json` (executable), docs in `.md` (human-readable), both version controlled and PR reviewed
+2. **Build-time generation** - Registry JSON generated as build artifact from schema + docs + handlers
 3. **Startup-only loading** - All tools registered at server startup (no lazy loading, no hot reload in production)
 4. **Versioned toolsets** - Pin registry version at session start, log with every tool execution
 5. **Layered error handling** - Registry standardizes/classifies, orchestrator recovers, tools report domain failures
 6. **Hybrid state access** - Tools receive state via context but don't manage it directly
+
+**Important architectural clarification on "source of truth":**
+
+The `schema.json` file is the **executable source of truth** that contains:
+- API contract (parameters, types, constraints)
+- Orchestration metadata (modes, confirmation, latency, side effects, idempotency)
+- Tool identity (toolId, version, category)
+
+Markdown files (`doc_summary.md` + `doc.md`) are **documentation**, not source of truth. They explain:
+- When to use the tool
+- Common mistakes
+- Example usage
+- Failure modes
+
+**Why this matters:** If we generate schemas from markdown, we'd be parsing prose to extract contracts (fragile). Instead, we keep the contract explicit in JSON Schema (validated with Ajv) and use markdown to document it for humans. This is the correct direction of dependency: markdown documents the schema, not the other way around.
 
 ### New Architecture
 
@@ -706,9 +750,9 @@ voice-server/
 │   ├── registry.js                 # Runtime registry (loads tool_registry.json)
 │   ├── tool-builder.js             # Build script (generates tool_registry.json)
 │   ├── error-types.js              # Error classification + ToolError + IntentType
-│   ├── provider-adapters/          # NEW: Provider-specific format converters
-│   │   ├── openai.js               # OpenAI format (PREFERRED)
-│   │   └── gemini-native.js        # Gemini SDK format (optional, Live API only)
+│   ├── provider-adapters/          # NEW: Provider-specific format converters (both run at build time)
+│   │   ├── openai.js               # OpenAI format (PREFERRED at runtime)
+│   │   └── gemini-native.js        # Gemini SDK format (for Live API)
 │   └── README.md                   # Guide for adding new tools
 ├── providers/                       # NEW: Transport abstraction layer
 │   ├── transport.js                # Abstract transport interface
@@ -903,7 +947,24 @@ Each tool consists of three files in its own directory:
 - **`idempotent`**: Safe to retry or not
 - **`requiresConfirmation`**: Actions like calendar events need confirmation
 - **`allowedModes`**: `["text"]`, `["voice"]`, or `["text", "voice"]` - Mode restrictions
-- **`latencyBudgetMs`**: Voice requires fast tools (<1s), text more flexible
+- **`latencyBudgetMs`**: Per-tool performance expectation (soft warning, not gate)
+
+**IMPORTANT: Two Independent Budget Concepts**
+
+1. **`latencyBudgetMs` (per-tool, soft limit)**:
+   - Performance expectation for individual tool execution
+   - Orchestrator logs a WARNING if exceeded, but doesn't block
+   - Used for performance monitoring and debugging
+   - Example: `kb_search` should complete in <800ms
+
+2. **Retrieval caps (orchestrator constants, hard gates)**:
+   - Defined in `VOICE_BUDGET.MAX_RETRIEVAL_CALLS_PER_TURN` (e.g., 2)
+   - Enforced at orchestrator level before execution
+   - Counts number of retrieval tool invocations per turn (not latency)
+   - Hard fail with `BUDGET_EXCEEDED` error when limit reached
+   - Purpose: Maintain conversational flow quality in voice mode
+
+**These are independent**: Changing `latencyBudgetMs` does NOT affect retrieval call limits. A tool can be fast (<800ms) but still contribute to retrieval budget exhaustion.
 
 ---
 
@@ -1102,6 +1163,13 @@ Your action:
 
 **Purpose**: Execution logic with semantic validation, returns intents (not setState)
 
+**ARCHITECTURAL PRINCIPLE: Capabilities vs Intents**
+
+- **Capabilities** (`context.messaging`, `context.audit`) - For doing work (sending messages, logging)
+- **Intents** (returned in result) - For declaring state changes (end session, suppress audio)
+- **NEVER** manufacture intents via context helpers - always return them in the result envelope
+- Tools return `{ ok, data, intents: [...] }` - orchestrator applies intents to state
+
 ```javascript
 import { ToolError, ErrorType } from '../error-types.js';
 
@@ -1184,29 +1252,30 @@ export async function execute({ args, context }) {
 Generates `tool_registry.json` with **build-time linting** and **content-based versioning**:
 
 ```javascript
-import { readdirSync, readFileSync, writeFileSync } from 'fs';
+import { readdirSync, readFileSync, writeFileSync, existsSync, statSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
 import { createHash } from 'crypto';
 import { execSync } from 'child_process';
 import Ajv from 'ajv';
+import addFormats from 'ajv-formats';
+import { toOpenAI } from './provider-adapters/openai.js';
+import { toGeminiNative } from './provider-adapters/gemini-native.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const TOOLS_DIR = __dirname;
 const OUTPUT_FILE = join(__dirname, '../tool_registry.json');
 
-// JSON Schema validator
-const ajv = new Ajv({ allErrors: true, strict: true });
-
-// Type mapping for SDK (Gemini uses string representations)
-const TYPE_MAP = {
-  'string': 'STRING',
-  'number': 'NUMBER',
-  'integer': 'NUMBER',
-  'boolean': 'BOOLEAN',
-  'object': 'OBJECT',
-  'array': 'ARRAY'
-};
+// JSON Schema validator with formats (email, date-time, etc.)
+// CRITICAL: Must match runtime Ajv config to ensure consistent validation
+const ajv = new Ajv({
+  allErrors: true,           // Report all errors, not just first
+  useDefaults: true,         // Apply default values from schema (match runtime)
+  coerceTypes: false,        // Stay strict - don't auto-coerce "3" to 3
+  removeAdditional: false,   // Don't silently drop unknown params (fail instead)
+  strict: true               // Strict schema validation
+});
+addFormats(ajv);
 
 // Required sections in doc.md
 const REQUIRED_DOC_SECTIONS = [
@@ -1266,12 +1335,40 @@ function buildRegistry() {
   console.log(`  Tools: ${tools.map(t => t.toolId).join(', ')}`);
 }
 
+// Example output structure of tool_registry.json:
+// {
+//   "version": "abc123def456",
+//   "gitCommit": "a1b2c3d4",
+//   "buildTimestamp": "2026-01-13T10:30:00.000Z",
+//   "tools": [
+//     {
+//       "toolId": "ignore_user",
+//       "version": "1.0.0",
+//       "category": "action",
+//       "sideEffects": "writes",
+//       "idempotent": false,
+//       "requiresConfirmation": false,
+//       "allowedModes": ["text", "voice"],
+//       "latencyBudgetMs": 1000,
+//       "jsonSchema": { /* Canonical JSON Schema for validation */ },
+//       "providerSchemas": {
+//         // BOTH schemas ALWAYS present (build generates both unconditionally)
+//         "openai": { /* OpenAI function schema format */ },
+//         "geminiNative": { /* Gemini functionDeclarations format with Type.* */ }
+//       },
+//       "summary": "Block user for specified duration...",
+//       "documentation": "# ignore_user\n\n## Summary...",
+//       "handlerPath": "file:///path/to/handler.js"
+//     }
+//   ]
+// }
+
 function buildTool(toolDirName) {
   const toolPath = join(TOOLS_DIR, toolDirName);
   
   // Read and validate schema.json
   const schemaPath = join(toolPath, 'schema.json');
-  if (!existsSync(schemaPath)) {
+  if (!checkFileExists(schemaPath)) {
     throw new Error('Missing schema.json');
   }
   const schema = JSON.parse(readFileSync(schemaPath, 'utf-8'));
@@ -1288,7 +1385,7 @@ function buildTool(toolDirName) {
   
   // Read and validate doc_summary.md
   const summaryPath = join(toolPath, 'doc_summary.md');
-  if (!existsSync(summaryPath)) {
+  if (!checkFileExists(summaryPath)) {
     throw new Error('Missing doc_summary.md');
   }
   const summary = readFileSync(summaryPath, 'utf-8').trim();
@@ -1298,7 +1395,7 @@ function buildTool(toolDirName) {
   
   // Read and validate doc.md
   const docPath = join(toolPath, 'doc.md');
-  if (!existsSync(docPath)) {
+  if (!checkFileExists(docPath)) {
     throw new Error('Missing doc.md');
   }
   const documentation = readFileSync(docPath, 'utf-8');
@@ -1306,7 +1403,7 @@ function buildTool(toolDirName) {
   
   // Verify handler.js exists and exports execute
   const handlerPath = join(toolPath, 'handler.js');
-  if (!existsSync(handlerPath)) {
+  if (!checkFileExists(handlerPath)) {
     throw new Error('Missing handler.js');
   }
   
@@ -1316,8 +1413,15 @@ function buildTool(toolDirName) {
     throw new Error(`toolId "${schema.toolId}" doesn't match directory "${toolDirName}" (expected "${expectedToolId}")`);
   }
   
-  // Generate SDK-compatible schema from JSON Schema
-  const sdkSchema = generateSDKSchema(schema);
+  // Generate provider-specific schemas at build time
+  // BOTH schemas are ALWAYS generated (not conditional)
+  // Build step requires @google/genai installed even if you only use OpenAI at runtime
+  // This is where provider coupling happens - isolated to build step
+  // Runtime decides which schema to use via transport layer
+  const providerSchemas = {
+    openai: toOpenAI(schema),
+    geminiNative: toGeminiNative(schema)
+  };
   
   // Use pathToFileURL for cross-platform safety
   const handlerUrl = pathToFileURL(handlerPath).href;
@@ -1331,8 +1435,8 @@ function buildTool(toolDirName) {
     requiresConfirmation: schema.requiresConfirmation,
     allowedModes: schema.allowedModes,
     latencyBudgetMs: schema.latencyBudgetMs,
-    schema: sdkSchema,
-    jsonSchema: schema.parameters, // Keep for runtime validation
+    jsonSchema: schema.parameters,     // Canonical JSON Schema (for validation)
+    providerSchemas: providerSchemas,  // Pre-computed provider formats
     summary: summary,
     documentation: documentation,
     handlerPath: handlerUrl
@@ -1419,9 +1523,9 @@ function lintDocumentation(doc) {
   }
 }
 
-// NOTE: Old implementations used generateSDKSchema() which had a critical bug:
-// - Dropped nested objects, arrays, enums, formats
-// - Flattened complex schemas to simple properties only
+// NOTE: Provider adapters handle schema conversion at BUILD time
+// - Runtime registry just returns pre-computed provider schemas
+// - No Type.* imports needed in runtime code
 // 
 // This new implementation uses provider adapters from the start (no bug).
 // See provider-adapters/ directory for toOpenAI() and toGeminiNative()
@@ -1429,15 +1533,29 @@ function lintDocumentation(doc) {
 function generateRegistryVersion(tools) {
   // Content-based version: hash of all tool IDs + schemas + doc hashes
   const content = tools
-    .map(t => `${t.toolId}:${t.version}:${hashString(t.schema)}:${hashString(t.summary)}`)
+    .map(t => `${t.toolId}:${t.version}:${hashString(t.jsonSchema)}:${hashString(t.summary)}`)
     .join('|');
   
   const hash = hashString(content);
   return `1.0.${hash.substring(0, 8)}`;
 }
 
-function hashString(str) {
+function hashString(value) {
+  // Use canonical JSON for objects to ensure stable hashing
+  const str = typeof value === 'object' ? canonicalStringify(value) : value;
   return createHash('sha256').update(JSON.stringify(str)).digest('hex');
+}
+
+function canonicalStringify(obj) {
+  // Recursively sort object keys for stable JSON serialization
+  if (obj === null || typeof obj !== 'object') return obj;
+  if (Array.isArray(obj)) return obj.map(canonicalStringify);
+  
+  const sorted = {};
+  Object.keys(obj).sort().forEach(key => {
+    sorted[key] = canonicalStringify(obj[key]);
+  });
+  return sorted;
 }
 
 function getGitCommit() {
@@ -1448,13 +1566,9 @@ function getGitCommit() {
   }
 }
 
-function existsSync(path) {
-  try {
-    readFileSync(path);
-    return true;
-  } catch {
-    return false;
-  }
+// Use real fs.existsSync (doesn't throw) - no try/catch needed
+function checkFileExists(path) {
+  return existsSync(path) && statSync(path).isFile();
 }
 
 buildRegistry();
@@ -1480,27 +1594,31 @@ Loads pre-built registry, validates with Ajv, provides standardized execution en
 import { readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { Type } from '@google/genai';
 import Ajv from 'ajv';
-import { ToolError, ErrorType } from './error-types.js';
+import addFormats from 'ajv-formats';
+import { ToolError, ErrorType, validateToolResponse } from './error-types.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REGISTRY_FILE = join(__dirname, '../tool_registry.json');
 
-// JSON Schema validator
-const ajv = new Ajv({ allErrors: true });
-
-// Type mapping from string to SDK enum
-const TYPE_ENUM = {
-  'STRING': Type.STRING,
-  'NUMBER': Type.NUMBER,
-  'BOOLEAN': Type.BOOLEAN,
-  'OBJECT': Type.OBJECT,
-  'ARRAY': Type.ARRAY
-};
+// Configure Ajv with formats and strict defaults
+const ajv = new Ajv({
+  allErrors: true,           // Report all errors, not just first
+  useDefaults: true,         // Apply default values from schema
+  coerceTypes: false,        // Stay strict - don't auto-coerce "3" to 3
+  removeAdditional: false,   // Don't silently drop unknown params (fail instead)
+  strict: true               // Strict schema validation
+});
+addFormats(ajv); // Add format validators (email, date-time, etc.)
 
 /**
  * Tool Registry - loads and executes tools with validation and error handling
+ * 
+ * ARCHITECTURE: Provider-agnostic runtime
+ * - Stores canonical JSON Schema (for validation)
+ * - Stores pre-computed provider schemas (from build step)
+ * - NO runtime schema conversion
+ * - NO provider SDK imports
  */
 class ToolRegistry {
   constructor() {
@@ -1522,9 +1640,6 @@ class ToolRegistry {
     this.gitCommit = registryData.gitCommit;
     
     for (const tool of registryData.tools) {
-      // Convert schema types from strings to SDK enums
-      const sdkSchema = this.convertToSDKTypes(tool.schema);
-      
       // Compile JSON Schema validator (strict validation with Ajv)
       const validator = ajv.compile(tool.jsonSchema);
       
@@ -1545,7 +1660,8 @@ class ToolRegistry {
         requiresConfirmation: tool.requiresConfirmation,
         allowedModes: tool.allowedModes,
         latencyBudgetMs: tool.latencyBudgetMs,
-        schema: sdkSchema,
+        jsonSchema: tool.jsonSchema,           // Canonical JSON Schema
+        providerSchemas: tool.providerSchemas, // Pre-computed at build time
         summary: tool.summary,
         documentation: tool.documentation
       });
@@ -1557,31 +1673,18 @@ class ToolRegistry {
     console.log(`✓ Loaded tool registry v${this.version} (commit: ${this.gitCommit || 'N/A'}) with ${this.tools.size} tools`);
     console.log(`  Tools: ${Array.from(this.tools.keys()).join(', ')}`);
   }
-  
-  convertToSDKTypes(schema) {
-    const converted = { ...schema };
-    if (converted.parameters) {
-      converted.parameters = {
-        type: TYPE_ENUM[schema.parameters.type],
-        properties: {},
-        required: schema.parameters.required
-      };
-      
-      for (const [key, prop] of Object.entries(schema.parameters.properties)) {
-        converted.parameters.properties[key] = {
-          type: TYPE_ENUM[prop.type],
-          description: prop.description
-        };
-      }
-    }
-    return converted;
-  }
 
   /**
-   * Get SDK-compatible schemas for session config
+   * Get provider-specific schemas (OpenAI function schema or Gemini functionDeclarations)
+   * Returns pre-computed schemas from build step - NO runtime conversion
    */
-  getSDKSchemas() {
-    return Array.from(this.tools.values()).map(tool => tool.schema);
+  getProviderSchemas(provider = 'openai') {
+    return Array.from(this.tools.values()).map(tool => {
+      if (!tool.providerSchemas[provider]) {
+        throw new Error(`Tool ${tool.toolId} missing ${provider} schema`);
+      }
+      return tool.providerSchemas[provider];
+    });
   }
 
   /**
@@ -1691,6 +1794,11 @@ class ToolRegistry {
   
   /**
    * Build context with capabilities (abstracts raw ws/session)
+   * 
+   * ARCHITECTURAL PRINCIPLE:
+   * - Capabilities = methods for DOING WORK (messaging.send, audit.log)
+   * - Context should NOT provide methods that manufacture intents
+   * - Intents come ONLY from tool results, never from context
    */
   buildContext(executionContext, tool) {
     const { clientId, ws, geminiSession, session } = executionContext;
@@ -1708,7 +1816,7 @@ class ToolRegistry {
         // Read-only state access
         state: { ...session.state }
       },
-      // Capabilities (not raw ws)
+      // Capabilities (for doing work, NOT for manufacturing intents)
       messaging: {
         send: async (message) => {
           if (ws.readyState !== 1) { // WebSocket.OPEN = 1
@@ -1718,25 +1826,23 @@ class ToolRegistry {
         }
       },
       voice: {
-        isActive: () => geminiSession !== null,
-        endSession: () => {
-          // Returns intent, doesn't execute
-          return { type: 'END_VOICE_SESSION', after: 'current_turn' };
-        }
-      },
-      audio: {
-        suppress: (value) => ({ type: 'SUPPRESS_AUDIO', value })
+        // Read-only state inquiry (capability for checking, not mutating)
+        isActive: () => geminiSession !== null
       },
       audit: {
         log: (event, data) => {
           console.log(`[${clientId}] AUDIT: ${event}`, JSON.stringify(data));
         }
       }
+      // NOTE: Removed voice.endSession() and audio.suppress() - these returned intents
+      // Tools should return intents directly in their result envelope, not manufacture them via context helpers
+      // Example: return { ok: true, data: {...}, intents: [{ type: 'END_VOICE_SESSION', after: 'current_turn' }] }
     };
   }
   
   /**
    * Create standardized response envelope
+   * Validates ToolResponse schema contract (v1.0.0)
    */
   createResponse(toolId, ok, dataOrError, startTime, intents = []) {
     const tool = this.tools.get(toolId);
@@ -1746,23 +1852,56 @@ class ToolRegistry {
       tool: toolId,
       toolVersion: tool?.version,
       registryVersion: this.version,
-      duration
+      duration,
+      timestamp: new Date().toISOString()
     };
     
+    let response;
+    
     if (ok) {
-      return {
+      response = {
         ok: true,
         data: dataOrError,
         intents,
         meta
       };
     } else {
-      return {
+      // Validate error structure
+      if (!dataOrError || typeof dataOrError !== 'object') {
+        throw new Error(`Invalid error structure for tool ${toolId}: error must be object`);
+      }
+      if (!dataOrError.type || typeof dataOrError.type !== 'string') {
+        throw new Error(`Invalid error structure for tool ${toolId}: error.type required`);
+      }
+      if (!dataOrError.message || typeof dataOrError.message !== 'string') {
+        throw new Error(`Invalid error structure for tool ${toolId}: error.message required`);
+      }
+      if (typeof dataOrError.retryable !== 'boolean') {
+        // Auto-fix: default to false if missing
+        dataOrError.retryable = false;
+      }
+      
+      response = {
         ok: false,
         error: dataOrError,
         meta
       };
+      
+      // Failure responses MAY have intents (e.g., suppress audio on error)
+      if (intents && intents.length > 0) {
+        response.intents = intents;
+      }
     }
+    
+    // Validate ToolResponse schema contract
+    try {
+      validateToolResponse(response);
+    } catch (validationError) {
+      console.error(`[Registry] ToolResponse validation failed for ${toolId}:`, validationError.message);
+      throw new Error(`Tool ${toolId} returned invalid ToolResponse: ${validationError.message}`);
+    }
+    
+    return response;
   }
   
   /**
@@ -1854,10 +1993,11 @@ export const toolRegistry = new ToolRegistry();
 
 - **Ajv validation** - Real JSON Schema validation with detailed error paths
 - **Standardized envelope** - All responses use `ToolResponse` format with metadata
-- **Capabilities pattern** - Tools use `context.messaging`, `context.voice`, `context.audit` instead of raw `ws`
+- **Capabilities pattern** - Tools use `context.messaging`, `context.audit` for doing work (not raw `ws`)
 - **Version tracking** - Every response includes tool version + registry version + duration
-- **Intent-based state** - Tools return intents, orchestrator applies them
+- **Intent-based state** - Tools return intents in result envelope, orchestrator applies them
 - **Strict validation** - Rejects unknown parameters (additionalProperties: false)
+- **Architectural invariant**: Capabilities do work; intents declare state changes; tools return both
 
 ### Error Type Definitions
 
@@ -1907,6 +2047,213 @@ export const IntentType = {
   SET_PENDING_MESSAGE: 'SET_PENDING_MESSAGE'
 };
 ```
+
+### ToolResponse Schema (FORMAL CONTRACT)
+
+**`voice-server/tools/tool-response.js`** (or part of `error-types.js`)
+
+This is the **central contract** between all layers. Every tool execution MUST return a ToolResponse.
+
+```typescript
+/**
+ * Formal ToolResponse Schema
+ * 
+ * VERSION: 1.0.0
+ * 
+ * This schema is the contract between:
+ * - Tool handlers (return this)
+ * - Registry (validates and normalizes this)
+ * - Orchestrator (interprets and applies this)
+ * - Transport layer (serializes this to provider)
+ * 
+ * CRITICAL INVARIANTS:
+ * 1. Every tool execution returns exactly one ToolResponse
+ * 2. ok=true XOR ok=false (never both, never neither)
+ * 3. If ok=true, data field SHOULD be present (may be null/undefined for side-effect-only tools)
+ * 4. If ok=false, error field MUST be present with type + message
+ * 5. meta field MUST always be present (added by registry if missing)
+ * 6. intents field MAY be present in both success and failure cases
+ */
+
+// TypeScript definition (reference only - JavaScript runtime uses validation)
+type ToolResponse = 
+  | ToolResponseSuccess
+  | ToolResponseFailure;
+
+interface ToolResponseSuccess {
+  ok: true;
+  data?: any;              // Tool-specific success data (may be absent for side-effect tools)
+  intents?: Intent[];      // State changes to apply (e.g., END_VOICE_SESSION)
+  meta: ToolResponseMeta;  // Execution metadata (added by registry)
+}
+
+interface ToolResponseFailure {
+  ok: false;
+  error: ToolError;        // Structured error with type + message + optional fields
+  intents?: Intent[];      // Allowed even on failure (e.g., suppress audio after error)
+  meta: ToolResponseMeta;  // Execution metadata (added by registry)
+}
+
+interface ToolError {
+  type: ErrorType;         // Error classification (from ErrorType enum)
+  message: string;         // Human-readable error message
+  retryable: boolean;      // Can this be retried? (false for VALIDATION, true for TRANSIENT)
+  details?: any;           // Optional structured error details (e.g., Ajv validation errors)
+  
+  // Special error types have additional fields:
+  confirmation_request?: { // Only for ErrorType.CONFIRMATION_REQUIRED
+    token: string;
+    expires: number;
+    tool: string;
+    args: object;
+    preview: string;
+  };
+  
+  // Partial side effects tracking (for idempotency decisions)
+  partialSideEffects?: boolean;  // true = side effects occurred before failure
+  idempotencyRequired?: boolean; // true = retry must use idempotency key
+}
+
+interface ToolResponseMeta {
+  tool: string;            // Tool ID
+  toolVersion: string;     // Tool version
+  registryVersion: string; // Registry version at execution time
+  duration: number;        // Execution time in milliseconds
+  timestamp?: string;      // ISO 8601 timestamp (optional)
+  
+  // Idempotency tracking (added by orchestrator)
+  _idempotent_cache_hit?: boolean;
+  _original_turn?: number;
+}
+
+interface Intent {
+  type: IntentType;        // Intent classification
+  [key: string]: any;      // Intent-specific parameters
+}
+```
+
+**JavaScript Runtime Validation:**
+
+```javascript
+/**
+ * Validate ToolResponse structure
+ * Called by registry to ensure handlers return valid responses
+ */
+export function validateToolResponse(response) {
+  if (!response || typeof response !== 'object') {
+    throw new Error('ToolResponse must be an object');
+  }
+  
+  if (typeof response.ok !== 'boolean') {
+    throw new Error('ToolResponse.ok must be boolean');
+  }
+  
+  if (response.ok === true) {
+    // Success case: data should be present (but may be null/undefined)
+    // No validation of data structure (tool-specific)
+  } else if (response.ok === false) {
+    // Failure case: error MUST be present
+    if (!response.error || typeof response.error !== 'object') {
+      throw new Error('ToolResponse with ok=false must have error object');
+    }
+    if (!response.error.type || typeof response.error.type !== 'string') {
+      throw new Error('ToolResponse.error.type must be string');
+    }
+    if (!response.error.message || typeof response.error.message !== 'string') {
+      throw new Error('ToolResponse.error.message must be string');
+    }
+    if (typeof response.error.retryable !== 'boolean') {
+      throw new Error('ToolResponse.error.retryable must be boolean');
+    }
+  }
+  
+  // Intents are optional but must be array if present
+  if (response.intents !== undefined && !Array.isArray(response.intents)) {
+    throw new Error('ToolResponse.intents must be array');
+  }
+  
+  // Meta will be added by registry if missing, but if present must be object
+  if (response.meta !== undefined && typeof response.meta !== 'object') {
+    throw new Error('ToolResponse.meta must be object');
+  }
+  
+  return true;
+}
+```
+
+### Layer Responsibilities for Error Generation
+
+**Clear rules about which layer generates which ErrorType:**
+
+| ErrorType | Layer | When | Retryable | Partial Side Effects |
+|-----------|-------|------|-----------|---------------------|
+| `VALIDATION` | Registry | Ajv schema validation fails | ❌ No | ❌ No (pre-execution) |
+| `NOT_FOUND` | Registry OR Orchestrator | Tool doesn't exist | ❌ No | ❌ No (pre-execution) |
+| `MODE_RESTRICTED` | Orchestrator | Tool not allowed in current mode | ❌ No | ❌ No (pre-execution) |
+| `BUDGET_EXCEEDED` | Orchestrator | Retrieval/total tool budget exceeded | ❌ No | ❌ No (pre-execution) |
+| `CONFIRMATION_REQUIRED` | Orchestrator | Tool requires confirmation | ❌ No | ❌ No (pre-execution) |
+| `SESSION_INACTIVE` | Tool Handler | Session ended (domain failure) | ❌ No | ❌ No (domain check) |
+| `TRANSIENT` | Tool Handler OR Registry | Network error, timeout, etc. | ✅ Yes | ⚠️ Maybe (check `partialSideEffects`) |
+| `PERMANENT` | Tool Handler | Unrecoverable domain failure | ❌ No | ⚠️ Maybe |
+| `RATE_LIMIT` | Tool Handler OR External API | Rate limit hit | ✅ Yes (with backoff) | ❌ No (usually) |
+| `AUTH` | Tool Handler OR External API | Auth failed | ❌ No | ❌ No |
+| `CONFLICT` | Tool Handler | Resource conflict (e.g., calendar overlap) | ⚠️ Maybe | ⚠️ Maybe |
+| `INTERNAL` | Registry | Unexpected exception during execution | ❌ No | ⚠️ Maybe |
+
+**Critical Rules:**
+
+1. **Pre-Execution Errors** (Registry + Orchestrator):
+   - Always have `partialSideEffects: false`
+   - Always have `retryable: false` (fix parameters and retry)
+   - Generated before handler executes
+
+2. **Domain Errors** (Tool Handlers):
+   - Tools decide `retryable` based on domain logic
+   - Tools MUST set `partialSideEffects: true` if side effects occurred
+   - Example: Payment captured but notification failed
+
+3. **Unexpected Errors** (Registry):
+   - Registry catches uncaught exceptions
+   - Normalizes to `ErrorType.INTERNAL`
+   - Assumes `partialSideEffects: true` (conservative)
+
+4. **Confirmation Errors** (Orchestrator ONLY):
+   - MUST include `confirmation_request` field
+   - Handler NEVER generates this (orchestrator gates execution)
+
+### ToolResponse Versioning
+
+**Current Version: 1.0.0**
+
+Changes to ToolResponse schema require:
+1. Version bump in schema definition
+2. Migration guide for existing tools
+3. Backward compatibility handling in registry
+
+**Future Evolution:**
+
+```javascript
+// Version 1.1.0 might add:
+interface ToolResponseMetaV1_1 extends ToolResponseMeta {
+  parentCallId?: string;      // For tool composition
+  backgroundTask?: boolean;   // For async execution
+}
+
+// Version 2.0.0 might change:
+// - Split success/failure into separate types
+// - Add streaming support
+// - Add cancellation tokens
+```
+
+**Registry validates version compatibility on load:**
+
+```javascript
+if (TOOL_RESPONSE_SCHEMA_VERSION !== '1.0.0') {
+  throw new Error(`Incompatible ToolResponse schema version: ${TOOL_RESPONSE_SCHEMA_VERSION}`);
+}
+```
+
+---
 
 ## 4. Integration Changes
 
@@ -1968,8 +2315,8 @@ const config = {
   speechConfig: { /* ... */ },
   inputAudioTranscription: {},
   outputAudioTranscription: {},
-  // Use registry to get tool schemas
-  tools: [{ functionDeclarations: toolRegistry.getSDKSchemas() }]
+  // Use registry to get provider-specific schemas (pre-computed at build time)
+  tools: [{ functionDeclarations: toolRegistry.getProviderSchemas('geminiNative') }]
 };
 
 // In handleGeminiMessage (replace lines 476-598):
@@ -1990,62 +2337,100 @@ if (message.toolCall?.functionCalls) {
     const toolMetadata = toolRegistry.getToolMetadata(call.name);
     if (!toolMetadata) {
       console.error(`[${clientId}] Unknown tool: ${call.name}`);
-      geminiSession.sendToolResponse({
-        functionResponses: [{
-          name: call.name,
-          response: { error: `Unknown tool: ${call.name}` }
-        }]
+      
+      // Return NOT_FOUND error through transport layer
+      await transport.sendToolResult({
+        id: call.id,
+        name: call.name,
+        result: {
+          ok: false,
+          error: {
+            type: ErrorType.NOT_FOUND,
+            message: `Unknown tool: ${call.name}`,
+            retryable: false
+          }
+        }
       });
       continue;
     }
     
     // POLICY: Check if tool allowed in current mode (voice vs text)
-    const currentMode = geminiSession ? 'voice' : 'text';
+    // CRITICAL: Use explicit session.mode (NEVER infer from geminiSession presence)
+    const currentMode = state.get('mode');
     if (!toolMetadata.allowedModes.includes(currentMode)) {
       console.warn(`[${clientId}] Tool ${call.name} not allowed in ${currentMode} mode`);
-      geminiSession.sendToolResponse({
-        functionResponses: [{
-          name: call.name,
-          response: { 
-            error: `Tool ${call.name} is not available in ${currentMode} mode`,
-            suggestion: currentMode === 'voice' ? 'Switch to text mode to use this tool' : null
+      
+      // Return MODE_RESTRICTED error through transport layer
+      await transport.sendToolResult({
+        id: call.id,
+        name: call.name,
+        result: {
+          ok: false,
+          error: {
+            type: ErrorType.MODE_RESTRICTED,
+            message: `Tool ${call.name} is not available in ${currentMode} mode`,
+            suggestion: currentMode === 'voice' ? 'Switch to text mode to use this tool' : null,
+            retryable: false
           }
-        }]
+        }
       });
       continue;
     }
     
-    // POLICY: Enforce retrieval budget in voice mode
+    // POLICY: Enforce retrieval budget in voice mode (HARD GATE - blocks execution)
+    // NOTE: This counts retrieval calls, NOT latency (independent from latencyBudgetMs)
     if (currentMode === 'voice' && toolMetadata.category === 'retrieval') {
       retrievalCallsThisTurn++;
       if (retrievalCallsThisTurn > MAX_RETRIEVAL_CALLS_VOICE) {
-        console.warn(`[${clientId}] Retrieval budget exceeded in voice mode (${retrievalCallsThisTurn}/${MAX_RETRIEVAL_CALLS_VOICE})`);
-        geminiSession.sendToolResponse({
-          functionResponses: [{
-            name: call.name,
-            response: { 
-              error: 'Retrieval budget exceeded for this turn',
-              suggestion: 'Use specific IDs with kb_get instead of searching'
+        console.error(`[${clientId}] HARD FAIL: Retrieval budget exceeded (${retrievalCallsThisTurn}/${MAX_RETRIEVAL_CALLS_VOICE})`);
+        
+        // Return BUDGET_EXCEEDED error through transport layer (execution prevented)
+        await transport.sendToolResult({
+          id: call.id,
+          name: call.name,
+          result: {
+            ok: false,
+            error: {
+              type: ErrorType.BUDGET_EXCEEDED,
+              message: `Retrieval budget exceeded (max ${MAX_RETRIEVAL_CALLS_VOICE} per turn in voice mode)`,
+              suggestion: 'Use specific IDs with kb_get instead of searching',
+              retryable: false
             }
-          }]
+          }
         });
-        continue;
+        continue;  // Skip execution - hard gate
       }
     }
     
     // POLICY: Check confirmation requirement for actions
-    if (toolMetadata.requiresConfirmation && !context.confirmed) {
-      // For now, block unconfirmed actions
-      // Later: implement confirmation flow
-      console.warn(`[${clientId}] Tool ${call.name} requires confirmation`);
-      geminiSession.sendToolResponse({
-        functionResponses: [{
-          name: call.name,
-          response: { 
-            error: 'This action requires user confirmation',
-            suggestion: 'Ask user to confirm before creating calendar events'
+    // Returns ToolResponse envelope - transport layer will serialize it
+    if (toolMetadata.requiresConfirmation && !executionContext.confirmationToken) {
+      console.log(`[${clientId}] Tool ${call.name} requires confirmation - generating token`);
+      
+      const confirmationResult = {
+        ok: false,
+        error: {
+          type: ErrorType.CONFIRMATION_REQUIRED,
+          message: 'This action requires user confirmation',
+          confirmation_request: {
+            token: generateConfirmationToken(call),
+            expires: Date.now() + 300000, // 5 min
+            tool: call.name,
+            args: call.args,
+            preview: generatePreview(call.name, call.args)
           }
-        }]
+        },
+        meta: {
+          toolId: call.name,
+          timestamp: new Date().toISOString()
+        }
+      };
+      
+      // Send through transport layer (preserves full envelope)
+      await transport.sendToolResult({ 
+        id: call.id, 
+        name: call.name, 
+        result: confirmationResult 
       });
       continue;
     }
@@ -2067,7 +2452,7 @@ if (message.toolCall?.functionCalls) {
           audioChunkCounter
         }
       },
-      confirmed: false // TODO: implement confirmation flow
+      confirmationToken: extractConfirmationToken(call.args) // Check if token provided
     };
     
     // Execute tool through registry (returns normalized result with intents)
@@ -2078,9 +2463,10 @@ if (message.toolCall?.functionCalls) {
     // Log execution with metadata
     console.log(`[${clientId}] Tool executed: ${call.name} (${toolMetadata.category}) - ok: ${result.ok}, duration: ${duration}ms, tools v${sessionToolsVersion}`);
     
-    // POLICY: Warn if latency budget exceeded
+    // POLICY: Warn if latency budget exceeded (soft limit - does NOT block execution)
+    // NOTE: This is independent from retrieval call count limits (which ARE hard gates)
     if (duration > toolMetadata.latencyBudgetMs) {
-      console.warn(`[${clientId}] Tool ${call.name} exceeded latency budget: ${duration}ms > ${toolMetadata.latencyBudgetMs}ms`);
+      console.warn(`[${clientId}] Tool ${call.name} exceeded latency budget: ${duration}ms > ${toolMetadata.latencyBudgetMs}ms (WARNING ONLY - execution completed)`);
     }
     
     // Apply intents (if tool succeeded)
@@ -2094,57 +2480,36 @@ if (message.toolCall?.functionCalls) {
       }
     }
     
-    // Orchestrate recovery based on error type and mode
+    // Send result through transport layer (handles both success and error)
+    // Transport layer serializes the full ToolResponse envelope
+    // No special cases - all results go through the same path
+    await transport.sendToolResult({
+      id: call.id,
+      name: call.name,
+      result: result  // Full envelope: { ok, data/error, intents, meta }
+    });
+    
+    // Orchestrator logs and applies recovery policy (but doesn't send responses)
     if (!result.ok) {
       const error = result.error;
       console.error(`[${clientId}] Tool error: ${error.type} - ${error.message}`);
       
       // Apply recovery policy based on error type and mode
-      if (error.type === ErrorType.VALIDATION) {
-        // Send error back to model for correction
-        geminiSession.sendToolResponse({
-          functionResponses: [{
-            name: call.name,
-            response: { 
-              error: error.message,
-              suggestion: 'Please check the parameters and try again'
-            }
-          }]
-        });
-      } else if (error.type === ErrorType.TRANSIENT && error.retryable) {
+      if (error.type === ErrorType.TRANSIENT && error.retryable) {
         // Voice mode: skip retry (latency budget too tight)
         // Text mode: could retry once
         if (currentMode === 'text' && toolMetadata.idempotent) {
           // TODO: implement single retry with backoff
           console.log(`[${clientId}] Could retry ${call.name} in text mode, but skipping for now`);
         }
-        
-        geminiSession.sendToolResponse({
-          functionResponses: [{
-            name: call.name,
-            response: { 
-              error: 'Temporary failure, please try again',
-              retryable: currentMode === 'text'
-            }
-          }]
-        });
-      } else {
-        // Permanent error: inform model
-        geminiSession.sendToolResponse({
-          functionResponses: [{
-            name: call.name,
-            response: { 
-              error: error.message,
-              retryable: false
-            }
-          }]
-        });
       }
     } else {
-      // Success: send result to model
-      geminiSession.sendToolResponse({
-        functionResponses: [{
-          name: call.name,
+      // Success case logged above
+      console.log(`[${clientId}] Tool ${call.name} succeeded: ${JSON.stringify(result.data).substring(0, 100)}`);
+    }
+    
+    // Continue processing next tool call
+    // (Original success path was:
           response: {
             ok: true,
             ...result.data
@@ -2283,7 +2648,8 @@ export function getToolDocumentation(toolId) {
   },
   "dependencies": {
     "ajv": "^8.12.0",
-    "ajv-formats": "^3.0.1"
+    "ajv-formats": "^3.0.1",
+    "@google/generative-ai": "^0.21.0"  // Required for gemini-native adapter
   }
 }
 ```
@@ -2291,8 +2657,10 @@ export function getToolDocumentation(toolId) {
 **Install dependencies:**
 
 ```bash
-npm install ajv ajv-formats
+npm install ajv ajv-formats @google/generative-ai
 ```
+
+**Note:** `@google/generative-ai` is required even if you only use OpenAI at runtime, because the build script unconditionally generates both provider schemas.
 
 ### Update `.gitignore`
 
@@ -2410,9 +2778,10 @@ export async function execute({ args, context }) {
 
 **Maintainability:**
 
-- Markdown source of truth (PRs, diffs, history, ownership)
+- JSON Schema source of truth for contract (PRs, diffs, history, ownership)
+- Markdown documentation for humans (reviewed, versioned, structured)
 - Build artifact is regenerated (no manual sync)
-- Clear separation: authoring (MD) vs runtime (JSON)
+- Clear separation: authoring (JSON + MD) vs runtime (compiled JSON)
 - Structured docs prevent 100+ line walls of text
 
 ### Comparison Table
@@ -2441,32 +2810,346 @@ export async function execute({ args, context }) {
 
 ## 6. Migration Strategy
 
-### Phase 1: Create Provider Abstraction Infrastructure (No Breaking Changes)
+**Implementation Philosophy: Contracts → Builder → Transports → Orchestrator → Tools**
+
+This ordering prevents building against shifting contracts and enables incremental validation at each step:
+
+1. **Phase 0-1**: Define all contracts (ToolResponse, ErrorType, provider schemas) BEFORE any implementation
+2. **Phase 2**: Build runtime registry that validates against contracts
+3. **Phase 3**: Build transports that preserve ToolResponse envelopes
+4. **Phase 4**: Build orchestrator that enforces policies using registry metadata
+5. **Phase 5**: Migrate tools incrementally (2 simple tools first, then reference implementation)
+6. **Phase 6**: Update prompt loader to inject summaries
+7. **Phase 7**: Integration tests with real failure scenarios
+
+This sequence ensures each layer only depends on previously-locked contracts, avoiding circular dependencies and mid-implementation contract changes.
+
+### Phase 0: Lock the Contracts (1 short session)
+
+**Define stable interfaces that won't change:**
+
+**1. Freeze ToolResponse Envelope:**
+
+**See formal schema in Section 3 "ToolResponse Schema (FORMAL CONTRACT)"**
+
+All tool handlers MUST return a valid ToolResponse (version 1.0.0):
+
+```typescript
+type ToolResponse = 
+  | { ok: true; data?: any; intents?: Intent[]; meta: Meta }
+  | { ok: false; error: ToolError; intents?: Intent[]; meta: Meta };
+```
+
+**Key invariants:**
+- `ok` is boolean (never missing, never null)
+- If `ok=true`, `data` MAY be present (tool-specific)
+- If `ok=false`, `error` MUST be present with `type`, `message`, `retryable`
+- `meta` MUST be present (added by registry if handler omits it)
+- `intents` MAY be present in both success and failure cases
+
+**Critical:** 
+- Transports MUST send full structure (do NOT strip to `data` only)
+- Registry validates structure before returning to orchestrator
+- See formal schema for error generation rules by layer
+
+**2. Freeze ToolDefinition Build Artifact:**
+
+The `tool_registry.json` schema is locked:
+```javascript
+{
+  version: string,
+  gitCommit: string,
+  buildTimestamp: string,
+  tools: [{
+    toolId: string,
+    version: string,
+    category: 'retrieval' | 'action' | 'utility',
+    sideEffects: 'none' | 'read_only' | 'writes',
+    idempotent: boolean,
+    requiresConfirmation: boolean,
+    allowedModes: string[],
+    latencyBudgetMs: number,
+    jsonSchema: object,           // Canonical JSON Schema
+    providerSchemas: {            // Pre-computed at build time
+      openai: object,
+      geminiNative?: object
+    },
+    summary: string,              // 2-4 lines for prompt
+    documentation: string,        // Full markdown doc
+    handlerPath: string          // file:// URL for dynamic import
+  }]
+}
+```
+
+**Actions:**
+- Document these contracts
+- All subsequent phases must respect these interfaces
+- No changes to these structures without full team review
+
+---
+
+### Phase 1: Contracts + Builder (Define Interfaces Before Implementation)
+
+**CRITICAL: Define all contracts FIRST before building any infrastructure**
+
+This phase establishes the foundational contracts that all other layers depend on. The order within this phase is strict: error types and response envelopes first, then provider adapters, then the builder that validates against these contracts.
+
+**Implementation Order (strict sequence):**
+
+**1a. Define Core Contracts (FIRST - nothing can proceed without these):**
+
+1. `voice-server/tools/error-types.js` - Complete ErrorType enum (including CONFIRMATION_REQUIRED, BUDGET_EXCEEDED)
+   - Define ToolResponse interface/schema
+   - Define ToolError structure with confirmation_request
+   - Define IntentType enum
+   - Export validateToolResponse function
+
+**1b. Build Provider Adapters (SECOND - depends on having ToolResponse contract):**
+
+2. `voice-server/tools/provider-adapters/openai.js` - OpenAI adapter (pass-through JSON Schema)
+3. `voice-server/tools/provider-adapters/gemini-native.js` - Gemini native adapter (Type.* conversion)
+
+**1c. Build Validator/Builder (THIRD - depends on contracts + adapters):**
+
+4. `voice-server/tools/tool-builder.js` - Build script with REAL validation against contracts
+5. `voice-server/tools/README.md` - Tool authoring guide
+
+**Important:** Both provider adapters are REQUIRED (not optional). Build script unconditionally generates both `openai` and `geminiNative` schemas. Requires `@google/genai` installed. Runtime chooses which schema to use.
+
+**Critical Implementation Details for tool-builder.js:**
+
+- Use **real** `fs.existsSync` and `fs.statSync` (NOT try/catch wrappers)
+- Required docs sections lint (7 sections mandatory)
+- Ajv compile with `addFormats(ajv)` for email, date-time, uri, etc.
+- Compute `providerSchemas` via BOTH adapters at build time (not conditional)
+- **Remove all `generateSDKSchema` references** - use adapter pipeline instead
+
+**Actions:**
+
+1. Implement `tool-builder.js` with Ajv validation
+2. Test schema compilation with formats (date-time, email, uri)
+3. Verify provider adapters produce correct output shapes
+4. Run build script: `node voice-server/tools/tool-builder.js`
+5. Inspect `tool_registry.json` structure
+
+**Testing:**
+- [ ] Build script validates JSON Schema syntax
+- [ ] Ajv formats work (test with email/date fields)
+- [ ] Provider schemas generated for both OpenAI and Gemini Native
+- [ ] Missing files cause build failure (not silent skip)
+- [ ] Missing doc sections cause build failure
+
+---
+
+### Phase 2: Runtime Registry (Provider-Agnostic Loader)
+
+**Create runtime registry that never does schema conversion:**
+
+**Files to create:**
+
+1. `voice-server/tools/registry.js` - Runtime loader (provider-agnostic)
+
+**Critical Implementation Details:**
+
+- Load `tool_registry.json` at startup
+- Create Ajv validators with `addFormats(ajv)` for each tool
+- Dynamic import handlers using `handlerPath` URLs
+- `executeTool()` validates args and returns normalized ToolResponse
+- `getProviderSchemas(provider)` returns PRE-COMPUTED schemas (NO runtime conversion)
+- **DO NOT import `Type` from `@google/genai`** in registry.js
+- **DO NOT implement convertToSDKTypes** - all conversion done at build time
+
+**Key Methods:**
+
+```javascript
+class ToolRegistry {
+  async load() { ... }                          // Load JSON + build validators
+  executeTool(toolId, args, context) { ... }   // Validate + execute + normalize
+  getProviderSchemas(provider) { ... }         // Return pre-computed schemas
+  getSummaries() { ... }                       // Get doc_summary.md text
+  getDocumentation(toolId) { ... }             // Get full doc.md
+  lock() { ... }                               // Freeze version for session
+  snapshot() { ... }                           // Export locked state
+}
+```
+
+**Actions:**
+
+1. Implement registry.js with JSON loading
+2. Test validator creation (with formats)
+3. Test dynamic handler imports
+4. Test provider schema retrieval (no conversion logic)
+5. Verify `executeTool()` returns normalized ToolResponse envelope
+
+**Testing:**
+- [ ] Registry loads tool_registry.json correctly
+- [ ] Validators work with format constraints
+- [ ] `getProviderSchemas('openai')` returns correct schemas
+- [ ] `getProviderSchemas('geminiNative')` returns converted schemas
+- [ ] No Type.* imports in registry.js (provider-agnostic)
+
+---
+
+### Phase 3: Transport Abstraction (Wire Without Policy)
+
+**Create transport layer that preserves ToolResponse structure:**
 
 **Files to create:**
 
 1. `voice-server/providers/transport.js` - Abstract transport interface
 2. `voice-server/providers/openai-transport.js` - OpenAI chat.completions transport
 3. `voice-server/providers/gemini-live-transport.js` - Gemini Live WebSocket transport
-4. `voice-server/tools/provider-adapters/openai.js` - OpenAI adapter (pass-through JSON Schema)
-5. `voice-server/tools/provider-adapters/gemini-native.js` - Gemini native adapter (Type.* conversion)
-6. `voice-server/session-state.js` - State controller (fixes buggy applyIntent)
-7. `voice-server/tools/error-types.js` - Error classification + IntentType
-8. `voice-server/tools/tool-builder.js` - Build script (with provider schema generation)
-9. `voice-server/tools/registry.js` - Runtime loader (provider-agnostic methods)
-10. `voice-server/tools/README.md` - Developer guide
+
+**Critical Implementation Details:**
+
+- Transports parse tool calls from provider messages
+- Transports send tool results back to provider
+- **CRITICAL:** Transports MUST send full ToolResponse (NOT just `data` field)
+- Gemini Live transport handles WebSocket `toolCall` / `toolResponse` events
+- OpenAI transport handles chat.completions tool_calls format
+
+**Transport Interface:**
+
+```javascript
+class Transport {
+  async sendToolResponse(toolCallId, toolResponse) {
+    // Send FULL ToolResponse, not just data
+    // Let provider decide how to present errors to model
+  }
+  
+  receiveToolCalls(message) {
+    // Parse provider-specific format to normalized calls
+    return [{ id, name, args }, ...]
+  }
+}
+```
 
 **Actions:**
 
-- Test provider adapters convert schemas correctly
-- Test transport interfaces work independently
-- Test state controller handles intents
-- Keep existing code running
+1. Implement abstract transport interface
+2. Implement OpenAI transport (tool_calls format)
+3. Implement Gemini Live transport (WebSocket events)
+4. Verify transports preserve full ToolResponse structure
+5. Test transport switching (OpenAI ↔ Gemini Live)
 
-### Phase 2: Migrate ignore_user Tool
+**Testing:**
+- [ ] OpenAI transport parses tool_calls correctly
+- [ ] Gemini Live transport handles WebSocket messages
+- [ ] Both transports send full ToolResponse (ok, data, error, intents, meta)
+- [ ] Can switch transports with 2-line config change
 
-**Create directory structure:**
+---
 
+### Phase 4: Orchestrator + State Controller (Policy Lives Here)
+
+**Implement orchestration policies without touching prompts:**
+
+**Files to create:**
+
+1. `voice-server/session-state.js` - State controller with explicit mutation API
+
+**Files to modify:**
+
+2. `voice-server/server.js` - Add orchestrator loop
+
+**Critical Implementation Details:**
+
+**State Controller:**
+- Explicit mutation API (no direct state passing)
+- Intent application (orchestrator sends intents, controller applies)
+- Fixes buggy value-passing from old applyIntent implementation
+
+**Orchestrator Policies:**
+- **Mode is explicit:** Use `session.mode` (NOT inferred from `geminiSession` presence)
+- **Retrieval budget:** Voice mode max 2 retrieval calls per turn (HARD_FAIL_AFTER=true)
+- **Idempotency dedupe:** Hash-based fallback when provider call.id missing
+- **Confirmation gating:** Returns `CONFIRMATION_REQUIRED` error with token+preview
+- **Intent processing:** Apply state changes through state controller
+
+**Orchestrator Loop:**
+
+```javascript
+// Check mode restriction (EXPLICIT, not inferred)
+const currentMode = session.mode;  // NOT: geminiSession ? 'voice' : 'text'
+if (!toolMetadata.allowedModes.includes(currentMode)) {
+  return { ok: false, error: { type: 'MODE_RESTRICTED', ... } };
+}
+
+// Voice budget enforcement (retrieval tools)
+if (currentMode === 'voice' && toolCategory === 'retrieval') {
+  const retrievalCount = session.toolCallsThisTurn.filter(t => t.category === 'retrieval').length;
+  if (retrievalCount >= VOICE_BUDGET.MAX_RETRIEVAL_CALLS_PER_TURN) {
+    return { ok: false, error: { type: 'BUDGET_EXCEEDED', ... } };
+  }
+}
+
+// Idempotency check (hash-based fallback)
+const callId = providedCallId || hashToolCall(toolName, args);
+if (session.processedCalls.has(callId)) {
+  return session.cachedResponses.get(callId);  // Return cached
+}
+
+// Confirmation check
+if (toolMetadata.requiresConfirmation && !confirmationToken) {
+  return {
+    ok: false,
+    error: {
+      type: 'CONFIRMATION_REQUIRED',
+      confirmation_request: {
+        token: generateToken(),
+        expires: Date.now() + 300000,
+        preview: { tool: toolName, args }
+      }
+    }
+  };
+}
+
+// Execute tool
+const response = await registry.executeTool(toolName, args, context);
+
+// Apply intents through state controller
+if (response.intents) {
+  for (const intent of response.intents) {
+    stateController.applyIntent(session, intent);
+  }
+}
+
+// Cache response
+session.processedCalls.add(callId);
+session.cachedResponses.set(callId, response);
+
+return response;
+```
+
+**Actions:**
+
+1. Implement session-state.js with explicit mutation API
+2. Add orchestrator loop to server.js with policy enforcement
+3. Use explicit `session.mode` (remove all mode inference)
+4. Implement retrieval budget hard-fail for voice mode
+5. Implement hash-based idempotency with fallback
+6. Implement confirmation gating with CONFIRMATION_REQUIRED error type
+7. Test intent application through state controller
+
+**Testing:**
+- [ ] Mode restrictions work (start_voice_session blocked in voice)
+- [ ] Voice budget enforced (3rd retrieval call rejected)
+- [ ] Idempotency works with missing provider IDs
+- [ ] Confirmation flow works (token generation + validation)
+- [ ] Intents applied through state controller (no direct mutation)
+- [ ] session.mode used everywhere (no geminiSession presence checks)
+
+---
+
+### Phase 5: Migrate Tools (Incremental)
+
+**Migrate existing tools to registry structure:**
+
+**5a. Migrate Smallest Tools First:**
+
+Create directory structures and migrate:
+
+1. **ignore_user** (action, writes):
 ```
 voice-server/tools/ignore-user/
 ├── schema.json
@@ -2475,41 +3158,7 @@ voice-server/tools/ignore-user/
 └── handler.js
 ```
 
-**Actions:**
-
-1. Copy existing schema from `voice-server/server.js` lines 30-67 → `schema.json`
-2. Create `doc_summary.md` (2-4 lines)
-3. Copy docs from `prompts/tools/ignore_user.md` → `doc.md` (restructure to format)
-4. Extract handler logic from `server.js` lines 493-527 → `handler.js`
-5. Run `node voice-server/tools/tool-builder.js`
-6. Verify `tool_registry.json` is generated correctly
-7. Test in isolation (don't integrate yet)
-
-### Phase 3: Migrate start_voice_session Tool
-
-**Create directory structure:**
-
-```
-voice-server/tools/start-voice-session/
-├── schema.json
-├── doc_summary.md
-├── doc.md
-└── handler.js
-```
-
-**Actions:**
-
-1. Copy schema from `app/api/chat/route.ts` lines 33-47 → `schema.json` (convert to JSON Schema)
-2. Create `doc_summary.md` (2-4 lines, emphasize TEXT MODE ONLY)
-3. Create `doc.md` with context handoff pattern documentation
-4. Create `handler.js` (new - currently inline in text agent)
-5. Rebuild registry
-6. Verify tool only available in text mode (allowedModes: ["text"])
-
-### Phase 4: Migrate end_voice_session Tool
-
-**Create directory structure:**
-
+2. **end_voice_session** (utility, none):
 ```
 voice-server/tools/end-voice-session/
 ├── schema.json
@@ -2519,73 +3168,186 @@ voice-server/tools/end-voice-session/
 ```
 
 **Actions:**
+- Copy schemas from server.js → schema.json
+- Create doc_summary.md (2-4 lines)
+- Restructure existing docs → doc.md (7 required sections)
+- Extract handler logic → handler.js (return ToolResponse with intents)
+- Run `node voice-server/tools/tool-builder.js`
+- Verify tool_registry.json generated correctly
 
-1. Copy schema from `voice-server/server.js` lines 70-185 → `schema.json`
-2. Create `doc_summary.md` (2-4 lines, emphasize VOICE MODE ONLY)
-3. Copy docs from `prompts/tools/end_voice_session.md` → `doc.md` (restructure)
-4. Extract handler logic from `server.js` lines 529-574 → `handler.js`
-5. Rebuild registry
-6. Verify all 3 tools in registry (ignore_user, start_voice_session, end_voice_session)
+**5b. Migrate start_voice_session (Text-Only):**
 
-### Phase 5: Update Server Integration (Breaking Change - Test Thoroughly)
+```
+voice-server/tools/start-voice-session/
+├── schema.json
+├── doc_summary.md
+├── doc.md
+└── handler.js
+```
+
+**Critical:**
+- Set `allowedModes: ["text"]` in schema.json
+- Test that voice mode rejects this tool (orchestrator policy, not prompt)
+- Verify mode gating works at orchestrator level
+
+**5c. Add kb_search Reference Tool:**
+
+```
+voice-server/tools/kb-search/
+├── schema.json          (nested filters, top_k, include_metadata)
+├── doc_summary.md       (2-4 lines)
+├── doc.md              (complete 7-section reference)
+└── handler.js          (citations, confidence scores)
+```
+
+**Critical:**
+- Full reference implementation with nested schema
+- Test provider adapter conversion (complex nested objects)
+- Verify citations and metadata in response
+- Test format validations (email, uri, etc.)
+
+**Testing:**
+- [ ] ignore_user executes in both text and voice
+- [ ] end_voice_session executes in voice only
+- [ ] start_voice_session executes in text only (rejected in voice)
+- [ ] kb_search nested schema validates correctly
+- [ ] All tools return normalized ToolResponse with intents
+
+---
+
+### Phase 6: Prompt Loader + On-Demand Docs
+
+**Update prompt system to use registry summaries:**
 
 **Files to modify:**
 
-1. `voice-server/server.js`:
+1. `voice-server/prompt-loader.js` - Inject summaries, keep retrieval-first loop stable
 
-            - Add `await toolRegistry.load()` at startup
-            - Replace hardcoded schemas (lines 30-185) with registry import
-            - Replace tool handler switch case (lines 476-598) with orchestrator pattern
-            - Add session state context builder
+**Implementation:**
 
-2. `voice-server/prompt-loader.js`:
+```javascript
+import { toolRegistry } from './tools/registry.js';
 
-            - Import registry
-            - Replace manual tool doc loading with `toolRegistry.getDocumentation()`
+// Inject ONLY doc_summary.md (not full doc.md)
+const toolSummaries = toolRegistry.getSummaries();
 
-3. `voice-server/config.js`:
+const systemPrompt = `
+${coreInstructions}
 
-            - No changes needed (already imports from prompt-loader)
+## Available Tools
 
-4. `package.json`:
+${toolSummaries}
 
-            - Add `build:tools` script
-            - Add `prebuild` and `prestart` hooks
+## Agent Loop (Retrieval-First)
 
-**Testing checklist:**
+1. If you need more context: call retrieval tool(s)
+2. Review retrieved information
+3. Act or respond with full context
+4. Never guess when you can retrieve
+`;
+```
 
-- [ ] Server starts without errors
-- [ ] Registry version logged at startup
-- [ ] Tool schemas available in session config
-- [ ] Tool documentation injected into system prompt
-- [ ] `ignore_user` tool executes correctly (text + voice)
-- [ ] `start_voice_session` tool executes correctly (text only, rejected in voice)
-- [ ] `end_voice_session` tool executes correctly (voice only, rejected in text)
-- [ ] Context handoff works (pending_request passed to voice agent)
-- [ ] Error handling works (test invalid params, unknown tools, mode restrictions)
-- [ ] Session state context accessible to tools
-- [ ] Logs include tool version info
+**On-Demand Full Documentation:**
 
-### Phase 6: Cleanup & Documentation
+**Option A: Pre-inject full docs (TEXT MODE ONLY, small toolsets)**
+- Include full `doc.md` for all tools in system prompt
+- **EXPLICITLY FORBIDDEN for voice mode** (breaks latency constraints)
+- Acceptable for text mode with tiny toolsets (3-6 tools) if you accept prompt bloat
+- Monitor token usage as tools grow
 
-**Files to remove:**
+**Option B: reg_describe tool (future, 20+ tools)**
+- Add `reg_describe(tool_name)` meta-tool
+- Agent calls when needs full docs
+- Orchestrator injects full doc.md without tool execution
 
-- `prompts/tools/ignore_user.md` (content moved to `tools/ignore-user/doc.md`)
-- `prompts/tools/end_voice_session.md` (content moved to `tools/end-voice-session/doc.md`)
-- Inline tool definition in `app/api/chat/route.ts` for `start_voice_session` (now in registry)
+**For current plan (HARD CONSTRAINTS):**
+- **Voice mode**: Summaries-only (2-4 lines per tool) - NO full docs injection, ever
+- **Text mode**: Summaries baseline; optionally fuller docs (Option A) only if toolset is tiny and prompt bloat is acceptable
 
-**Files to update:**
+**Actions:**
 
-- `.gitignore` - Add `tool_registry.json`
-- `README.md` - Document new tool system
-- Deployment docs - Add build step
+1. Update prompt-loader.js to import registry
+2. Inject tool summaries (doc_summary.md) - always for voice, baseline for text
+3. Keep stable retrieval-first loop instructions
+4. Voice mode: summaries only (hard constraint for latency)
+5. Text mode: summaries baseline, allow fuller docs for small toolsets if needed
+6. Monitor token usage
 
-**Validation:**
+**Testing:**
+- [ ] System prompt includes tool summaries
+- [ ] Retrieval-first loop instructions stable
+- [ ] Voice mode: summaries only (NO full docs)
+- [ ] Text mode: summaries + optional full docs for small toolsets
+- [ ] No prompt changes when tools updated (rebuild only)
 
-- [ ] No references to old markdown files
-- [ ] Build artifact gitignored
-- [ ] Documentation complete
-- [ ] All tests passing
+---
+
+### Phase 7: Integration Tests (Real Failure Modes)
+
+**Test the actual failure scenarios that matter in production:**
+
+**Test Cases:**
+
+1. **Ajv Validation Errors (Including Formats):**
+   - Invalid email format
+   - Invalid date-time format
+   - Missing required fields
+   - Invalid enum values
+   - Nested object validation failures
+
+2. **Idempotency Dedupe with Missing Provider IDs:**
+   - Same tool call twice with no call.id
+   - Hash-based fallback works
+   - Cached response returned
+   - Second execution prevented
+
+3. **Confirmation Token Expiry + Replay Rejection:**
+   - Generate confirmation token
+   - Wait for expiry
+   - Attempt execution with expired token
+   - Verify rejection
+   - Test replay prevention
+
+4. **Mode Restrictions:**
+   - Call start_voice_session in voice mode (rejected)
+   - Call end_voice_session in text mode (rejected)
+   - Verify error type is MODE_RESTRICTED
+   - Verify enforcement at orchestrator level (not prompt)
+
+5. **Retrieval Budget Hard-Fail in Voice:**
+   - Call 2 retrieval tools (allowed)
+   - Call 3rd retrieval tool (rejected with BUDGET_EXCEEDED)
+   - Verify hard fail (not soft warning)
+   - Test budget reset per turn
+
+6. **Intent Application:**
+   - Tool returns intents
+   - State controller applies intents
+   - Verify state changes
+   - Verify no direct mutation by tools
+
+7. **Transport Full ToolResponse:**
+   - Tool returns error
+   - Transport sends full ToolResponse (not just data)
+   - Verify error structure preserved
+   - Test with both OpenAI and Gemini transports
+
+**Actions:**
+
+1. Write integration tests for each scenario
+2. Test with both transports (OpenAI + Gemini Live)
+3. Verify policy enforcement
+4. Test error handling paths
+5. Document test results
+
+**Testing:**
+- [ ] All Ajv format validations work
+- [ ] Idempotency prevents duplicate executions
+- [ ] Confirmation flow enforced
+- [ ] Mode restrictions enforced
+- [ ] Voice budget hard-fails at limit
+- [ ] Intents applied correctly
+- [ ] Transports preserve ToolResponse structure
 
 ## 7. Key Architectural Decisions Summary
 
@@ -2595,7 +3357,9 @@ voice-server/tools/end-voice-session/
 
 |--------|----------|-----------|
 
-| **Source of Truth** | Markdown files (`.md`) | PR reviews, diffs, history, ownership |
+| **Contract Source** | JSON Schema (`schema.json`) | Executable, typed, validated with Ajv |
+
+| **Documentation Source** | Markdown (`.md`) | Human-readable, PR reviewed, versioned |
 
 | **Build Artifact** | `tool_registry.json` | Stable runtime format, consistent |
 
@@ -2714,7 +3478,7 @@ This asymmetry is enforced via `allowedModes` in schema, not in prompt.
 
 | kb_get | retrieval | read_only | ✓ | ✓ | 500 | ✗ |
 
-| calendar_get_availability | retrieval | read_only | ✗ | ✓ | 1500 | ✗ |
+| calendar_get_availability | retrieval | read_only | ✓ | ✓ | 1500 | ✗ |
 
 | calendar_create_event | action | writes | ✗ | ✓ | 3000 | ✓ |
 
@@ -2730,12 +3494,15 @@ This asymmetry is enforced via `allowedModes` in schema, not in prompt.
 
 ```javascript
 // VOICE TOOL BUDGET CONSTANTS (voice-server/config.js)
+// NOTE: These are INDEPENDENT from per-tool latencyBudgetMs metadata
+// - latencyBudgetMs = per-tool expectation (soft warning)
+// - These constants = hard gates enforced at orchestrator level
 export const VOICE_BUDGET = {
-  MAX_RETRIEVAL_CALLS_PER_TURN: 2,
-  MAX_TOTAL_TOOL_CALLS_PER_TURN: 3,
-  MAX_TOP_K: 3,
-  LATENCY_BUDGET_MS: 1500,  // Total budget per turn
-  HARD_FAIL_AFTER: true      // Reject calls beyond budget
+  MAX_RETRIEVAL_CALLS_PER_TURN: 2,    // Hard limit on retrieval count (not latency)
+  MAX_TOTAL_TOOL_CALLS_PER_TURN: 3,   // Hard limit on total tool count
+  MAX_TOP_K: 3,                        // Clamp retrieval result size
+  LATENCY_BUDGET_MS: 1500,             // Total cumulative latency per turn (soft guidance)
+  HARD_FAIL_AFTER: true                // Reject calls beyond budget (no soft warning)
 };
 
 // In orchestrator (server.js) - Track and enforce
@@ -2749,15 +3516,19 @@ if (mode === 'voice') {
     totalCallsThisTurn++;
     if (totalCallsThisTurn > VOICE_BUDGET.MAX_TOTAL_TOOL_CALLS_PER_TURN) {
       console.error(`[${clientId}] VOICE BUDGET EXCEEDED: Total calls ${totalCallsThisTurn}/${VOICE_BUDGET.MAX_TOTAL_TOOL_CALLS_PER_TURN}`);
-      geminiSession.sendToolResponse({
-        functionResponses: [{
-          name: call.name,
-          response: { 
-            error: 'Voice mode tool call budget exceeded (max 3 per turn)',
-            type: ErrorType.RATE_LIMIT,
+      
+      // Return BUDGET_EXCEEDED through transport (preserves envelope)
+      await transport.sendToolResult({
+        id: call.id,
+        name: call.name,
+        result: {
+          ok: false,
+          error: {
+            type: ErrorType.BUDGET_EXCEEDED,
+            message: 'Voice mode tool call budget exceeded (max 3 per turn)',
             retryable: false
           }
-        }]
+        }
       });
       continue;
     }
@@ -2767,16 +3538,20 @@ if (mode === 'voice') {
       retrievalCallsThisTurn++;
       if (retrievalCallsThisTurn > VOICE_BUDGET.MAX_RETRIEVAL_CALLS_PER_TURN) {
         console.error(`[${clientId}] VOICE BUDGET EXCEEDED: Retrieval calls ${retrievalCallsThisTurn}/${VOICE_BUDGET.MAX_RETRIEVAL_CALLS_PER_TURN}`);
-        geminiSession.sendToolResponse({
-          functionResponses: [{
-            name: call.name,
-            response: { 
-              error: 'Voice mode retrieval budget exceeded (max 2 per turn)',
-              type: ErrorType.RATE_LIMIT,
+        
+        // Return BUDGET_EXCEEDED through transport (preserves envelope)
+        await transport.sendToolResult({
+          id: call.id,
+          name: call.name,
+          result: {
+            ok: false,
+            error: {
+              type: ErrorType.BUDGET_EXCEEDED,
+              message: 'Voice mode retrieval budget exceeded (max 2 per turn)',
               suggestion: 'Use kb_get with specific IDs instead',
               retryable: false
             }
-          }]
+          }
         });
         continue;
       }
@@ -2785,10 +3560,11 @@ if (mode === 'voice') {
     // ... execute tool ...
     const result = await toolRegistry.executeTool(call.name, executionContext);
     
-    // BUDGET CHECK 3: Accumulated latency
+    // BUDGET CHECK 3: Accumulated latency (SOFT LIMIT - logs only, does NOT block)
+    // NOTE: This is cumulative across turn; latencyBudgetMs is per-tool
     accumulatedLatencyMs += result.meta.duration;
     if (accumulatedLatencyMs > VOICE_BUDGET.LATENCY_BUDGET_MS) {
-      console.error(`[${clientId}] VOICE BUDGET EXCEEDED: Latency ${accumulatedLatencyMs}ms/${VOICE_BUDGET.LATENCY_BUDGET_MS}ms`);
+      console.error(`[${clientId}] VOICE LATENCY WARNING: ${accumulatedLatencyMs}ms/${VOICE_BUDGET.LATENCY_BUDGET_MS}ms (SOFT LIMIT - execution completed)`);
       // Log but don't fail (already executed) - inform model for next turn
     }
     
@@ -2808,27 +3584,81 @@ if (mode === 'voice') {
 ```
 
 **Benefits:**
-- **Hard enforcement**: Voice agents die by latency - this prevents it
+- **Hard enforcement**: Voice agents die by excessive tool calls - this prevents it
 - **Clear error messages**: Model learns budget constraints
 - **Auditable logs**: Every violation logged with context
 - **No prompt reliance**: Policy enforced in code, not instructions
 
+**CRITICAL: Understanding Three Budget Concepts**
+
+Voice mode has THREE independent budget enforcement mechanisms:
+
+1. **Per-Tool `latencyBudgetMs` (schema metadata)**:
+   - Type: **Soft limit** (warning only)
+   - Scope: Individual tool execution
+   - Purpose: Performance expectation / monitoring
+   - Enforcement: Logs warning AFTER execution completes
+   - Example: `kb_search` should complete in <800ms
+   - Does NOT block execution
+
+2. **Cumulative `VOICE_BUDGET.LATENCY_BUDGET_MS` (orchestrator)**:
+   - Type: **Soft limit** (warning only)
+   - Scope: Total latency across all tools in turn
+   - Purpose: Detect turns that are too slow overall
+   - Enforcement: Logs warning AFTER all executions complete
+   - Example: All tools in turn should total <1500ms
+   - Does NOT block execution (already completed)
+
+3. **Call Count Limits (orchestrator)**:
+   - Type: **Hard gates** (block execution)
+   - Scope: Number of tool invocations per turn
+   - Purpose: Maintain conversational flow quality
+   - Enforcement: Checks BEFORE execution, prevents call if exceeded
+   - Examples:
+     - `MAX_RETRIEVAL_CALLS_PER_TURN`: max 2 retrieval calls
+     - `MAX_TOTAL_TOOL_CALLS_PER_TURN`: max 3 total calls
+   - DOES block execution with `BUDGET_EXCEEDED` error
+
+**Why independent?**
+- A tool can be fast (<800ms per-tool budget) but still exhaust call count budget (3rd retrieval call)
+- A turn can have 2 tools (under call limit) but exceed cumulative latency (1500ms total)
+- Changing `latencyBudgetMs` in schema does NOT affect call count limits
+
 **Confirmation Flow:**
 
 ```javascript
-if (tool.requiresConfirmation && !context.confirmed) {
-  return { error: 'This action requires user confirmation' };
+// Orchestrator returns proper ToolResponse envelope
+if (tool.requiresConfirmation && !executionContext.confirmationToken) {
+  return {
+    ok: false,
+    error: {
+      type: ErrorType.CONFIRMATION_REQUIRED,
+      message: 'This action requires user confirmation',
+      confirmation_request: {
+        token: generateConfirmationToken(call),
+        expires: Date.now() + 300000,
+        preview: generatePreview(call.name, call.args)
+      }
+    }
+  };
 }
 ```
 
 **Retrieval Budget:**
 
 ```javascript
-// Count retrieval calls
+// Count retrieval calls and return ToolResponse envelope on budget exceeded
 if (tool.category === 'retrieval') {
   retrievalCallsThisTurn++;
   if (retrievalCallsThisTurn > MAX_RETRIEVAL_CALLS_VOICE) {
-    return { error: 'Retrieval budget exceeded' };
+    return {
+      ok: false,
+      error: {
+        type: ErrorType.BUDGET_EXCEEDED,
+        message: `Retrieval budget exceeded (max ${MAX_RETRIEVAL_CALLS_VOICE} per turn in voice mode)`,
+        retryable: false
+      }
+    };
   }
 }
 ```
@@ -3198,57 +4028,35 @@ export async function execute({ args, context }) {
 }
 ````
 
-### Recursive SDK Schema Conversion
+### Provider Schema Generation (Build Time)
 
-**`voice-server/tools/tool-builder.js`** - Updated `generateSDKSchema`:
+**Correct Approach:** Use **provider adapters** to convert schemas at build time. This keeps the build script provider-agnostic and avoids runtime complexity:
 
 ```javascript
-function generateSDKSchema(schema) {
-  return {
-    name: schema.toolId,
-    description: schema.description,
-    parameters: convertJSONSchemaToSDK(schema.parameters)
-  };
-}
+// ✅ PROVIDER ADAPTERS (Build-Time Conversion):
+import { toOpenAI } from './provider-adapters/openai.js';
+import { toGeminiNative } from './provider-adapters/gemini-native.js';
 
-/**
- * Recursively convert JSON Schema to Gemini SDK format
- */
-function convertJSONSchemaToSDK(jsonSchema) {
-  const sdkSchema = {
-    type: TYPE_MAP[jsonSchema.type] || 'STRING'
-  };
-  
-  // Handle object properties (nested)
-  if (jsonSchema.type === 'object' && jsonSchema.properties) {
-    sdkSchema.properties = {};
-    for (const [key, prop] of Object.entries(jsonSchema.properties)) {
-      sdkSchema.properties[key] = convertJSONSchemaToSDK(prop);
-    }
-    
-    if (jsonSchema.required) {
-      sdkSchema.required = jsonSchema.required;
-    }
-  }
-  
-  // Handle arrays (items)
-  if (jsonSchema.type === 'array' && jsonSchema.items) {
-    sdkSchema.items = convertJSONSchemaToSDK(jsonSchema.items);
-  }
-  
-  // Handle enums
-  if (jsonSchema.enum) {
-    sdkSchema.enum = jsonSchema.enum;
-  }
-  
-  // Always include description
-  if (jsonSchema.description) {
-    sdkSchema.description = jsonSchema.description;
-  }
-  
-  return sdkSchema;
-}
+// In buildTool():
+const providerSchemas = {
+  openai: toOpenAI(schema),          // OpenAI function schema
+  geminiNative: toGeminiNative(schema) // Gemini functionDeclarations
+};
+
+// Build artifact contains BOTH provider formats pre-computed
+return {
+  jsonSchema: schema.parameters,     // Canonical JSON Schema
+  providerSchemas: providerSchemas,  // Provider-specific formats
+  // ... other fields
+};
 ```
+
+**Why this matters:**
+- Provider conversion logic is isolated in `provider-adapters/` directory (not scattered)
+- Build script imports adapters (which import SDKs), but conversion is modular and isolated
+- Adding a new provider = add one adapter file + update buildTool() to call it
+- Runtime registry never does schema conversion (just returns pre-computed schemas)
+- Both schemas are always generated at build time (not conditional)
 
 ### State Controller Pattern
 
@@ -3319,14 +4127,27 @@ function generateIdempotencyKey(call, turnId) {
   // - Voice reconnects replaying turns
   // - Gemini Live resending events
   // - Provider ID instability
-  const canonical = JSON.stringify({
+  
+  // Use canonical stringify for deterministic hashing (recursive key sorting)
+  function canonicalStringify(obj) {
+    if (obj === null || typeof obj !== 'object') return obj;
+    if (Array.isArray(obj)) return obj.map(canonicalStringify);
+    
+    const sorted = {};
+    Object.keys(obj).sort().forEach(key => {
+      sorted[key] = canonicalStringify(obj[key]);
+    });
+    return sorted;
+  }
+  
+  const canonical = canonicalStringify({
     tool: call.name,
     args: call.args || {},
     turn: turnId
-  }, Object.keys(call.args || {}).sort());  // Sorted keys for determinism
+  });
   
   const hash = createHash('sha256')
-    .update(canonical)
+    .update(JSON.stringify(canonical))
     .digest('hex')
     .substring(0, 16);
   
@@ -3352,16 +4173,18 @@ async function handleModelMessage(message) {
       console.warn(`  Original turn: ${cached.turn}, Current turn: ${sessionTurnId}`);
       console.warn(`  Age: ${Date.now() - cached.timestamp}ms`);
       
-      // Return cached result (idempotent response)
-      geminiSession.sendToolResponse({
-        functionResponses: [{
-          name: call.name,
-          response: {
-            ...cached.result,
+      // Return cached result (idempotent response) through transport
+      await transport.sendToolResult({
+        id: call.id,
+        name: call.name,
+        result: {
+          ...cached.result,  // Full ToolResponse envelope
+          meta: {
+            ...cached.result.meta,
             _idempotent_cache_hit: true,
             _original_turn: cached.turn
           }
-        }]
+        }
       });
       continue;
     }
@@ -3371,9 +4194,10 @@ async function handleModelMessage(message) {
     // Execute tool through registry
     const result = await toolRegistry.executeTool(call.name, executionContext);
     
-    // IDEMPOTENCY: Cache result IMMEDIATELY (before sending response)
+    // IDEMPOTENCY: Cache FULL ToolResponse envelope (not just data field)
+    // This ensures cache hits can round-trip the same response shape
     executedToolCalls.set(idempotencyKey, {
-      result: result.ok ? result.data : { error: result.error },
+      result: result,  // Full ToolResponse: { ok, data/error, intents, meta }
       timestamp: Date.now(),
       tool: call.name,
       turn: sessionTurnId
@@ -3386,12 +4210,11 @@ async function handleModelMessage(message) {
       console.log(`[${clientId}] Idempotency cache evicted: ${firstKey}`);
     }
     
-    // Send response to model
-    geminiSession.sendToolResponse({
-      functionResponses: [{
-        name: call.name,
-        response: result.ok ? result.data : { error: result.error }
-      }]
+    // Send response to model through transport layer
+    await transport.sendToolResult({
+      id: call.id,
+      name: call.name,
+      result: result  // Full ToolResponse envelope (preserves ok, data, error, intents, meta)
     });
   }
 }
@@ -3399,10 +4222,17 @@ async function handleModelMessage(message) {
 
 **Benefits:**
 - **Hash-based fallback**: Works even if provider IDs unstable
-- **Per-turn scoping**: Same call in different turns = different keys
-- **Deterministic hashing**: Sorted args keys prevent false misses
+- **Per-turn scoping**: Same call in different turns = different keys (protects within a single handler invocation stream)
+- **Deterministic hashing**: Recursive key sorting prevents false misses
 - **Reject before execution**: No duplicate side effects
 - **Audit trail**: Logs duplicates with timing info
+
+**Stability Note (Gemini Live Constraint):**
+- **Gemini Live reconnect/replay is the common failure mode**: turn counters are NOT stable across reconnects
+- **Strong dedupe within a single Live stream**: turn-based hashing works reliably for duplicates in same session
+- **Best-effort across reconnects**: if Gemini Live reconnects and replays tool calls, they will be treated as new (different turn counter)
+- **Provider call IDs are preferred when available** (stable across events) - use these when provider supplies them
+- **For cross-reconnect stability**, provider must expose stable event IDs (Gemini Live currently does not guarantee this)
 
 ### Ajv Configuration
 
@@ -3427,6 +4257,13 @@ addFormats(ajv);
 
 ### Confirmation Flow Contract (RECOMMENDATION 1: First-Class Error Type)
 
+**ARCHITECTURAL INVARIANT: Confirmation is an orchestrator-only concern**
+
+- **Tools NEVER implement confirmation logic** - they only declare `requiresConfirmation: true` in metadata
+- **Orchestrator ALWAYS gates execution** - checks `requiresConfirmation` before calling handler
+- **No confirmation logic in handlers** - handlers assume all preconditions are met
+- **Why this matters**: Avoids duplicated UX, ensures consistent policy enforcement, prevents handlers from leaking orchestration concerns
+
 **Standardized confirmation error with structured request:**
 
 ```javascript
@@ -3445,7 +4282,7 @@ export const ErrorType = {
 };
 
 // In orchestrator - Standard confirmation response
-if (toolMetadata.requiresConfirmation && !executionContext.confirmed) {
+if (toolMetadata.requiresConfirmation && !executionContext.confirmationToken) {
   const result = {
     ok: false,
     error: {
@@ -3461,11 +4298,11 @@ if (toolMetadata.requiresConfirmation && !executionContext.confirmed) {
     }
   };
   
-  geminiSession.sendToolResponse({
-    functionResponses: [{
-      name: call.name,
-      response: result
-    }]
+  // Send confirmation request through transport layer
+  await transport.sendToolResult({
+    id: call.id,
+    name: call.name,
+    result: result  // Full ToolResponse envelope with CONFIRMATION_REQUIRED error
   });
   continue;
 }
@@ -3495,6 +4332,60 @@ function generateConfirmationToken(call) {
 - **UX-driven**: Clear contract for client confirmation UI
 - **Orchestration stays clean**: No ad-hoc blocks
 - **Expirable tokens**: Security against replay attacks
+
+**Confirmation State Management (Single Source of Truth):**
+
+The orchestrator owns confirmation state and follows this invariant pattern:
+
+1. **Orchestrator blocks execution** when `requiresConfirmation: true` and no confirmation token present
+2. **Orchestrator stores pending confirmation** in session state:
+   ```javascript
+   // In session state
+   let pendingConfirmations = new Map(); // token -> { toolId, args, timestamp, argsHash }
+   
+   // When generating confirmation request
+   const token = generateConfirmationToken(call);
+   const argsHash = createHash('sha256').update(JSON.stringify(canonicalStringify(call.args))).digest('hex');
+   
+   pendingConfirmations.set(token, {
+     toolId: call.name,
+     args: call.args,
+     argsHash: argsHash,
+     timestamp: Date.now(),
+     expiresAt: Date.now() + 300000  // 5 min
+   });
+   ```
+
+3. **When user confirms**, orchestrator:
+   - Receives confirmation via message (e.g., `{ confirmationToken: "abc123..." }`)
+   - Validates token exists and hasn't expired
+   - Replays tool call with same args + confirmation token in context:
+     ```javascript
+     const pending = pendingConfirmations.get(confirmationToken);
+     if (!pending || Date.now() > pending.expiresAt) {
+       return { ok: false, error: { type: 'CONFIRMATION_EXPIRED', ... } };
+     }
+     
+     // Replay with confirmation token
+     const result = await toolRegistry.executeTool(pending.toolId, {
+       ...executionContext,
+       args: pending.args,
+       confirmationToken: confirmationToken  // This bypasses confirmation check
+     });
+     
+     // Clean up after successful execution
+     pendingConfirmations.delete(confirmationToken);
+     ```
+
+4. **Tools remain pure**: handlers never see confirmation tokens or logic, they just execute
+
+**Token Boundary (Critical):**
+- `confirmationToken` is passed to `executeTool()` in `executionContext` for orchestrator/registry gating
+- Registry uses token to bypass the confirmation check on replay
+- **Token is NOT forwarded into handler arguments or handler execution context**
+- Handlers remain pure and unaware of confirmation mechanics
+
+This keeps confirmation state centralized in the orchestrator, making it auditable and avoiding leaks into tool handlers or transports.
 
 ## 10. Reference Implementation: `calendar_get_availability`
 
@@ -4261,6 +5152,145 @@ Before merging to production:
 - [ ] Documentation updated with new error types
 - [ ] Migration complete (ignore_user, end_voice_session, kb_search, kb_get)
 
+---
+
+## 10. Cleaned-Up Architecture: Layer Responsibilities
+
+This section clarifies what each layer should own to maintain clean separation of concerns and avoid coupling.
+
+### A) Build Artifact (`tool_registry.json`) Contains
+
+For each tool:
+
+- **Canonical JSON Schema** (`parameters`) - Used for runtime validation
+- **Orchestration metadata**:
+  - `category` (retrieval/action/utility)
+  - `allowedModes` (text/voice restrictions)
+  - `requiresConfirmation` (boolean)
+  - `latencyBudgetMs` (performance guidance)
+  - `idempotent` (retry safety)
+  - `sideEffects` (none/read_only/writes)
+- **Documentation**:
+  - `summary` (250 char max, voice-optimized)
+  - `documentation` (full doc.md content)
+- **Handler reference**: `handlerPath` (file URL for dynamic import)
+- **Provider schemas** (BOTH precomputed at build time):
+  - `openai`: `{ type: "function", function: { name, description, parameters: jsonSchema } }`
+  - `geminiNative`: `{ name, description, parameters: convertedGeminiSchema }`
+
+**Key point**: All provider-specific conversions happen at **build time**, not runtime. Both schemas are always generated; the runtime transport layer decides which to use.
+
+### B) Runtime Registry (`registry.js`) Owns
+
+- **Loading the build artifact once** at startup
+- **Ajv validators** (with formats via `addFormats(ajv)`) per tool
+- **Executing handlers** via dynamic import
+- **Normalizing errors** into standard `ToolResponse` envelope:
+  ```javascript
+  {
+    ok: boolean,
+    data?: any,        // Present if ok === true
+    error?: {          // Present if ok === false
+      type: ErrorType,
+      message: string,
+      details?: any
+    },
+    meta: {
+      toolId: string,
+      version: string,
+      duration: number,
+      timestamp: string
+    },
+    intents?: Intent[] // State transitions to apply
+  }
+  ```
+- **Exposing `getProviderSchemas(provider)`** - Returns precomputed provider schemas from build artifact
+- **NO provider SDK imports** - No `@google/genai` types, no runtime schema conversion
+
+### C) Transport Layer (`*-transport.js`) Owns
+
+- **Parsing tool calls** from provider-specific events (OpenAI: `message.tool_calls`, Gemini Live: `message.toolCall.functionCalls`)
+- **Sending tool results** back in provider-specific protocol
+- **MUST send full normalized `ToolResponse`** as content/response to preserve:
+  - `ok` status
+  - `data` or `error`
+  - `meta` (for auditability)
+  - `intents` (for state controller)
+
+**Anti-pattern to avoid**:
+
+```javascript
+// ❌ BAD: Drops meta and intents
+content: JSON.stringify(result.ok ? result.data : { error: result.error })
+
+// ✅ GOOD: Preserves full envelope
+content: JSON.stringify(result)
+```
+
+### D) Orchestrator (`server.js`) Owns
+
+- **Policy checks** (executed BEFORE calling registry):
+  - Mode allowed check: `!toolMetadata.allowedModes.includes(currentMode)`
+  - **Retrieval budget enforcement** (HARD GATE - blocks execution):
+    - Voice mode: max 2 retrieval calls per turn (count-based, not latency-based)
+    - Returns `BUDGET_EXCEEDED` error, prevents execution
+    - **Independent from `latencyBudgetMs`** (which is per-tool soft warning)
+  - **Total tool call budget** (HARD GATE):
+    - Voice mode: max 3 tools per turn
+  - **Latency warnings** (SOFT LIMIT - does NOT block):
+    - Logs warning if `toolMetadata.latencyBudgetMs` exceeded
+    - Execution completes normally
+    - Used for performance monitoring only
+  - **Confirmation gating**: Check `requiresConfirmation` and block execution if not confirmed
+    - **INVARIANT**: Tools NEVER implement confirmation - only orchestrator gates it
+    - Tools declare `requiresConfirmation: true` in metadata
+    - Orchestrator returns `CONFIRMATION_REQUIRED` error before execution
+
+**IMPORTANT: Budget Concepts Are Independent**
+
+1. **`latencyBudgetMs` (per-tool metadata)**: Soft warning, logs if exceeded, does NOT prevent execution
+2. **`MAX_RETRIEVAL_CALLS_PER_TURN` (orchestrator constant)**: Hard gate, counts retrieval invocations, blocks execution when exceeded
+
+Changing one does NOT affect the other. A tool can be fast (<800ms) and still exhaust retrieval budget.
+
+- **Idempotency deduplication**:
+  - Generate key: `provider:${call.id}` if stable ID available
+  - Fallback: `hash:${sha256(tool + args + turn).substring(0, 16)}` if unstable/missing
+  - Cache results per session+turn to prevent duplicate side effects
+
+- **Applying intents via state controller**:
+  - **NEVER mutate local variables directly** (old buggy pattern)
+  - Always use `state.applyIntent(intent)` for auditable transitions
+  - State changes: `isActive`, `mode`, `shouldSuppressAudio`, `pendingEndVoiceSession`, etc.
+
+- **Explicit session mode tracking**:
+  - Store `session.mode` at creation time (explicit, not inferred)
+  - Pass through execution context everywhere
+  - **NEVER infer mode from geminiSession presence** (old buggy pattern: `currentMode = geminiSession ? 'voice' : 'text'`)
+  - Mode is set once at session creation and doesn't change
+
+### E) State Controller (`session-state.js`) Owns
+
+- **Centralized state mutations** via `applyIntent(intent)`
+- **Immutable state access** via `get(key)`
+- **Audit trail** of all state transitions (who changed what, when)
+- **Validation** of state transitions (e.g., can't suppress audio if session inactive)
+
+### F) Error Types (`error-types.js`) Owns
+
+- **Standardized error type enum**:
+  - `VALIDATION`, `NOT_FOUND`, `SESSION_INACTIVE`, `TRANSIENT`, `PERMANENT`
+  - `RATE_LIMIT`, `AUTH`, `CONFLICT`, `INTERNAL`
+  - `CONFIRMATION_REQUIRED` (for confirmation flow)
+- **Error factory functions** with consistent structure
+- **HTTP status code mapping** (for API responses)
+
+---
+
+**Architecture Summary**: Build generates provider schemas once, runtime validates and executes, transports handle protocol plumbing, orchestrator enforces policy, state controller owns mutations. Each layer has a single, clear responsibility with no overlap.
+
+---
+
 ## 11. Future Enhancements
 
 ### Tool Metadata Extensions
@@ -4302,6 +5332,56 @@ Enable/disable tools based on context:
   "condition": "context.user.isAuthenticated && context.mode === 'voice'"
 }
 ```
+
+### ToolResponse Schema Evolution
+
+**Current Version: 1.0.0** (formalized in this plan)
+
+**Planned Evolution Path:**
+
+**Version 1.1.0 - Retry & Async Support**
+```typescript
+interface ToolResponseMeta extends ToolResponseMetaV1_0 {
+  retryCount?: number;          // How many times this was retried
+  backgroundTaskId?: string;    // For async/long-running operations
+  parentCallId?: string;        // For tool composition
+}
+
+interface ToolError extends ToolErrorV1_0 {
+  retryAfterMs?: number;        // Backoff guidance for TRANSIENT errors
+  maxRetries?: number;          // Maximum retry attempts allowed
+}
+```
+
+**Version 2.0.0 - Streaming & Cancellation**
+```typescript
+interface ToolResponseStream {
+  ok: true;
+  stream: AsyncIterator<Chunk>;  // Streaming response data
+  intents?: Intent[];
+  meta: ToolResponseMeta;
+}
+
+interface ToolResponseCancellable {
+  ok: true;
+  data: any;
+  cancellationToken: CancellationToken;
+  intents?: Intent[];
+  meta: ToolResponseMeta;
+}
+```
+
+**Migration Strategy:**
+- Registry validates schema version on load
+- Handlers declare schema version in exports
+- Runtime checks compatibility and fails fast on mismatch
+- Backward compatibility maintained for N-1 versions
+
+**Why versioning matters:**
+- Enables safe evolution of error handling
+- Supports new execution models (streaming, background tasks)
+- Documents contract changes for tool authors
+- Prevents runtime surprises from schema drift
 
 ### Tool Composition
 
