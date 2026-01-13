@@ -41,7 +41,8 @@ VERTEXAI_LOCATION=us-central1
 
 **Example:**
 ```bash
-GEMINI_API_KEY=AIzaSyExample1234567890abcdefghijklmnop
+GEMINI_API_KEY=AIza...
+
 ```
 
 **Security:** Never commit this to version control. Always use Railway environment variables or `.env` file (which should be in `.gitignore`).
