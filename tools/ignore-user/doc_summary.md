@@ -1,0 +1,1 @@
+Punitive action tool that blocks disrespectful users for a specified duration (30s-24h) and immediately ends voice session with farewell message.
