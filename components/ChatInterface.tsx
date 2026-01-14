@@ -127,6 +127,25 @@ function normalizeTextResponse(text: string): string {
   return normalized;
 }
 
+function shouldAppendRetryHint(message: string): boolean {
+  const lower = message.toLowerCase();
+  if (lower.includes("please try again")) return false;
+  if (lower.includes("tool registry") || lower.includes("tool_registry.json")) return false;
+  if (lower.includes("run npm run build:tools") || lower.includes("npm run setup")) return false;
+  if (lower.includes("missing dependencies")) return false;
+  if (lower.includes("api key") || lower.includes("authentication")) return false;
+  return true;
+}
+
+function formatChatError(message: string): string {
+  const trimmed = message.trim();
+  if (!shouldAppendRetryHint(trimmed)) {
+    return `ERROR: ${trimmed}`;
+  }
+  const needsPeriod = !/[.!?]$/.test(trimmed);
+  return `ERROR: ${trimmed}${needsPeriod ? "." : ""} PLEASE TRY AGAIN.`;
+}
+
 export default function ChatInterface() {
   const [messages, setMessages] = useState<Message[]>([
     { id: "initial-assistant", role: "assistant", content: "HELLO. HOW CAN I HELP YOU TODAY?" }
@@ -785,7 +804,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
             if (lastIndex >= 0 && updated[lastIndex].id === assistantMessageId) {
               updated[lastIndex] = {
                 ...updated[lastIndex],
-                content: `ERROR: ${streamError.message}. PLEASE TRY AGAIN.`,
+                content: formatChatError(streamError.message),
                 streaming: false,
               };
             }
@@ -857,7 +876,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
       
       setMessages((prev) => [
         ...prev,
-        { id: generateMessageId(), role: "assistant", content: `ERROR: ${errorMessage}. PLEASE TRY AGAIN.` }
+        { id: generateMessageId(), role: "assistant", content: formatChatError(errorMessage) }
       ]);
     } finally {
       setIsLoading(false);
