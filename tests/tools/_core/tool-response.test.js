@@ -2,8 +2,8 @@
  * Unit tests for tool-response.js
  */
 
-import { validateToolResponse, TOOL_RESPONSE_SCHEMA_VERSION } from '../../../../tools/_core/tool-response.js';
-import { ErrorType } from '../../../../tools/_core/error-types.js';
+import { validateToolResponse, TOOL_RESPONSE_SCHEMA_VERSION } from '../../../tools/_core/tool-response.js';
+import { ErrorType } from '../../../tools/_core/error-types.js';
 
 describe('TOOL_RESPONSE_SCHEMA_VERSION', () => {
   test('should have correct version', () => {

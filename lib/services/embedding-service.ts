@@ -19,10 +19,11 @@ let genAI: GoogleGenAI | null = null;
  */
 function getGenAI(): GoogleGenAI {
   if (!genAI) {
-    const apiKey = process.env.GEMINI_API_KEY;
+    // Support both legacy and documented env var names.
+    const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_GENAI_API_KEY;
 
     if (!apiKey) {
-      throw new Error('GEMINI_API_KEY environment variable is required for embedding generation');
+      throw new Error('GEMINI_API_KEY (or GOOGLE_GENAI_API_KEY) environment variable is required for embedding generation');
     }
 
     genAI = new GoogleGenAI({ apiKey });

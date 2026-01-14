@@ -15,6 +15,11 @@ const customJestConfig = {
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/$1',
   },
+  // Support importing markdown files as raw strings (mirrors Next webpack asset/source).
+  // Needed because `lib/prompt-loader.ts` imports `prompts/*.md` at build time.
+  transform: {
+    '^.+\\.md$': '<rootDir>/tests/jest/markdownTransformer.cjs',
+  },
   testMatch: ['**/tests/**/*.test.ts', '**/tests/**/*.test.tsx', '**/tests/**/*.test.js'],
   collectCoverageFrom: [
     'app/**/*.{ts,tsx}',

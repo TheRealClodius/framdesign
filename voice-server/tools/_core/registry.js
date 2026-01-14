@@ -46,7 +46,7 @@ const HANDLER_IMPORTS = {
  *
  * Singleton instance exported as `toolRegistry`
  */
-class ToolRegistry {
+export class ToolRegistry {
   constructor() {
     this.tools = new Map();           // toolId -> tool metadata
     this.handlers = new Map();        // toolId -> handler function

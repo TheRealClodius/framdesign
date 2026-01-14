@@ -3,9 +3,9 @@
  * Tests budget exceeded, mode restrictions, validation failures, etc.
  */
 
-import { toolRegistry } from '../../../tools/_core/registry.js';
-import { createStateController } from '../../../tools/_core/state-controller.js';
-import { ErrorType } from '../../../tools/_core/error-types.js';
+import { toolRegistry } from '../../tools/_core/registry.js';
+import { createStateController } from '../../tools/_core/state-controller.js';
+import { ErrorType } from '../../tools/_core/error-types.js';
 
 describe('E2E: Error Scenarios', () => {
   beforeAll(async () => {
@@ -143,7 +143,7 @@ describe('E2E: Error Scenarios', () => {
         clientId: 'test-123',
         args: {
           duration_seconds: 60,
-          farewell_message: 'Goodbye'
+          farewell_message: 'Goodbye. Take care.'
         },
         session: {
           isActive: false // Inactive session = permanent error

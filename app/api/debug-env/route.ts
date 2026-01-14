@@ -8,6 +8,11 @@ export async function GET() {
       length: process.env.GEMINI_API_KEY?.length || 0,
       startsWith: process.env.GEMINI_API_KEY?.substring(0, 4) || "N/A",
     },
+    GOOGLE_GENAI_API_KEY: {
+      present: !!process.env.GOOGLE_GENAI_API_KEY,
+      length: process.env.GOOGLE_GENAI_API_KEY?.length || 0,
+      startsWith: process.env.GOOGLE_GENAI_API_KEY?.substring(0, 4) || "N/A",
+    },
     RESEND_API_KEY: {
       present: !!process.env.RESEND_API_KEY,
       length: process.env.RESEND_API_KEY?.length || 0,

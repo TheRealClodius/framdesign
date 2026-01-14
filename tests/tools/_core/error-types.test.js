@@ -2,7 +2,7 @@
  * Unit tests for error-types.js
  */
 
-import { ErrorType, ToolError, IntentType } from '../../../../tools/_core/error-types.js';
+import { ErrorType, ToolError, IntentType } from '../../../tools/_core/error-types.js';
 
 describe('ErrorType', () => {
   test('should have all expected error types', () => {

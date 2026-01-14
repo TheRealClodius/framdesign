@@ -146,7 +146,7 @@ describe('Text Agent: Tool Integration', () => {
                     name: 'ignore_user',
                     args: {
                       duration_seconds: 60,
-                      farewell_message: 'Goodbye'
+                      farewell_message: 'Goodbye. Take care.'
                     }
                   }
                 }
@@ -193,7 +193,7 @@ describe('Text Agent: Tool Integration', () => {
         name: 'ignore_user',
         args: {
           duration_seconds: 60,
-          farewell_message: 'Goodbye'
+          farewell_message: 'Goodbye. Take care.'
         }
       };
 
@@ -240,7 +240,7 @@ describe('Text Agent: Tool Integration', () => {
       expect(result.ok).toBe(true);
       expect(result.data).toBeDefined();
       expect(result.data.durationSeconds).toBe(60);
-      expect(result.data.farewellMessage).toBe('Goodbye');
+      expect(result.data.farewellMessage).toBe('Goodbye. Take care.');
       expect(result.data.timeoutUntil).toBeDefined();
 
       // Simulate API response format
@@ -252,7 +252,7 @@ describe('Text Agent: Tool Integration', () => {
         }
       };
 
-      expect(apiResponse.message).toBe('Goodbye');
+      expect(apiResponse.message).toBe('Goodbye. Take care.');
       expect(apiResponse.timeout.duration).toBe(60);
     });
 

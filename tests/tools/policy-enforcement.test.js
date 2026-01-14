@@ -3,8 +3,8 @@
  * Tests mode restrictions, budget limits, and confirmation requirements
  */
 
-import { ErrorType } from '../../../tools/_core/error-types.js';
-import { toolRegistry } from '../../../tools/_core/registry.js';
+import { ErrorType } from '../../tools/_core/error-types.js';
+import { toolRegistry } from '../../tools/_core/registry.js';
 
 describe('Policy Enforcement', () => {
   beforeAll(async () => {
