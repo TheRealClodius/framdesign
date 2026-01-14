@@ -3,9 +3,10 @@
  * Tests full tool execution flow with WebSocket transport
  */
 
-import { toolRegistry } from '../../../tools/_core/registry.js';
-import { createStateController } from '../../../tools/_core/state-controller.js';
-import { ErrorType } from '../../../tools/_core/error-types.js';
+import { jest } from '@jest/globals';
+import { toolRegistry } from '../../tools/_core/registry.js';
+import { createStateController } from '../../tools/_core/state-controller.js';
+import { ErrorType } from '../../tools/_core/error-types.js';
 
 describe('E2E: Tool Execution in Voice Mode', () => {
   beforeAll(async () => {
@@ -94,7 +95,7 @@ describe('E2E: Tool Execution in Voice Mode', () => {
         ws: mockWs,
         args: {
           duration_seconds: 60,
-          farewell_message: 'Goodbye'
+          farewell_message: 'Goodbye. Take care.'
         },
         session: {
           isActive: state.get('isActive'),
@@ -109,7 +110,7 @@ describe('E2E: Tool Execution in Voice Mode', () => {
 
       expect(result.ok).toBe(true);
       expect(result.data.durationSeconds).toBe(60);
-      expect(result.data.farewellMessage).toBe('Goodbye');
+      expect(result.data.farewellMessage).toBe('Goodbye. Take care.');
       expect(result.intents).toBeDefined();
     });
 
@@ -123,7 +124,7 @@ describe('E2E: Tool Execution in Voice Mode', () => {
         clientId: 'test-voice-123',
         args: {
           duration_seconds: 60,
-          farewell_message: 'Goodbye'
+          farewell_message: 'Goodbye. Take care.'
         },
         session: {
           isActive: state.get('isActive'),

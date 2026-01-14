@@ -2,8 +2,9 @@
  * Unit tests for state-controller.js
  */
 
-import { createStateController } from '../../../../tools/_core/state-controller.js';
-import { IntentType } from '../../../../tools/_core/error-types.js';
+import { jest } from '@jest/globals';
+import { createStateController } from '../../../tools/_core/state-controller.js';
+import { IntentType } from '../../../tools/_core/error-types.js';
 
 describe('createStateController', () => {
   test('should create controller with initial state', () => {
@@ -184,7 +185,8 @@ describe('applyIntent', () => {
         type: IntentType.SET_PENDING_MESSAGE
       });
       
-      expect(state.get('pendingMessage')).toBeUndefined();
+      // When message is missing, controller should leave state unchanged.
+      expect(state.get('pendingMessage')).toBe(null);
       expect(consoleWarnSpy).toHaveBeenCalled();
       
       consoleWarnSpy.mockRestore();

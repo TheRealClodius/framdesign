@@ -3,10 +3,11 @@
  * Tests full tool execution flow with HTTP transport
  */
 
-import { toolRegistry } from '../../../tools/_core/registry.js';
-import { createStateController } from '../../../tools/_core/state-controller.js';
-import { retryWithBackoff } from '../../../tools/_core/retry-handler.js';
-import { ErrorType } from '../../../tools/_core/error-types.js';
+import { jest } from '@jest/globals';
+import { toolRegistry } from '../../tools/_core/registry.js';
+import { createStateController } from '../../tools/_core/state-controller.js';
+import { retryWithBackoff } from '../../tools/_core/retry-handler.js';
+import { ErrorType } from '../../tools/_core/error-types.js';
 
 describe('E2E: Tool Execution in Text Mode', () => {
   beforeAll(async () => {
@@ -65,7 +66,7 @@ describe('E2E: Tool Execution in Text Mode', () => {
         clientId: 'test-text-123',
         args: {
           duration_seconds: 60,
-          farewell_message: 'Goodbye'
+          farewell_message: 'Goodbye. Take care.'
         },
         session: {
           isActive: state.get('isActive'),
@@ -80,7 +81,7 @@ describe('E2E: Tool Execution in Text Mode', () => {
 
       expect(result.ok).toBe(true);
       expect(result.data.durationSeconds).toBe(60);
-      expect(result.data.farewellMessage).toBe('Goodbye');
+      expect(result.data.farewellMessage).toBe('Goodbye. Take care.');
     });
   });
 

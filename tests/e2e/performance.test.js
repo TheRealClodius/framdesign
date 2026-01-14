@@ -3,9 +3,9 @@
  * Tests latency budgets, concurrent executions, registry load time
  */
 
-import { toolRegistry } from '../../../tools/_core/registry.js';
-import { createStateController } from '../../../tools/_core/state-controller.js';
-import { getMetricsSummary } from '../../../tools/_core/metrics.js';
+import { toolRegistry } from '../../tools/_core/registry.js';
+import { createStateController } from '../../tools/_core/state-controller.js';
+import { getMetricsSummary } from '../../tools/_core/metrics.js';
 
 describe('E2E: Performance Tests', () => {
   beforeAll(async () => {
