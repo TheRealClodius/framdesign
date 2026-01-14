@@ -25,6 +25,10 @@ import { recordToolExecution, recordError, recordBudgetViolation, recordRegistry
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REGISTRY_PATH = join(__dirname, '..', 'tool_registry.json');
+const REGISTRY_PATH_FALLBACKS = [
+  REGISTRY_PATH,
+  resolve(process.cwd(), 'tools', 'tool_registry.json')
+];
 // Create require function for resolving modules  
 const require = createRequire(import.meta.url);
 // Project root is two levels up from _core
@@ -71,8 +75,30 @@ export class ToolRegistry {
     const loadStartTime = Date.now();
     this.providerSchemaCache.clear();
 
-    // Read registry file
-    const registryJson = readFileSync(REGISTRY_PATH, 'utf-8');
+    // Read registry file (handle bundled path differences in production)
+    let registryJson;
+    let registryPathUsed = null;
+    for (const registryPath of REGISTRY_PATH_FALLBACKS) {
+      try {
+        registryJson = readFileSync(registryPath, 'utf-8');
+        registryPathUsed = registryPath;
+        break;
+      } catch (error) {
+        if (error?.code !== 'ENOENT') {
+          throw error;
+        }
+      }
+    }
+
+    if (!registryJson) {
+      const attempted = REGISTRY_PATH_FALLBACKS.join(', ');
+      throw new Error(`Tool registry not found. Tried: ${attempted}`);
+    }
+
+    if (registryPathUsed && registryPathUsed !== REGISTRY_PATH) {
+      console.warn(`[Registry] Using fallback registry path: ${registryPathUsed}`);
+    }
+
     const registry = JSON.parse(registryJson);
 
     this.version = registry.version;
