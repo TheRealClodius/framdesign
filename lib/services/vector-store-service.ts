@@ -4,8 +4,11 @@
  * 
  * Supports two modes:
  * 1. Local mode: Direct LanceDB access (when VECTOR_SEARCH_API_URL not set)
+ *    - Requires @lancedb/lancedb package (installed as optionalDependency)
+ *    - NOT available in serverless environments (Vercel)
  * 2. API mode: HTTP API calls to vector-search-api service (when VECTOR_SEARCH_API_URL is set)
  *    - Required for Vercel (serverless, no persistent storage)
+ *    - Does NOT require LanceDB to be installed
  */
 
 import path from 'path';
@@ -19,23 +22,41 @@ const LANCE_DB_PATH = path.join(__dirname, '../../.lancedb');
 const TABLE_NAME = 'kb_documents';
 const VECTOR_SEARCH_API_URL = process.env.VECTOR_SEARCH_API_URL;
 
+// Check if we're in API mode (required for serverless/Vercel)
+const IS_API_MODE = !!VECTOR_SEARCH_API_URL;
+
 // Lazy-loaded LanceDB module (dynamic import to avoid bundling issues)
-let lancedbModule: typeof import('@lancedb/lancedb') | null = null;
+// Only loaded when LOCAL mode is used (not API mode)
+let lancedbModule: any = null;
 let db: any = null;
 let table: any = null;
 
 /**
  * Dynamically import LanceDB (only when needed for local mode)
  * This prevents Next.js from trying to bundle native modules during module evaluation
+ * 
+ * IMPORTANT: This function should ONLY be called when NOT in API mode.
+ * In API mode (serverless), LanceDB is not installed and this will fail.
  */
 async function getLanceDB() {
+  // Prevent LanceDB usage in API mode (serverless environments)
+  if (IS_API_MODE) {
+    throw new Error(
+      'LanceDB is not available in API mode (serverless). ' +
+      'VECTOR_SEARCH_API_URL is set, use the API endpoints instead.'
+    );
+  }
+  
   if (!lancedbModule) {
     try {
-      // Dynamic import to avoid bundling issues with native modules
-      lancedbModule = await import('@lancedb/lancedb');
+      // Dynamic import using a variable to prevent Webpack static analysis
+      // This ensures Webpack doesn't try to bundle LanceDB when in API mode
+      const modulePath = '@lancedb/lancedb';
+      lancedbModule = await import(/* webpackIgnore: true */ modulePath);
     } catch (error: any) {
       throw new Error(
-        `Failed to load LanceDB. Make sure @lancedb/lancedb is installed and you're running in a Node.js environment. ` +
+        `Failed to load LanceDB. This is expected in serverless environments. ` +
+        `For Vercel deployment, set VECTOR_SEARCH_API_URL to use the API mode. ` +
         `Original error: ${error.message}`
       );
     }
@@ -199,40 +220,44 @@ export async function searchSimilar(
   distance: number;
   score: number;
 }>> {
-  // Use API mode if configured (required for Vercel)
-  if (VECTOR_SEARCH_API_URL && queryText) {
-    try {
-      const response = await fetch(`${VECTOR_SEARCH_API_URL}/search`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          query: queryText,
-          top_k: topK,
-          filters: filters || {},
-        }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        if (data.ok && data.data.results) {
-          // API returns grouped documents, convert to chunk format
-          return data.data.results.flatMap((doc: any) => 
-            doc.chunks.map((chunk: any, idx: number) => ({
-              id: `${doc.id}_chunk_${idx}`,
-              text: chunk.text,
-              metadata: doc.metadata,
-              distance: 1 - chunk.score,
-              score: chunk.score,
-            }))
-          );
-        }
-      }
-    } catch (apiError) {
-      console.warn('[vector-store] API search failed, falling back to local:', apiError);
-      // Fall through to local mode
+  // Use API mode if configured (required for Vercel/serverless)
+  if (IS_API_MODE) {
+    if (!queryText) {
+      throw new Error('[vector-store] API mode requires queryText parameter');
     }
+    
+    const response = await fetch(`${VECTOR_SEARCH_API_URL}/search`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        query: queryText,
+        top_k: topK,
+        filters: filters || {},
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => 'Unknown error');
+      throw new Error(`[vector-store] API search failed: ${response.status} ${errorText}`);
+    }
+    
+    const data = await response.json();
+    if (!data.ok || !data.data?.results) {
+      throw new Error(`[vector-store] API returned invalid response: ${JSON.stringify(data)}`);
+    }
+    
+    // API returns grouped documents, convert to chunk format
+    return data.data.results.flatMap((doc: any) => 
+      doc.chunks.map((chunk: any, idx: number) => ({
+        id: `${doc.id}_chunk_${idx}`,
+        text: chunk.text,
+        metadata: doc.metadata,
+        distance: 1 - chunk.score,
+        score: chunk.score,
+      }))
+    );
   }
 
   // Local mode: Direct LanceDB access
@@ -340,20 +365,22 @@ export async function getAllDocumentIds(): Promise<string[]> {
  * Check if table exists and has documents
  */
 export async function hasDocuments(): Promise<boolean> {
-  // Check API first if configured
-  if (VECTOR_SEARCH_API_URL) {
+  // API mode (required for serverless/Vercel)
+  if (IS_API_MODE) {
     try {
       const response = await fetch(`${VECTOR_SEARCH_API_URL}/status`);
       if (response.ok) {
         const data = await response.json();
         return data.initialized && data.document_count > 0;
       }
+      return false;
     } catch (error) {
-      // Fallback to local check
+      console.warn('[vector-store] API status check failed:', error);
+      return false;
     }
   }
 
-  // Local mode check
+  // Local mode check (not available in serverless)
   try {
     const ids = await getAllDocumentIds();
     return ids.length > 0;
