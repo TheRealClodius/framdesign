@@ -11,8 +11,8 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Prompts directory is one level up from voice-server
-const PROMPTS_DIR = join(__dirname, '..', 'prompts');
+// Prompts directory is inside voice-server for Railway deployment
+const PROMPTS_DIR = join(__dirname, 'prompts');
 
 /**
  * Helper to read and strip top-level markdown header from a file

@@ -22,11 +22,11 @@ import { writeFileSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { FRAM_SYSTEM_PROMPT } from './config.js';
-import { toolRegistry } from '../tools/_core/registry.js';
-import { createStateController } from '../tools/_core/state-controller.js';
+import { toolRegistry } from './tools/_core/registry.js';
+import { createStateController } from './tools/_core/state-controller.js';
 import { GeminiLiveTransport } from './providers/gemini-live-transport.js';
-import { ToolError, ErrorType } from '../tools/_core/error-types.js';
-import { retryWithBackoff } from '../tools/_core/retry-handler.js';
+import { ToolError, ErrorType } from './tools/_core/error-types.js';
+import { retryWithBackoff } from './tools/_core/retry-handler.js';
 
 // Load environment variables from .env file (if present)
 config();
