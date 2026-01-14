@@ -86,6 +86,19 @@ export async function parseApiError(response: Response): Promise<ApiError> {
 export function handleServerError(error: unknown): Response {
   const errorMessage = error instanceof Error ? error.message : String(error);
   const errorLower = errorMessage.toLowerCase();
+
+  const isMissingToolRegistry =
+    (errorLower.includes("tool_registry.json") || errorLower.includes("tool registry")) &&
+    (errorLower.includes("enoent") ||
+      errorLower.includes("no such file") ||
+      errorLower.includes("cannot find module") ||
+      errorLower.includes("cannot find package"));
+
+  const isMissingAjvDependency =
+    (errorLower.includes("ajv") || errorLower.includes("ajv-formats")) &&
+    (errorLower.includes("cannot find module") ||
+      errorLower.includes("cannot find package") ||
+      errorLower.includes("module not found"));
   
   if (errorLower.includes("overloaded")) {
     return new Response(
@@ -106,6 +119,26 @@ export function handleServerError(error: unknown): Response {
         details: errorMessage,
       }),
       { status: 401, headers: { "Content-Type": "application/json" } }
+    );
+  }
+
+  if (isMissingToolRegistry) {
+    return new Response(
+      JSON.stringify({
+        error: "Tool registry missing. Run npm run build:tools (or npm run setup).",
+        details: errorMessage,
+      }),
+      { status: 500, headers: { "Content-Type": "application/json" } }
+    );
+  }
+
+  if (isMissingAjvDependency) {
+    return new Response(
+      JSON.stringify({
+        error: "Missing dependencies. Run npm install and then npm run build:tools.",
+        details: errorMessage,
+      }),
+      { status: 500, headers: { "Content-Type": "application/json" } }
     );
   }
   
