@@ -46,6 +46,7 @@ export class VoiceService extends EventTarget {
   private reconnectAttempts = 0;
   private reconnectTimer: NodeJS.Timeout | null = null;
   private heartbeatTimer: NodeJS.Timeout | null = null;
+  private connectionTimeoutTimer: NodeJS.Timeout | null = null;
   private conversationHistory: Array<{ role: string; content: string }> = [];
   private pendingRequest: string | null = null;
   private isIntentionallyStopping = false;
@@ -172,13 +173,45 @@ export class VoiceService extends EventTarget {
       this.startPromiseResolve = resolve;
       this.startPromiseReject = reject;
 
+      // Set connection timeout (10 seconds)
+      this.connectionTimeoutTimer = setTimeout(() => {
+        if (this.ws && this.ws.readyState !== WebSocket.OPEN) {
+          console.error('WebSocket connection timeout');
+
+          // Close the WebSocket if it's still trying to connect
+          if (this.ws.readyState === WebSocket.CONNECTING) {
+            this.ws.close();
+          }
+
+          const errorMessage = 'Connection timeout. Voice server may not be running or unreachable.';
+          this.dispatchEvent(new CustomEvent('error', {
+            detail: { message: errorMessage }
+          }));
+
+          if (this.startPromiseReject) {
+            this.startPromiseReject(new Error(errorMessage));
+            this.startPromiseReject = null;
+            this.startPromiseResolve = null;
+          }
+
+          this.cleanup();
+        }
+      }, 10000);
+
       try {
         this.ws = new WebSocket(VOICE_CONFIG.WEBSOCKET_URL);
 
         this.ws.onopen = async () => {
           console.log('WebSocket connected');
+
+          // Clear connection timeout since we successfully connected
+          if (this.connectionTimeoutTimer) {
+            clearTimeout(this.connectionTimeoutTimer);
+            this.connectionTimeoutTimer = null;
+          }
+
           this.reconnectAttempts = 0; // Reset on successful connection
-          
+
           // Clear any pending reconnect timer
           if (this.reconnectTimer) {
             clearTimeout(this.reconnectTimer);
@@ -224,10 +257,16 @@ export class VoiceService extends EventTarget {
 
         this.ws.onclose = (event) => {
           console.log('WebSocket closed', { code: event.code, reason: event.reason });
-          
+
+          // Clear connection timeout if still pending
+          if (this.connectionTimeoutTimer) {
+            clearTimeout(this.connectionTimeoutTimer);
+            this.connectionTimeoutTimer = null;
+          }
+
           // Stop heartbeat
           this.stopHeartbeat();
-          
+
           // Only attempt reconnection if not intentionally stopping and session was active
           if (!this.isIntentionallyStopping && this.isActive) {
             this.attemptReconnection();
@@ -235,6 +274,22 @@ export class VoiceService extends EventTarget {
             // Clean up if intentionally stopping or never started
             if (!this.isActive) {
               this.cleanup();
+
+              // If we have a pending start promise, reject it
+              // This handles the case where connection fails before session starts
+              if (this.startPromiseReject) {
+                const errorMessage = event.code === 1006
+                  ? 'Could not connect to voice server. Please ensure the voice server is running.'
+                  : `Connection failed: ${event.reason || 'Unknown error'}`;
+
+                this.dispatchEvent(new CustomEvent('error', {
+                  detail: { message: errorMessage }
+                }));
+
+                this.startPromiseReject(new Error(errorMessage));
+                this.startPromiseReject = null;
+                this.startPromiseResolve = null;
+              }
             }
           }
         };
@@ -926,11 +981,17 @@ export class VoiceService extends EventTarget {
   private cleanup(): void {
     // Stop heartbeat
     this.stopHeartbeat();
-    
+
     // Clear reconnect timer
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
+    }
+
+    // Clear connection timeout timer
+    if (this.connectionTimeoutTimer) {
+      clearTimeout(this.connectionTimeoutTimer);
+      this.connectionTimeoutTimer = null;
     }
 
     // Disconnect audio processing node first
