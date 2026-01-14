@@ -20,9 +20,9 @@ tools/
 │
 ├── _build/                 # Build-time infrastructure (run once, generate artifact)
 │   ├── tool-builder.js     # Main build script
-│   ├── provider-adapters/  # Schema format converters
+│   ├── provider-adapters/  # (Legacy) schema format converters
 │   │   ├── openai.js       # OpenAI function calling format
-│   │   └── gemini-native.js # Gemini SDK Type.* format
+│   │   └── gemini-native.js # Gemini "native" format (type strings)
 │   └── README.md           # Build process documentation
 │
 ├── {tool-name}/            # Individual tool directories
@@ -80,9 +80,8 @@ import { ErrorType, ToolError } from '@/tools/_core/error-types';
 
 **Implementation:**
 - Registry loads on first API request: `await toolRegistry.load()`
-- Provider schemas: `toolRegistry.getProviderSchemas('geminiNative')` converted to JSON Schema format
-- Uses `parametersJsonSchema` format for Gemini 3 (not Type.* enums)
-- Schema conversion: uppercase types ("OBJECT", "STRING") → lowercase ("object", "string")
+- Provider schemas: `toolRegistry.getProviderSchemas('geminiJsonSchema')`
+- Uses `parametersJsonSchema` format for Gemini 3 directly (no conversion glue)
 - Tool execution via `toolRegistry.executeTool()`
 - State controller initialized per request
 
@@ -110,8 +109,7 @@ npm run build:tools
 2. Validates `schema.json` with Ajv (JSON Schema draft 2020-12)
 3. Validates `doc.md` has required sections
 4. Validates `handler.js` exists and exports `execute()`
-5. Generates provider-specific schemas via adapters (OpenAI + Gemini Native)
-6. Outputs `tools/tool_registry.json` with content-based version hash
+5. Outputs `tools/tool_registry.json` with content-based version hash (canonical JSON Schema only)
 
 **Build artifact structure:**
 ```json
@@ -124,10 +122,6 @@ npm run build:tools
       "toolId": "ignore_user",
       "category": "action",
       "jsonSchema": { /* canonical JSON Schema */ },
-      "providerSchemas": {
-        "openai": { /* OpenAI format */ },
-        "geminiNative": { /* Gemini Type.* format */ }
-      },
       "summary": "Block user for specified duration...",
       "documentation": "# ignore_user\n\n## Summary...",
       "handlerPath": "file:///path/to/handler.js"
@@ -205,15 +199,12 @@ Tools can return intents for orchestrator to apply:
 **Solution:** Three-layer architecture
 
 1. **Registry Layer** - Stores canonical JSON Schema (provider-agnostic)
-2. **Adapter Layer** - Converts schemas at build time (OpenAI, Gemini Native)
+2. **Provider Views** - Derives provider schemas at runtime (cached)
 3. **Transport Layer** - Abstracts tool call/response protocol (per agent)
 
 **Gemini 3 Format Handling:**
-- **Voice Server:** Uses `geminiNative` schemas with Type.* enums (via Gemini Live API)
-- **Text Agent:** Uses `geminiNative` schemas converted to JSON Schema format with `parametersJsonSchema`
-  - Converts uppercase types ("OBJECT", "STRING") to lowercase ("object", "string")
-  - Uses `parametersJsonSchema` field instead of `parameters` field
-  - Compatible with Gemini 3's dual format support
+- **Voice Server:** Uses `geminiNative` schemas (derived from canonical schema)
+- **Text Agent:** Uses `geminiJsonSchema` schemas (provides `parametersJsonSchema` directly)
 
 **Result:** Switch providers in 2 lines:
 ```javascript

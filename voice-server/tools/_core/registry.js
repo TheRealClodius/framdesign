@@ -9,8 +9,7 @@
  *
  * ARCHITECTURE: Provider-agnostic runtime
  * - Stores canonical JSON Schema (for validation)
- * - Stores pre-computed provider schemas (from build step)
- * - NO runtime schema conversion
+ * - Derives provider schemas at runtime (cached)
  * - NO provider SDK imports (Type.* enums, etc.)
  */
 
@@ -55,6 +54,7 @@ export class ToolRegistry {
     this.gitCommit = null;            // Git commit at build time
     this.locked = false;              // Lock after load (no hot reload)
     this.frozenSnapshot = null;       // Immutable snapshot for sessions
+    this.providerSchemaCache = new Map(); // provider -> schemas[]
   }
 
   /**
@@ -69,6 +69,7 @@ export class ToolRegistry {
 
     console.log('Loading tool registry...');
     const loadStartTime = Date.now();
+    this.providerSchemaCache.clear();
 
     // Read registry file
     const registryJson = readFileSync(REGISTRY_PATH, 'utf-8');
@@ -182,17 +183,19 @@ export class ToolRegistry {
    * @returns {Array} - Array of provider-specific tool schemas
    */
   getProviderSchemas(provider = 'openai') {
-    if (provider !== 'openai' && provider !== 'geminiNative') {
+    if (provider !== 'openai' && provider !== 'geminiNative' && provider !== 'geminiJsonSchema') {
       throw new Error(`Unsupported provider: ${provider}`);
     }
 
+    const cached = this.providerSchemaCache.get(provider);
+    if (cached) return cached;
+
     const schemas = [];
     for (const tool of this.tools.values()) {
-      if (tool.providerSchemas && tool.providerSchemas[provider]) {
-        schemas.push(tool.providerSchemas[provider]);
-      }
+      schemas.push(buildProviderSchema(tool, provider));
     }
 
+    this.providerSchemaCache.set(provider, schemas);
     return schemas;
   }
 
@@ -438,12 +441,92 @@ export class ToolRegistry {
     this.tools.clear();
     this.handlers.clear();
     this.validators.clear();
+    this.providerSchemaCache.clear();
     this.version = null;
     this.gitCommit = null;
 
     // Reload
     await this.load();
   }
+}
+
+/**
+ * Build provider-specific tool schema view from canonical JSON Schema.
+ */
+function buildProviderSchema(tool, provider) {
+  if (provider === 'openai') {
+    return {
+      type: 'function',
+      function: {
+        name: tool.toolId,
+        description: tool.description,
+        parameters: tool.jsonSchema
+      }
+    };
+  }
+
+  if (provider === 'geminiJsonSchema') {
+    return {
+      name: tool.toolId,
+      description: tool.description,
+      parametersJsonSchema: tool.jsonSchema
+    };
+  }
+
+  // provider === 'geminiNative'
+  return {
+    name: tool.toolId,
+    description: tool.description,
+    parameters: convertJsonSchemaToGeminiNative(tool.jsonSchema)
+  };
+}
+
+/**
+ * Convert JSON Schema -> Gemini "native" function declaration schema.
+ *
+ * Emit uppercase string types ("OBJECT", "STRING", ...) to match existing artifacts
+ * and what the Gemini SDK expects in functionDeclarations.
+ */
+function convertJsonSchemaToGeminiNative(jsonSchema) {
+  const TYPE_MAP = {
+    string: 'STRING',
+    number: 'NUMBER',
+    integer: 'NUMBER',
+    boolean: 'BOOLEAN',
+    object: 'OBJECT',
+    array: 'ARRAY'
+  };
+
+  const type = (jsonSchema && typeof jsonSchema === 'object' && !Array.isArray(jsonSchema))
+    ? jsonSchema.type
+    : undefined;
+
+  const geminiSchema = {
+    type: TYPE_MAP[type] || 'STRING'
+  };
+
+  if (type === 'object' && jsonSchema.properties && typeof jsonSchema.properties === 'object') {
+    geminiSchema.properties = {};
+    for (const [key, prop] of Object.entries(jsonSchema.properties)) {
+      geminiSchema.properties[key] = convertJsonSchemaToGeminiNative(prop);
+    }
+    if (Array.isArray(jsonSchema.required)) {
+      geminiSchema.required = jsonSchema.required;
+    }
+  }
+
+  if (type === 'array' && jsonSchema.items) {
+    geminiSchema.items = convertJsonSchemaToGeminiNative(jsonSchema.items);
+  }
+
+  if (Array.isArray(jsonSchema?.enum)) {
+    geminiSchema.enum = jsonSchema.enum;
+  }
+  if (typeof jsonSchema?.description === 'string') {
+    geminiSchema.description = jsonSchema.description;
+  }
+
+  return geminiSchema;
 }
 
 /**

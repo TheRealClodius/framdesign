@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI } from "@google/genai";
 import { FRAM_SYSTEM_PROMPT } from "@/lib/config";
 import { createHash } from "crypto";
 import { handleServerError, isRetryableError } from "@/lib/errors";
@@ -17,50 +17,6 @@ import { retryWithBackoff as retryToolExecution } from '@/tools/_core/retry-hand
 // Ensure this route runs on the Node.js runtime (not Edge).
 // It depends on Node-only APIs (crypto, tool registry fs reads, etc.).
 export const runtime = "nodejs";
-
-// Convert geminiNative schema (with uppercase string types like "OBJECT", "STRING") 
-// to JSON Schema format (lowercase: "object", "string") for parametersJsonSchema
-function convertGeminiSchemaToJsonSchema(schema: any): any {
-  if (!schema || typeof schema !== 'object' || Array.isArray(schema)) {
-    return schema;
-  }
-  
-  const TYPE_MAP: Record<string, string> = {
-    'STRING': 'string',
-    'NUMBER': 'number',
-    'INTEGER': 'integer',
-    'BOOLEAN': 'boolean',
-    'OBJECT': 'object',
-    'ARRAY': 'array'
-  };
-  
-  // Create a copy to avoid mutating the original
-  const converted: any = { ...schema };
-  
-  // Convert uppercase type to lowercase JSON Schema type
-  if (schema.type && typeof schema.type === 'string') {
-    const upperType = schema.type.toUpperCase();
-    if (TYPE_MAP[upperType]) {
-      converted.type = TYPE_MAP[upperType];
-    }
-  }
-  
-  // Recursively convert properties
-  if (schema.properties && typeof schema.properties === 'object') {
-    converted.properties = {};
-    for (const [key, prop] of Object.entries(schema.properties)) {
-      converted.properties[key] = convertGeminiSchemaToJsonSchema(prop);
-    }
-  }
-  
-  // Recursively convert items for arrays
-  if (schema.items) {
-    converted.items = convertGeminiSchemaToJsonSchema(schema.items);
-  }
-  
-  // Preserve other fields (enum, description, required, etc.)
-  return converted;
-}
 
 // In-memory cache store for conversation caches
 // Key: conversation hash, Value: { cacheName: string, cachedMessageCount: number, summary: string | null, summaryUpToIndex: number, createdAt: number }
@@ -531,18 +487,8 @@ export async function POST(request: Request) {
     }
 
     // Get provider schemas for Gemini 3
-    // Convert geminiNative format (uppercase types) to JSON Schema format (lowercase types)
-    // Use parametersJsonSchema instead of parameters to avoid Type.* enum conversion
-    const geminiNativeSchemas = toolRegistry.getProviderSchemas('geminiNative');
-    const providerSchemas = geminiNativeSchemas.map(schema => {
-      // Convert to JSON Schema format and use parametersJsonSchema
-      const jsonSchema = convertGeminiSchemaToJsonSchema(schema.parameters);
-      return {
-        name: schema.name,
-        description: schema.description,
-        parametersJsonSchema: jsonSchema  // Use JSON Schema format instead of Type.* enums
-      };
-    });
+    // Use registry-provided Gemini JSON Schema view directly (no conversion glue).
+    const providerSchemas = toolRegistry.getProviderSchemas('geminiJsonSchema');
 
     // Enable caching
     const ENABLE_CACHING = true;

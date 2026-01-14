@@ -45,42 +45,17 @@ export async function POST(request: Request) {
   }
 
   // Get provider schemas for Gemini 3
-  const geminiNativeSchemas = toolRegistry.getProviderSchemas('geminiNative');
-  const providerSchemas = geminiNativeSchemas.map(schema => {
-    // Convert to JSON Schema format for Gemini 3
-    const jsonSchema = convertGeminiSchemaToJsonSchema(schema.parameters);
-    return {
-      name: schema.name,
-      description: schema.description,
-      parametersJsonSchema: jsonSchema  // Use JSON Schema format
-    };
-  });
+  const providerSchemas = toolRegistry.getProviderSchemas('geminiJsonSchema');
 }
 ```
 
 **Note:** Registry loads on first API request (Next.js on-demand loading). This is efficient and works correctly.
 
-### 2. Schema Format Conversion
+### 2. Schema Format
 
 **Gemini 3 Compatibility:**
-- Registry stores `geminiNative` schemas with uppercase types ("OBJECT", "STRING")
-- Gemini 3 API accepts `parametersJsonSchema` with lowercase JSON Schema types
-- Conversion function converts uppercase → lowercase for compatibility
-
-```typescript
-// Convert geminiNative schema to JSON Schema format
-function convertGeminiSchemaToJsonSchema(schema: any): any {
-  const TYPE_MAP = {
-    'STRING': 'string',
-    'NUMBER': 'number',
-    'INTEGER': 'integer',
-    'BOOLEAN': 'boolean',
-    'OBJECT': 'object',
-    'ARRAY': 'array'
-  };
-  // Recursively convert types...
-}
-```
+- Use the registry’s `geminiJsonSchema` provider view, which returns `{ name, description, parametersJsonSchema }`
+- No integration-side schema conversion is required
 
 ### 3. Tool Usage in Gemini API
 

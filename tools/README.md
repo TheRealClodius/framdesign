@@ -457,7 +457,7 @@ npm run build:tools
 
 ### Build output
 - Generates `tools/tool_registry.json` (gitignored)
-- Contains provider-specific schemas (OpenAI + Gemini Native)
+- Contains canonical JSON Schema (`jsonSchema`) for each tool (provider schemas are derived at runtime)
 - Version hash based on content (deterministic)
 - Git commit captured
 
@@ -574,7 +574,7 @@ Both agents are now using the unified tool registry system:
 
 - ✅ **Text Agent** (`app/api/chat/route.ts`)
   - Registry loads on first API request
-  - All 5 tools available via `providerSchemas` (JSON Schema format)
+  - All 5 tools available via registry provider schemas (Gemini 3 uses `geminiJsonSchema`)
   - State controller initialized per request
   - Tool execution via `toolRegistry.executeTool()`
   - Next.js webpack configuration for handler loading
