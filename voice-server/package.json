@@ -5,13 +5,17 @@
   "main": "server.js",
   "type": "module",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node --watch server.js"
+    "start": "tsx server.js",
+    "dev": "tsx --watch server.js"
   },
   "dependencies": {
     "@google/genai": "^1.35.0",
+    "@lancedb/lancedb": "^0.23.0",
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
     "ws": "^8.18.0",
-    "dotenv": "^16.4.7"
+    "dotenv": "^16.4.7",
+    "tsx": "^4.21.0"
   },
   "engines": {
     "node": ">=20.0.0"
