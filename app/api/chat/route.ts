@@ -9,10 +9,10 @@ import {
   TOKEN_CONFIG,
   STREAM_CONFIG,
 } from "@/lib/constants";
-import { toolRegistry } from '@/tools/_core/registry';
-import { ErrorType, ToolError } from '@/tools/_core/error-types';
-import { createStateController } from '@/tools/_core/state-controller';
-import { retryWithBackoff as retryToolExecution } from '@/tools/_core/retry-handler';
+import { toolRegistry } from '@/tools/_core/registry.js';
+import { ErrorType, ToolError } from '@/tools/_core/error-types.js';
+import { createStateController } from '@/tools/_core/state-controller.js';
+import { retryWithBackoff as retryToolExecution } from '@/tools/_core/retry-handler.js';
 
 // Convert geminiNative schema (with uppercase string types like "OBJECT", "STRING") 
 // to JSON Schema format (lowercase: "object", "string") for parametersJsonSchema
