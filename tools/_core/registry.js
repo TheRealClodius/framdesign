@@ -14,7 +14,7 @@
  * - NO provider SDK imports (Type.* enums, etc.)
  */
 
-import { readFileSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
 import { join, dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
@@ -25,11 +25,43 @@ import { validateToolResponse, TOOL_RESPONSE_SCHEMA_VERSION } from './tool-respo
 import { recordToolExecution, recordError, recordBudgetViolation, recordRegistryLoadTime } from './metrics.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const REGISTRY_PATH = join(__dirname, '..', 'tool_registry.json');
+const DEFAULT_REGISTRY_PATH = join(__dirname, '..', 'tool_registry.json');
 // Create require function for resolving modules  
 const require = createRequire(import.meta.url);
 // Project root is two levels up from _core
 const PROJECT_ROOT = resolve(__dirname, '..', '..');
+
+function resolveRegistryPath() {
+  const envPath = process.env.TOOL_REGISTRY_PATH;
+
+  // In Next.js serverless, `__dirname` may point into a compiled chunk directory.
+  // `process.cwd()` is typically the deployed bundle root (e.g., /var/task on Vercel).
+  const candidates = [
+    envPath,
+    join(process.cwd(), 'tools', 'tool_registry.json'),
+    join(PROJECT_ROOT, 'tools', 'tool_registry.json'),
+    DEFAULT_REGISTRY_PATH,
+  ].filter(Boolean);
+
+  for (const p of candidates) {
+    try {
+      if (existsSync(p)) return p;
+    } catch {
+      // ignore
+    }
+  }
+
+  const details = [
+    `cwd=${process.cwd()}`,
+    `__dirname=${__dirname}`,
+    `PROJECT_ROOT=${PROJECT_ROOT}`,
+    `DEFAULT_REGISTRY_PATH=${DEFAULT_REGISTRY_PATH}`,
+    `TOOL_REGISTRY_PATH=${envPath || ''}`,
+    `candidates=${candidates.join(',')}`,
+  ].join(' | ');
+
+  throw new Error(`tool_registry.json not found (${details})`);
+}
 
 // Static import map for Webpack compatibility
 // Webpack can statically analyze these imports at build time
@@ -70,8 +102,10 @@ export class ToolRegistry {
     console.log('Loading tool registry...');
     const loadStartTime = Date.now();
 
-    // Read registry file
-    const registryJson = readFileSync(REGISTRY_PATH, 'utf-8');
+    // Read registry file (robust path resolution for serverless deploys)
+    const registryPath = resolveRegistryPath();
+    console.log(`[Registry] Using registry file: ${registryPath}`);
+    const registryJson = readFileSync(registryPath, 'utf-8');
     const registry = JSON.parse(registryJson);
 
     this.version = registry.version;
