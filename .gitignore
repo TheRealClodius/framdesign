@@ -43,3 +43,9 @@ next-env.d.ts
 # tool registry build artifact
 tools/tool_registry.json
 .env*.local
+
+# vector-search-api dependencies (should never be committed)
+vector-search-api/node_modules/
+
+# LanceDB database files (binary, should be regenerated)
+.lancedb/
