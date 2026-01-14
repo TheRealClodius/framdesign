@@ -85,8 +85,15 @@ export async function parseApiError(response: Response): Promise<ApiError> {
  */
 export function handleServerError(error: unknown): Response {
   const errorMessage = error instanceof Error ? error.message : String(error);
+  const errorStack = error instanceof Error ? error.stack : undefined;
   const errorLower = errorMessage.toLowerCase();
-  
+
+  // Log full error details for debugging
+  console.error('[handleServerError] Error:', errorMessage);
+  if (errorStack) {
+    console.error('[handleServerError] Stack:', errorStack);
+  }
+
   if (errorLower.includes("overloaded")) {
     return new Response(
       JSON.stringify({ error: "The AI model is currently overloaded. Please try again in a moment." }),

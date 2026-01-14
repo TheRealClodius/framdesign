@@ -493,9 +493,11 @@ async function retryWithBackoff<T>(
 }
 
 export async function POST(request: Request) {
+  console.log('[Chat Route] POST request received');
   try {
     const body = await request.json();
     const { messages, timeoutExpired } = body;
+    console.log(`[Chat Route] Processing ${messages?.length || 0} messages`);
 
     // Support both legacy and documented env var names.
     // - `GEMINI_API_KEY` is used throughout the codebase and voice-server.
@@ -525,9 +527,16 @@ export async function POST(request: Request) {
 
     // Load registry if not already loaded
     if (!toolRegistry.getVersion()) {
-      await toolRegistry.load();
-      toolRegistry.lock();
-      console.log(`✓ Tool registry loaded: v${toolRegistry.getVersion()}`);
+      console.log('[Chat Route] Loading tool registry...');
+      try {
+        await toolRegistry.load();
+        toolRegistry.lock();
+        console.log(`[Chat Route] ✓ Tool registry loaded: v${toolRegistry.getVersion()}`);
+      } catch (registryError) {
+        console.error('[Chat Route] CRITICAL: Failed to load tool registry');
+        console.error('[Chat Route] Registry error:', registryError);
+        throw new Error(`Tool registry failed to load: ${registryError instanceof Error ? registryError.message : String(registryError)}`);
+      }
     }
 
     // Get provider schemas for Gemini 3
@@ -1235,7 +1244,12 @@ export async function POST(request: Request) {
     }
 
   } catch (error) {
-    console.error("Error in chat route:", error);
+    // Enhanced error logging for production debugging
+    console.error("=== CHAT ROUTE ERROR ===");
+    console.error("Error type:", error?.constructor?.name);
+    console.error("Error message:", error instanceof Error ? error.message : String(error));
+    console.error("Error stack:", error instanceof Error ? error.stack : "No stack trace");
+    console.error("========================");
     return handleServerError(error);
   }
 }
