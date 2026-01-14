@@ -8,50 +8,6 @@ import { toolRegistry } from '../../tools/_core/registry.js';
 import { createStateController } from '../../tools/_core/state-controller.js';
 import { ErrorType } from '../../tools/_core/error-types.js';
 
-// Mock the convertGeminiSchemaToJsonSchema function
-function convertGeminiSchemaToJsonSchema(parameters) {
-  // Simple conversion: uppercase types to lowercase
-  if (!parameters || typeof parameters !== 'object') {
-    return parameters;
-  }
-
-  function convertType(type) {
-    if (typeof type === 'string') {
-      return type.toLowerCase();
-    }
-    return type;
-  }
-
-  function convertSchema(schema) {
-    if (!schema || typeof schema !== 'object') {
-      return schema;
-    }
-
-    const converted = { ...schema };
-
-    if (converted.type) {
-      converted.type = convertType(converted.type);
-    }
-
-    if (converted.properties) {
-      converted.properties = Object.fromEntries(
-        Object.entries(converted.properties).map(([key, value]) => [
-          key,
-          convertSchema(value)
-        ])
-      );
-    }
-
-    if (converted.items) {
-      converted.items = convertSchema(converted.items);
-    }
-
-    return converted;
-  }
-
-  return convertSchema(parameters);
-}
-
 describe('Text Agent: Tool Integration', () => {
   let state;
 
@@ -71,56 +27,22 @@ describe('Text Agent: Tool Integration', () => {
 
   describe('Tool Schema Provision', () => {
     test('should provide all tools to Gemini API', () => {
-      const geminiNativeSchemas = toolRegistry.getProviderSchemas('geminiNative');
+      const schemas = toolRegistry.getProviderSchemas('geminiJsonSchema');
       
-      expect(geminiNativeSchemas).toBeDefined();
-      expect(Array.isArray(geminiNativeSchemas)).toBe(true);
-      expect(geminiNativeSchemas.length).toBeGreaterThan(0);
+      expect(schemas).toBeDefined();
+      expect(Array.isArray(schemas)).toBe(true);
+      expect(schemas.length).toBeGreaterThan(0);
       
       // Verify expected tools are present
-      const toolNames = geminiNativeSchemas.map(s => s.name);
+      const toolNames = schemas.map(s => s.name);
       expect(toolNames).toContain('ignore_user');
       expect(toolNames).toContain('start_voice_session');
       expect(toolNames).toContain('kb_search');
       expect(toolNames).toContain('kb_get');
     });
 
-    test('should convert schemas to JSON Schema format for Gemini 3', () => {
-      const geminiNativeSchemas = toolRegistry.getProviderSchemas('geminiNative');
-      const providerSchemas = geminiNativeSchemas.map(schema => {
-        const jsonSchema = convertGeminiSchemaToJsonSchema(schema.parameters);
-        return {
-          name: schema.name,
-          description: schema.description,
-          parametersJsonSchema: jsonSchema
-        };
-      });
-
-      // Verify conversion
-      for (const schema of providerSchemas) {
-        expect(schema).toHaveProperty('name');
-        expect(schema).toHaveProperty('description');
-        expect(schema).toHaveProperty('parametersJsonSchema');
-        
-        // Verify JSON Schema format (lowercase types)
-        if (schema.parametersJsonSchema?.type) {
-          expect(typeof schema.parametersJsonSchema.type).toBe('string');
-          // Type should be lowercase (JSON Schema format)
-          expect(schema.parametersJsonSchema.type).toBe(schema.parametersJsonSchema.type.toLowerCase());
-        }
-      }
-    });
-
     test('should have correct structure for Gemini 3 API', () => {
-      const geminiNativeSchemas = toolRegistry.getProviderSchemas('geminiNative');
-      const providerSchemas = geminiNativeSchemas.map(schema => {
-        const jsonSchema = convertGeminiSchemaToJsonSchema(schema.parameters);
-        return {
-          name: schema.name,
-          description: schema.description,
-          parametersJsonSchema: jsonSchema
-        };
-      });
+      const providerSchemas = toolRegistry.getProviderSchemas('geminiJsonSchema');
 
       // Verify structure matches Gemini 3 expectations
       for (const schema of providerSchemas) {
@@ -129,6 +51,10 @@ describe('Text Agent: Tool Integration', () => {
         expect(schema.parametersJsonSchema).toBeDefined();
         // Should use parametersJsonSchema, not parameters
         expect(schema.parameters).toBeUndefined();
+        // JSON Schema types should be lowercase (canonical)
+        if (schema.parametersJsonSchema?.type) {
+          expect(schema.parametersJsonSchema.type).toBe(schema.parametersJsonSchema.type.toLowerCase());
+        }
       }
     });
   });

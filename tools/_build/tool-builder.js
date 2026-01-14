@@ -11,12 +11,11 @@
  *    - Read doc_summary.md and doc.md
  *    - Validate documentation structure
  *    - Verify handler.js exists
- *    - Generate provider-specific schemas via adapters
  * 3. Generate tool_registry.json with:
  *    - Content-based version hash
  *    - Git commit
  *    - Build timestamp
- *    - Tool metadata with provider schemas
+ *    - Tool metadata with canonical JSON Schema
  */
 
 import { readdirSync, readFileSync, writeFileSync, existsSync, statSync } from 'fs';
@@ -26,8 +25,6 @@ import { createHash } from 'crypto';
 import { execSync } from 'child_process';
 import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
-import { toOpenAI } from './provider-adapters/openai.js';
-import { toGeminiNative } from './provider-adapters/gemini-native.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const TOOLS_DIR = join(__dirname, '..');
@@ -233,15 +230,8 @@ function buildTool(toolDirName) {
     handlerPath: pathToFileURL(handlerPath).href
   };
 
-  // Generate provider schemas
-  const providerSchemas = {
-    openai: toOpenAI(toolDefinition),
-    geminiNative: toGeminiNative(toolDefinition)
-  };
-
   return {
-    ...toolDefinition,
-    providerSchemas
+    ...toolDefinition
   };
 }
 

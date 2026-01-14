@@ -43,16 +43,15 @@
      - toOpenAI() - Pass-through converter (returns OpenAI function calling format)
 
    - ✅ `tools/_build/provider-adapters/gemini-native.js`
-     - toGeminiNative() - Recursive converter to Type.* enums
+     - toGeminiNative() - Recursive converter to Gemini "native" type strings
      - Handles nested objects, arrays, enums
-     - Uses `Type` from `@google/genai`
 
 3. **Build System**
    - ✅ `tools/_build/tool-builder.js`
      - Tool directory scanning (ignores _core, _build)
      - Schema.json validation with Ajv
      - Documentation validation (doc_summary.md ≤250 chars, doc.md with 7 required sections)
-     - Provider schema generation via adapters
+     - Emits canonical JSON Schema only (`jsonSchema`)
      - Content-based versioning (SHA256 hash)
      - Git commit tracking
      - Comprehensive error messages
@@ -68,7 +67,7 @@
 **Testing Results:**
 - ✅ Build script validates JSON Schema syntax
 - ✅ Ajv formats work (email, date-time, uri)
-- ✅ Both provider schemas generated (OpenAI + Gemini Native)
+- ✅ Canonical JSON Schema emitted for each tool
 - ✅ Missing files cause build failure
 - ✅ Missing doc sections cause build failure
 - ✅ toolId/directory name mismatch detected
@@ -93,7 +92,7 @@ Output: tools/tool_registry.json (gitignored)
 
 1. **Registry Implementation** - `tools/_core/registry.js`
    - ✅ `load()` - Reads tool_registry.json, compiles Ajv validators per tool, dynamic imports handlers
-   - ✅ `getProviderSchemas(provider)` - Returns pre-computed schemas (no runtime conversion)
+   - ✅ `getProviderSchemas(provider)` - Derives provider schema views at runtime (cached)
    - ✅ `getSummaries()` - Formats tool summaries for prompt injection
    - ✅ `getDocumentation(toolId)` - Returns full markdown documentation
    - ✅ `getToolMetadata(toolId)` - Returns orchestration metadata

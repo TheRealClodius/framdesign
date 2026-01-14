@@ -2,7 +2,7 @@
 
 ## Overview
 
-The tool registry build process transforms tool definitions into a compiled artifact (`tool_registry.json`) with validation and provider-specific schemas.
+The tool registry build process transforms tool definitions into a compiled artifact (`tool_registry.json`) with validation and **canonical JSON Schema** for each tool.
 
 ## Build Command
 
@@ -46,12 +46,9 @@ For each tool directory, validates:
   - ## Examples
   - ## Common Mistakes
 
-### 5. Provider Schema Generation
-- Convert canonical JSON Schema to provider-specific formats
-- **OpenAI adapter** (`toOpenAI`): Pass-through (OpenAI uses JSON Schema)
-- **Gemini Native adapter** (`toGeminiNative`): Convert to Type.* enums
-- Both schemas generated unconditionally (not optional)
-- Requires `@google/genai` installed (even if only using OpenAI at runtime)
+### 5. Provider Schema Derivation (Runtime)
+- Registry emits canonical JSON Schema only (`jsonSchema`)
+- Provider-specific schema views are derived at runtime by the registry loader (and cached)
 
 ### 6. Artifact Generation
 - Compute content-based version hash (SHA256 of tool IDs + schemas + docs)
@@ -91,24 +88,7 @@ For each tool directory, validates:
         "required": ["duration_seconds", "farewell_message"],
         "properties": { /* ... */ }
       },
-      "providerSchemas": {
-        "openai": {
-          "type": "function",
-          "function": {
-            "name": "ignore_user",
-            "description": "Block user for specified duration...",
-            "parameters": { /* JSON Schema */ }
-          }
-        },
-        "geminiNative": {
-          "name": "ignore_user",
-          "description": "Block user for specified duration...",
-          "parameters": {
-            "type": /* Type.OBJECT */,
-            "properties": { /* Type.* enums */ }
-          }
-        }
-      },
+      // Provider schemas are derived at runtime (not stored in artifact)
       "summary": "Block user for specified duration...",
       "documentation": "# ignore_user\n\n## Summary...",
       "handlerPath": "file:///path/to/handler.js"
@@ -117,13 +97,13 @@ For each tool directory, validates:
 }
 ```
 
-## Provider Adapters
+## Provider Schema Views (Runtime)
 
-### OpenAI Adapter (openai.js)
+### OpenAI-Compatible Tools
 
 **Purpose:** Convert to OpenAI function calling format
 
-**Implementation:** Pass-through (OpenAI uses JSON Schema natively)
+**Implementation:** Wrapper around canonical JSON Schema (OpenAI uses JSON Schema natively)
 
 **Output:**
 ```json
@@ -137,35 +117,26 @@ For each tool directory, validates:
 }
 ```
 
-### Gemini Native Adapter (gemini-native.js)
+### Gemini JSON Schema (Gemini 3)
 
-**Purpose:** Convert to Gemini SDK Type.* format
+**Purpose:** Provide `parametersJsonSchema` for Gemini tool calling
 
-**Implementation:** Recursive conversion
-
-**Type mapping:**
-- `string` → `Type.STRING`
-- `number` / `integer` → `Type.NUMBER`
-- `boolean` → `Type.BOOLEAN`
-- `object` → `Type.OBJECT` (recursively convert properties)
-- `array` → `Type.ARRAY` (recursively convert items)
+**Implementation:** Pass canonical JSON Schema through as `parametersJsonSchema` (no conversion needed)
 
 **Output:**
-```javascript
+```json
 {
-  name: "tool_name",
-  description: "Tool description",
-  parameters: {
-    type: Type.OBJECT,
-    properties: {
-      param1: { type: Type.STRING, description: "..." }
-    },
-    required: ["param1"]
-  }
+  "name": "tool_name",
+  "description": "Tool description",
+  "parametersJsonSchema": { /* JSON Schema */ }
 }
 ```
 
-**Critical:** Handles nested objects and arrays recursively
+### Gemini Native (Voice / Live)
+
+**Purpose:** Provide `parameters` using Gemini “native” type strings (`"OBJECT"`, `"STRING"`, ...)
+
+**Implementation:** Runtime conversion from canonical JSON Schema (minimal subset: type/properties/items/required/enum/description)
 
 ## Ajv Configuration
 
