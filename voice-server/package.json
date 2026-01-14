@@ -5,8 +5,7 @@
   "main": "server.js",
   "type": "module",
   "scripts": {
-    "start": "node health-test.js",
-    "start:full": "tsx server.js",
+    "start": "tsx server.js",
     "dev": "tsx --watch server.js"
   },
   "dependencies": {
