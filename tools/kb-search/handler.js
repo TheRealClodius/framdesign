@@ -33,6 +33,9 @@ export async function execute(context) {
     // Use path alias for Next.js compatibility, fallback to relative for Node.js
     let generateQueryEmbedding, searchSimilar;
     
+    // Check if we're in API mode (vector search service handles embeddings)
+    const isAPIMode = !!process.env.VECTOR_SEARCH_API_URL;
+    
     try {
       // Try Next.js path alias first (works in Next.js webpack)
       const embeddingModule = await import('@/lib/services/embedding-service');
@@ -51,24 +54,26 @@ export async function execute(context) {
       searchSimilar = vectorModule.searchSimilar;
     }
 
-    // Generate query embedding
-    let queryEmbedding;
-    try {
-      queryEmbedding = await generateQueryEmbedding(args.query);
-    } catch (error) {
-      // Classify embedding errors
-      if (error.message?.includes('API key') || error.message?.includes('Invalid')) {
-        throw new ToolError(ErrorType.AUTH, error.message, { retryable: false });
+    // Generate query embedding (only needed in local mode - API mode handles embeddings)
+    let queryEmbedding = [];
+    if (!isAPIMode) {
+      try {
+        queryEmbedding = await generateQueryEmbedding(args.query);
+      } catch (error) {
+        // Classify embedding errors
+        if (error.message?.includes('API key') || error.message?.includes('Invalid')) {
+          throw new ToolError(ErrorType.AUTH, error.message, { retryable: false });
+        }
+        if (error.message?.includes('rate limit') || error.message?.includes('quota')) {
+          throw new ToolError(ErrorType.RATE_LIMIT, error.message, { retryable: true });
+        }
+        if (error.message?.includes('timeout')) {
+          throw new ToolError(ErrorType.TRANSIENT, error.message, { retryable: true });
+        }
+        throw new ToolError(ErrorType.TRANSIENT, `Embedding generation failed: ${error.message}`, {
+          retryable: true
+        });
       }
-      if (error.message?.includes('rate limit') || error.message?.includes('quota')) {
-        throw new ToolError(ErrorType.RATE_LIMIT, error.message, { retryable: true });
-      }
-      if (error.message?.includes('timeout')) {
-        throw new ToolError(ErrorType.TRANSIENT, error.message, { retryable: true });
-      }
-      throw new ToolError(ErrorType.TRANSIENT, `Embedding generation failed: ${error.message}`, {
-        retryable: true
-      });
     }
 
     // Execute vector search

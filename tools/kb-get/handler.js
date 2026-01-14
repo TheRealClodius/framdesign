@@ -26,6 +26,9 @@ export async function execute(context) {
     // Use path alias for Next.js compatibility, fallback to relative for Node.js
     let generateQueryEmbedding, searchSimilar;
     
+    // Check if we're in API mode (vector search service handles embeddings)
+    const isAPIMode = !!process.env.VECTOR_SEARCH_API_URL;
+    
     try {
       // Try Next.js path alias first (works in Next.js webpack)
       const embeddingModule = await import('@/lib/services/embedding-service');
@@ -44,8 +47,11 @@ export async function execute(context) {
       searchSimilar = vectorModule.searchSimilar;
     }
 
-    // Generate a generic embedding (we'll filter results anyway)
-    const dummyEmbedding = await generateQueryEmbedding('document');
+    // Generate a generic embedding (only needed in local mode - API mode handles embeddings)
+    let dummyEmbedding = [];
+    if (!isAPIMode) {
+      dummyEmbedding = await generateQueryEmbedding('document');
+    }
 
     // Get many results (up to 100) to ensure we get all chunks
     const allResults = await searchSimilar(dummyEmbedding, 100, {}, 'document');
