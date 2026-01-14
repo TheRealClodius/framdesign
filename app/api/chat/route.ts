@@ -497,15 +497,18 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { messages, timeoutExpired } = body;
 
-    const apiKey = process.env.GEMINI_API_KEY;
+    // Support both legacy and documented env var names.
+    // - `GEMINI_API_KEY` is used throughout the codebase and voice-server.
+    // - `GOOGLE_GENAI_API_KEY` appears in deployment docs/checklists.
+    const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_GENAI_API_KEY;
 
     // Log for debugging (API key presence, not the key itself)
-    console.log("GEMINI_API_KEY present:", !!apiKey);
-    console.log("GEMINI_API_KEY length:", apiKey ? apiKey.length : 0);
+    console.log("GenAI API key present:", !!apiKey);
+    console.log("GenAI API key length:", apiKey ? apiKey.length : 0);
 
     if (!apiKey) {
       // Return a mock response if no API key is configured
-      console.error("GEMINI_API_KEY is missing!");
+      console.error("Missing GenAI API key: set GEMINI_API_KEY or GOOGLE_GENAI_API_KEY");
       return NextResponse.json({
         message: "I AM A DEMO AI ASSISTANT. PLEASE CONFIGURE THE GEMINI_API_KEY ENVIRONMENT VARIABLE TO ENABLE REAL RESPONSES."
       });
