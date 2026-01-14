@@ -1,8 +1,15 @@
-# Railway Voice Service Fix Required
+# Railway Voice Service - Fixed!
 
-## Current Issue
+## ✅ Deployment Status: SUCCESS
 
-The voice-service deployments are failing with "Deployment does not have an associated build" error. This indicates a Railway service configuration issue that requires dashboard access to fix.
+The voice-service has been successfully redeployed after deleting and recreating the service via Railway GraphQL API.
+
+**New Service URL:** `wss://voice-service-production-17a5.up.railway.app`
+**Health Check:** `https://voice-service-production-17a5.up.railway.app/health`
+
+## Previous Issue
+
+The voice-service deployments were failing with "Deployment does not have an associated build" error. This was fixed by deleting and recreating the service via Railway GraphQL API.
 
 ## Solution: Delete and Recreate the Service
 
