@@ -75,7 +75,19 @@ async function getTable() {
 
 /**
  * Upsert documents into vector store
+ * 
+ * Drops and recreates the table on each call to ensure clean schema.
+ * This prevents schema conflicts when metadata structure changes.
+ * 
+ * Important: The 'id' field in metadata is excluded to prevent overwriting
+ * the document ID. Frontmatter 'id' should be stored as 'entity_id' instead.
+ * 
  * @param documents - Array of document objects with id, text, embedding, metadata
+ *   - id: Unique chunk ID (format: {entity_id}_chunk_{index})
+ *   - text: Chunk text content
+ *   - embedding: Vector embedding (768 dimensions for text-embedding-004)
+ *   - metadata: Object with file_path, chunk_index, entity_id, etc.
+ *     NOTE: Must not contain 'id' field (would overwrite document ID)
  */
 export async function upsertDocuments(
   documents: Array<{
@@ -94,12 +106,41 @@ export async function upsertDocuments(
     }
 
     // Prepare data for LanceDB (array of objects)
-    const data = documents.map(doc => ({
-      id: doc.id,
-      vector: doc.embedding,
-      text: doc.text,
-      ...doc.metadata,
-    }));
+    // Ensure all metadata values are primitives (string, number, boolean)
+    const data = documents.map(doc => {
+      const row: any = {
+        id: String(doc.id), // Ensure ID is a string
+        vector: doc.embedding,
+        text: String(doc.text),
+      };
+      
+      // Add metadata fields, ensuring all values are primitives
+      // 
+      // ⚠️ CRITICAL: Skip 'id' field in metadata to prevent overwriting document ID
+      // The document ID (e.g., "lab:fram_design_chunk_0") is set above (line 112)
+      // If metadata contains an 'id' field, it would overwrite this unique chunk ID
+      // This causes all chunks from the same file to have duplicate IDs
+      // Frontmatter 'id' is stored as 'entity_id' in metadata (see embed-kb.ts line 155)
+      // See embed-kb.ts line 162 for the corresponding exclusion when building metadata
+      if (doc.metadata) {
+        for (const [key, value] of Object.entries(doc.metadata)) {
+          // Skip 'id' field - it would overwrite the document ID
+          if (key === 'id') continue;
+          // Skip if value is null or undefined
+          if (value === null || value === undefined) continue;
+          
+          // Ensure value is a primitive type
+          if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+            row[key] = value;
+          } else {
+            // Convert objects/arrays to JSON strings
+            row[key] = JSON.stringify(value);
+          }
+        }
+      }
+      
+      return row;
+    });
 
     // Check if table exists
     let currentTable: any = null;
@@ -110,12 +151,26 @@ export async function upsertDocuments(
     }
 
     if (currentTable) {
-      // Table exists, merge (upsert) data
-      await currentTable.mergeInsert(data);
-    } else {
-      // Create new table
-      table = await database.createTable(TABLE_NAME, data);
+      // Table exists - drop and recreate to avoid schema conflicts
+      // 
+      // ⚠️ NOTE: We drop and recreate instead of using mergeInsert to ensure:
+      // 1. Clean schema matching current metadata structure
+      // 2. No conflicts from schema changes
+      // 3. Consistent data structure
+      // If you need to preserve existing data, modify to use mergeInsert instead
+      try {
+        await database.dropTable(TABLE_NAME);
+        console.log(`[vector-store] Dropped existing table ${TABLE_NAME} for schema refresh`);
+      } catch (error: any) {
+        // Ignore errors if table doesn't exist
+        if (!error.message?.includes('not found')) {
+          console.warn(`[vector-store] Warning dropping table:`, error.message);
+        }
+      }
     }
+    
+    // Create new table with fresh schema
+    table = await database.createTable(TABLE_NAME, data);
 
     console.log(`[vector-store] Upserted ${documents.length} documents`);
   } catch (error) {
@@ -241,7 +296,7 @@ export async function deleteDocuments(ids: string[]): Promise<void> {
 
     // Delete by filtering out IDs
     // Note: LanceDB doesn't have direct delete by ID, so we need to filter
-    const allData = await currentTable.toArray();
+    const allData = await currentTable.query().toArray();
     const filteredData = allData.filter((row: any) => !ids.includes(String(row.id)));
     
     if (filteredData.length < allData.length) {
@@ -273,7 +328,7 @@ export async function getAllDocumentIds(): Promise<string[]> {
       return [];
     }
 
-    const allData = await currentTable.toArray();
+    const allData = await currentTable.query().toArray();
     return allData.map((row: any) => String(row.id));
   } catch (error) {
     console.error('[vector-store] Error getting document IDs:', error);

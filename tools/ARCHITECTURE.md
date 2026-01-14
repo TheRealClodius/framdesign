@@ -41,28 +41,63 @@ tools/
 **Import Path:**
 ```javascript
 import { toolRegistry } from '../tools/_core/registry.js';
+import { createStateController } from '../tools/_core/state-controller.js';
+import { GeminiLiveTransport } from './providers/gemini-live-transport.js';
 ```
 
-**Mode:** WebSocket with Gemini Live or OpenAI Realtime API
+**Mode:** WebSocket with Gemini Live API
+
+**Integration Status:** ✅ **COMPLETE**
+
+**Implementation:**
+- Registry loads at startup: `await toolRegistry.load()`
+- Provider schemas: `toolRegistry.getProviderSchemas('geminiNative')`
+- State controller initialized per session
+- Transport layer handles tool call/response protocol
+- Orchestrator enforces policies (mode restrictions, budgets)
+- All state managed via state controller (no direct variables)
 
 **Constraints:**
-- Max 2 retrieval calls per turn (voice latency budget)
+- Max 2 retrieval calls per turn (voice latency budget) - **HARD GATE**
+- Max 3 total tool calls per turn - **HARD GATE**
 - Max 800ms per retrieval tool (soft limit, logs warning)
 - Tool summaries only in prompt (tight for performance)
+
+**Available Tools:** All 5 tools (ignore_user, start_voice_session, end_voice_session, kb_search, kb_get)
 
 ### Text Agent (`app/api/chat/route.ts`)
 
 **Import Path:**
 ```javascript
 import { toolRegistry } from '@/tools/_core/registry.js';
+import { createStateController } from '@/tools/_core/state-controller.js';
+import { ErrorType, ToolError } from '@/tools/_core/error-types';
 ```
 
-**Mode:** HTTP streaming with any LLM provider (OpenAI, Anthropic, etc.)
+**Mode:** HTTP streaming with Google Gemini API (gemini-3-flash-preview)
+
+**Integration Status:** ✅ **COMPLETE**
+
+**Implementation:**
+- Registry loads on first API request: `await toolRegistry.load()`
+- Provider schemas: `toolRegistry.getProviderSchemas('geminiNative')` converted to JSON Schema format
+- Uses `parametersJsonSchema` format for Gemini 3 (not Type.* enums)
+- Schema conversion: uppercase types ("OBJECT", "STRING") → lowercase ("object", "string")
+- Tool execution via `toolRegistry.executeTool()`
+- State controller initialized per request
 
 **Constraints:**
 - Max 5 retrieval calls per turn (text flexibility)
 - Max 2s per retrieval tool (soft limit)
 - Can use fuller tool context when needed
+
+**Available Tools:** All 5 tools (ignore_user, start_voice_session, end_voice_session, kb_search, kb_get)
+
+**Next.js Configuration:**
+- Webpack configured to handle markdown files
+- Path alias `@/` configured for tool imports
+- Handler loading uses `require()` for Next.js (bypasses webpack bundling)
+- Dynamic imports work for both Node.js and Next.js environments
 
 ## Build Process
 
@@ -173,6 +208,13 @@ Tools can return intents for orchestrator to apply:
 2. **Adapter Layer** - Converts schemas at build time (OpenAI, Gemini Native)
 3. **Transport Layer** - Abstracts tool call/response protocol (per agent)
 
+**Gemini 3 Format Handling:**
+- **Voice Server:** Uses `geminiNative` schemas with Type.* enums (via Gemini Live API)
+- **Text Agent:** Uses `geminiNative` schemas converted to JSON Schema format with `parametersJsonSchema`
+  - Converts uppercase types ("OBJECT", "STRING") to lowercase ("object", "string")
+  - Uses `parametersJsonSchema` field instead of `parameters` field
+  - Compatible with Gemini 3's dual format support
+
 **Result:** Switch providers in 2 lines:
 ```javascript
 // const transport = new GeminiLiveTransport(geminiSession);
@@ -237,12 +279,35 @@ const transport = new OpenAITransport(client, conversationId);
 - User must approve before execution
 - Examples: Calendar events, image generation
 
+## Current Status
+
+### ✅ Completed Phases
+- **Phase 0-3:** Core infrastructure, runtime registry, transport layer ✅
+- **Phase 4:** Orchestrator integration (voice + text agents) ✅
+- **Phase 5:** Tool migrations (all 5 tools) ✅
+
+### Current Tools (5 total)
+1. `ignore_user` - Block disrespectful users (text + voice)
+2. `start_voice_session` - Initiate voice mode (text only)
+3. `end_voice_session` - End voice session gracefully (voice only)
+4. `kb_search` - Search knowledge base (text + voice)
+5. `kb_get` - Get knowledge base entity (text + voice)
+
+### Integration Status
+- ✅ Voice server: Fully integrated, all tools available
+- ✅ Text agent: Fully integrated, all tools available
+- ✅ Registry: Loads successfully in both environments
+- ✅ Handler loading: Works for Node.js and Next.js
+- ✅ State management: Centralized via state controller
+- ✅ Policy enforcement: Budgets and mode restrictions operational
+
 ## Future Evolution
 
-### Phase 1-3 (Current Plan)
-- Implement core infrastructure
-- Migrate existing tools
-- Add kb_search (reference implementation)
+### Phase 6-7 (Next Steps)
+- Production hardening (monitoring, error handling)
+- Documentation cleanup
+- Performance optimization
+- Additional tool development
 
 ### Future Possibilities
 - Tool composition (tools calling tools)

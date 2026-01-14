@@ -207,9 +207,19 @@ export class VoiceService extends EventTarget {
           this.handleMessage(JSON.parse(event.data));
         };
 
-        this.ws.onerror = (error) => {
-          console.error('WebSocket error:', error);
-          // Don't reject immediately - let onclose handle reconnection
+        this.ws.onerror = (event) => {
+          // WebSocket error events don't provide detailed error info
+          // The onclose handler provides more useful information (close codes, reasons)
+          // Only log at debug level to avoid noise - onclose will handle user-visible errors
+          if (this.ws) {
+            const wsState = ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED'][this.ws.readyState];
+            console.debug('WebSocket error event:', {
+              state: wsState,
+              readyState: this.ws.readyState,
+              url: VOICE_CONFIG.WEBSOCKET_URL || 'not configured'
+            });
+          }
+          // Don't reject immediately - let onclose handle reconnection and logging
         };
 
         this.ws.onclose = (event) => {

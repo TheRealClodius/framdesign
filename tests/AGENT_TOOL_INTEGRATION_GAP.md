@@ -162,31 +162,23 @@ Gemini API → functionCall in response → app/api/chat/route.ts → toolRegist
 4. Tests mode restrictions (start_voice_session in text, end_voice_session blocked)
 5. Tests complete flow: detect → execute → respond
 
-## Test Execution
+## Next Steps
 
-### Running the Tests
+1. **Configure Jest for ES Modules** (if needed)
+   - The project uses `"type": "module"` in package.json
+   - Tests may need Jest ES module configuration
+   - Check if existing tests run successfully
 
-**Note:** Tests require ES module support. Run with:
-```bash
-NODE_OPTIONS='--experimental-vm-modules' npm test -- tests/e2e/voice-agent-tool-integration.test.js
-NODE_OPTIONS='--experimental-vm-modules' npm test -- tests/e2e/text-agent-tool-integration.test.js
-```
+2. **Run Tests**
+   ```bash
+   npm test -- tests/e2e/voice-agent-tool-integration.test.js
+   npm test -- tests/e2e/text-agent-tool-integration.test.js
+   ```
 
-**Or run both together:**
-```bash
-NODE_OPTIONS='--experimental-vm-modules' npm test -- tests/e2e/voice-agent-tool-integration.test.js tests/e2e/text-agent-tool-integration.test.js
-```
-
-### Test Results
-
-✅ **All tests passing:**
-- Voice Agent: 10/10 tests passing
-- Text Agent: 11/11 tests passing
-- **Total: 21/21 tests passing**
-
-### Jest Configuration
-
-Tests use ES modules (`"type": "module"` in package.json). Jest configuration in `jest.config.cjs` handles this via Next.js Jest, but requires `NODE_OPTIONS='--experimental-vm-modules'` flag for ES module support.
+3. **Verify Integration**
+   - Tests should verify the complete agent → Gemini → agent loop
+   - If tests pass, integration is verified
+   - If tests fail, investigate the specific failure points
 
 ## Implementation Verification
 

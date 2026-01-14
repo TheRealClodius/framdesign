@@ -4,7 +4,7 @@
  * Blocks disrespectful users for specified duration and ends voice session.
  */
 
-import { ErrorType, ToolError, IntentType } from '../../_core/error-types.js';
+import { ErrorType, ToolError, IntentType } from '../_core/error-types.js';
 
 /**
  * Execute ignore_user tool

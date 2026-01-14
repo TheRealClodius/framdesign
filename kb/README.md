@@ -84,3 +84,57 @@
 - First person allowed
 - Emotion and metaphor allowed
 - Still fix spelling and broken sentences
+
+---
+
+## Embedding
+
+KB documents are embedded into a LanceDB vector store for semantic search. The embedding process:
+
+1. **Reads all markdown files** from `kb/` directory (excluding `README.md`)
+2. **Splits documents into chunks** (1000 chars with 200 char overlap)
+3. **Generates embeddings** using Gemini's `text-embedding-004` model (768 dimensions)
+4. **Stores in LanceDB** with unique chunk IDs and metadata
+
+### Running Embedding
+
+```bash
+npx tsx scripts/Embed/embed-kb.ts
+```
+
+**Requirements:**
+- `GEMINI_API_KEY` must be set in `.env.local`
+- Node.js environment (LanceDB uses native modules)
+
+### Document ID Format
+
+Each chunk gets a unique ID:
+- **Single chunk**: `{entity_id}_chunk_0` (e.g., `project:fitbit_OS_chunk_0`)
+- **Multiple chunks**: `{entity_id}_chunk_0`, `{entity_id}_chunk_1`, etc.
+
+Where `entity_id` comes from frontmatter `id` field (e.g., `person:andrei_clodius`).
+
+**Important:** The frontmatter `id` field is stored as `entity_id` in metadata to avoid conflicts with document IDs.
+
+### Metadata Stored
+
+Each chunk includes:
+- `file_path`: Relative path from `kb/` directory
+- `chunk_index`: 0-based chunk index
+- `total_chunks`: Total chunks for this document
+- `entity_type`: From frontmatter `type` field
+- `entity_id`: From frontmatter `id` field
+- `title`: From frontmatter `title` field
+- All other frontmatter fields (except `id`, which is stored as `entity_id`)
+
+### Verification
+
+Check embedding status:
+```bash
+npx tsx scripts/Embed/verify-kb-embedding.ts
+```
+
+This verifies:
+- All KB files are embedded
+- Chunks have unique IDs
+- No orphaned chunks exist

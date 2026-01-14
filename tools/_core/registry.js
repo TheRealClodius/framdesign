@@ -15,15 +15,31 @@
  */
 
 import { readFileSync } from 'fs';
-import { join, dirname } from 'path';
+import { join, dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
+import { createRequire } from 'module';
 import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
 import { ErrorType, ToolError } from './error-types.js';
 import { validateToolResponse, TOOL_RESPONSE_SCHEMA_VERSION } from './tool-response.js';
+import { recordToolExecution, recordError, recordBudgetViolation, recordRegistryLoadTime } from './metrics.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REGISTRY_PATH = join(__dirname, '..', 'tool_registry.json');
+// Create require function for resolving modules  
+const require = createRequire(import.meta.url);
+// Project root is two levels up from _core
+const PROJECT_ROOT = resolve(__dirname, '..', '..');
+
+// Static import map for Webpack compatibility
+// Webpack can statically analyze these imports at build time
+const HANDLER_IMPORTS = {
+  'end_voice_session': () => import('../end-voice-session/handler.js'),
+  'ignore_user': () => import('../ignore-user/handler.js'),
+  'kb_get': () => import('../kb-get/handler.js'),
+  'kb_search': () => import('../kb-search/handler.js'),
+  'start_voice_session': () => import('../start-voice-session/handler.js'),
+};
 
 /**
  * ToolRegistry class
@@ -52,6 +68,7 @@ class ToolRegistry {
     }
 
     console.log('Loading tool registry...');
+    const loadStartTime = Date.now();
 
     // Read registry file
     const registryJson = readFileSync(REGISTRY_PATH, 'utf-8');
@@ -84,18 +101,76 @@ class ToolRegistry {
       }
 
       // Dynamic import handler
+      let importPath = tool.handlerPath;
       try {
-        const handlerModule = await import(tool.handlerPath);
-        if (typeof handlerModule.execute !== 'function') {
-          throw new Error(`Handler ${tool.toolId} must export an execute function`);
+        let handlerModule;
+        
+        // Check if we have a static import map entry (for Webpack compatibility)
+        if (HANDLER_IMPORTS[tool.toolId]) {
+          // Use static import map - Webpack can analyze these at build time
+          console.log(`[Registry] Loading ${tool.toolId} from static import map`);
+          handlerModule = await HANDLER_IMPORTS[tool.toolId]();
+        } else {
+          // Fallback: dynamic import with path resolution
+          // Convert file:// URLs to file paths for webpack compatibility
+          if (importPath.startsWith('file://')) {
+            const url = new URL(importPath);
+            let filePath = url.pathname;
+            
+            // Handle macOS/Unix paths (file:///Users/...) vs Windows paths
+            if (process.platform === 'win32' && filePath.startsWith('/')) {
+              filePath = filePath.substring(1);
+            }
+            
+            // Extract tool name from path (e.g., /Users/.../tools/end-voice-session/handler.js -> end-voice-session)
+            const toolsMatch = filePath.match(/tools[\/\\]([^\/\\]+)[\/\\]handler\.js$/);
+            if (toolsMatch) {
+              const toolName = toolsMatch[1];
+              // Use relative path from registry location
+              importPath = `../${toolName}/handler.js`;
+            } else {
+              // Fallback: use the file path as-is
+              importPath = filePath.replace(/\\/g, '/');
+            }
+          } else {
+            // Path doesn't start with file://, ensure it uses forward slashes
+            importPath = importPath.replace(/\\/g, '/');
+          }
+          
+          // Log the resolved path for debugging
+          console.log(`[Registry] Loading ${tool.toolId} from: ${importPath}`);
+          
+          // Use dynamic import (works in both Next.js and Node.js)
+          handlerModule = await import(importPath);
         }
+        
+        // Debug: Log what we got from the module
+        if (!handlerModule) {
+          throw new Error(`Handler module ${tool.toolId} loaded but is null/undefined`);
+        }
+        
+        if (!handlerModule.execute) {
+          console.error(`[Registry] Handler module ${tool.toolId} exports:`, Object.keys(handlerModule));
+          throw new Error(`Handler ${tool.toolId} must export an execute function. Found exports: ${Object.keys(handlerModule).join(', ')}`);
+        }
+        
+        if (typeof handlerModule.execute !== 'function') {
+          console.error(`[Registry] Handler ${tool.toolId} execute is not a function:`, typeof handlerModule.execute, handlerModule.execute);
+          throw new Error(`Handler ${tool.toolId} execute must be a function, got ${typeof handlerModule.execute}`);
+        }
+        
         this.handlers.set(tool.toolId, handlerModule.execute);
       } catch (error) {
+        // Log the error for debugging
+        console.error(`[Registry] Failed to load ${tool.toolId}:`, error.message);
+        console.error(`[Registry] Attempted path: ${importPath}`);
         throw new Error(`Failed to load handler for ${tool.toolId}: ${error.message}`);
       }
     }
 
-    console.log(`✓ Tool registry loaded: v${this.version} (${this.tools.size} tools)`);
+    const loadDuration = Date.now() - loadStartTime;
+    recordRegistryLoadTime(loadDuration);
+    console.log(`✓ Tool registry loaded: v${this.version} (${this.tools.size} tools) in ${loadDuration}ms`);
   }
 
   /**
@@ -181,6 +256,9 @@ class ToolRegistry {
 
     // Check tool exists
     if (!this.tools.has(toolId)) {
+      const duration = Date.now() - startTime;
+      recordToolExecution(toolId, duration, false);
+      recordError(toolId, ErrorType.NOT_FOUND);
       return createResponse(toolId, false, {
         type: ErrorType.NOT_FOUND,
         message: `Tool ${toolId} not found`,
@@ -191,11 +269,25 @@ class ToolRegistry {
     const tool = this.tools.get(toolId);
     const validator = this.validators.get(toolId);
     const handler = this.handlers.get(toolId);
+    
+    // Debug: Check if handler exists and is a function
+    if (!handler) {
+      console.error(`[Registry] Handler not found for ${toolId}. Available handlers:`, Array.from(this.handlers.keys()));
+      throw new Error(`Handler not found for ${toolId}`);
+    }
+    
+    if (typeof handler !== 'function') {
+      console.error(`[Registry] Handler for ${toolId} is not a function. Type: ${typeof handler}, Value:`, handler);
+      throw new Error(`Handler for ${toolId} is not a function, got ${typeof handler}`);
+    }
 
     // Validate parameters
     const valid = validator(executionContext.args || {});
     if (!valid) {
+      const duration = Date.now() - startTime;
       const errors = validator.errors.map(e => `${e.instancePath} ${e.message}`).join(', ');
+      recordToolExecution(toolId, duration, false);
+      recordError(toolId, ErrorType.VALIDATION);
       return createResponse(toolId, false, {
         type: ErrorType.VALIDATION,
         message: `Invalid parameters: ${errors}`,
@@ -215,7 +307,10 @@ class ToolRegistry {
       try {
         validateToolResponse(result);
       } catch (validationError) {
+        const duration = Date.now() - startTime;
         console.error(`[Registry] Handler ${toolId} returned invalid ToolResponse:`, validationError.message);
+        recordToolExecution(toolId, duration, false);
+        recordError(toolId, ErrorType.INTERNAL);
         return createResponse(toolId, false, {
           type: ErrorType.INTERNAL,
           message: `Handler returned invalid response: ${validationError.message}`,
@@ -233,13 +328,23 @@ class ToolRegistry {
       result.meta.duration = Date.now() - startTime;
       result.meta.responseSchemaVersion = TOOL_RESPONSE_SCHEMA_VERSION;
 
+      // Record metrics
+      recordToolExecution(toolId, result.meta.duration, true);
+      
+      // Check for budget violation
+      if (result.meta.duration > tool.latencyBudgetMs) {
+        recordBudgetViolation(toolId, result.meta.duration, tool.latencyBudgetMs);
+      }
+
       return result;
 
     } catch (error) {
+      const duration = Date.now() - startTime;
+      
       // Handler threw an exception
       if (error instanceof ToolError) {
         // Expected domain error
-        return createResponse(toolId, false, {
+        const errorResponse = createResponse(toolId, false, {
           type: error.type,
           message: error.message,
           retryable: error.retryable,
@@ -248,15 +353,27 @@ class ToolRegistry {
           details: error.details,
           confirmation_request: error.confirmation_request
         }, startTime);
+        
+        // Record metrics
+        recordToolExecution(toolId, duration, false);
+        recordError(toolId, error.type);
+        
+        return errorResponse;
       } else {
         // Unexpected error
         console.error(`[Registry] Unexpected error in handler ${toolId}:`, error);
-        return createResponse(toolId, false, {
+        const errorResponse = createResponse(toolId, false, {
           type: ErrorType.INTERNAL,
           message: `Unexpected error: ${error.message}`,
           retryable: false,
           partialSideEffects: true // Conservative assumption
         }, startTime);
+        
+        // Record metrics
+        recordToolExecution(toolId, duration, false);
+        recordError(toolId, ErrorType.INTERNAL);
+        
+        return errorResponse;
       }
     }
   }

@@ -4,7 +4,7 @@
  * Gracefully terminates voice session while keeping text chat available.
  */
 
-import { ErrorType, ToolError, IntentType } from '../../_core/error-types.js';
+import { ErrorType, ToolError, IntentType } from '../_core/error-types.js';
 
 /**
  * Execute end_voice_session tool

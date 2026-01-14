@@ -32,16 +32,21 @@ export async function execute(context) {
     // Dynamically import services (avoid bundling issues)
     // Use path alias for Next.js compatibility, fallback to relative for Node.js
     let generateQueryEmbedding, searchSimilar;
+    
     try {
-      // Try Next.js path alias first
+      // Try Next.js path alias first (works in Next.js webpack)
       const embeddingModule = await import('@/lib/services/embedding-service');
       const vectorModule = await import('@/lib/services/vector-store-service');
       generateQueryEmbedding = embeddingModule.generateQueryEmbedding;
       searchSimilar = vectorModule.searchSimilar;
     } catch {
-      // Fallback to relative paths for Node.js (voice server)
-      const embeddingModule = await import('../../lib/services/embedding-service.js');
-      const vectorModule = await import('../../lib/services/vector-store-service.js');
+      // Fallback for Node.js runtime (voice server)
+      // Use relative paths WITHOUT extension - avoids webpack static analysis
+      // Node.js ESM will resolve .ts files automatically at runtime
+      const embeddingPath = '../../lib/services/embedding-service';
+      const vectorPath = '../../lib/services/vector-store-service';
+      const embeddingModule = await import(embeddingPath);
+      const vectorModule = await import(vectorPath);
       generateQueryEmbedding = embeddingModule.generateQueryEmbedding;
       searchSimilar = vectorModule.searchSimilar;
     }

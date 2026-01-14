@@ -64,7 +64,7 @@ For complete deployment instructions, see:
 ```bash
 # Deploy Voice Server
 cd voice-server
-../scripts/deploy-voice-server.sh  # Or follow manual steps in RAILWAY_DEPLOYMENT.md
+../scripts/Deployment/prod/deploy-voice-server.sh  # Or follow manual steps in RAILWAY_DEPLOYMENT.md
 
 # Deploy Next.js App
 railway init

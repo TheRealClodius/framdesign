@@ -23,178 +23,159 @@ import { ErrorType, ToolError, IntentType } from '@/tools/_core/error-types.js';
 import { createStateController } from '@/tools/_core/state-controller.js';
 ```
 
-## Integration Flow (To Be Implemented in Phase 4)
+## Integration Flow ✅ (IMPLEMENTED)
 
-### 1. App Initialization
+### 1. Registry Loading
 
-**Option A: Middleware (Recommended)**
-```typescript
-// middleware.ts or app initialization
-import { toolRegistry } from '@/tools/_core/registry.js';
-
-// Load registry at app startup
-await toolRegistry.load();
-toolRegistry.lock();
-console.log(`✓ Tool registry loaded: v${toolRegistry.getVersion()}`);
-```
-
-**Option B: Route Handler**
+**Current Implementation:**
 ```typescript
 // app/api/chat/route.ts
 import { toolRegistry } from '@/tools/_core/registry.js';
 
-// Load registry once (cached module)
-if (!toolRegistry.getVersion()) {
-  await toolRegistry.load();
-  toolRegistry.lock();
+export async function POST(request: Request) {
+  // ... setup ...
+  
+  const ai = new GoogleGenAI({ apiKey });
+
+  // Load registry if not already loaded (on first request)
+  if (!toolRegistry.getVersion()) {
+    await toolRegistry.load();
+    toolRegistry.lock();
+    console.log(`✓ Tool registry loaded: v${toolRegistry.getVersion()}`);
+  }
+
+  // Get provider schemas for Gemini 3
+  const geminiNativeSchemas = toolRegistry.getProviderSchemas('geminiNative');
+  const providerSchemas = geminiNativeSchemas.map(schema => {
+    // Convert to JSON Schema format for Gemini 3
+    const jsonSchema = convertGeminiSchemaToJsonSchema(schema.parameters);
+    return {
+      name: schema.name,
+      description: schema.description,
+      parametersJsonSchema: jsonSchema  // Use JSON Schema format
+    };
+  });
 }
 ```
 
-### 2. Get Provider Schemas
+**Note:** Registry loads on first API request (Next.js on-demand loading). This is efficient and works correctly.
+
+### 2. Schema Format Conversion
+
+**Gemini 3 Compatibility:**
+- Registry stores `geminiNative` schemas with uppercase types ("OBJECT", "STRING")
+- Gemini 3 API accepts `parametersJsonSchema` with lowercase JSON Schema types
+- Conversion function converts uppercase → lowercase for compatibility
 
 ```typescript
-// For OpenAI-compatible providers (OpenAI, Anthropic, etc.)
-const tools = toolRegistry.getProviderSchemas('openai');
+// Convert geminiNative schema to JSON Schema format
+function convertGeminiSchemaToJsonSchema(schema: any): any {
+  const TYPE_MAP = {
+    'STRING': 'string',
+    'NUMBER': 'number',
+    'INTEGER': 'integer',
+    'BOOLEAN': 'boolean',
+    'OBJECT': 'object',
+    'ARRAY': 'array'
+  };
+  // Recursively convert types...
+}
+```
 
-// Use in chat completion
-const response = await openai.chat.completions.create({
-  model: 'gpt-4',
-  messages: [...],
-  tools: tools,
-  tool_choice: 'auto'
+### 3. Tool Usage in Gemini API
+
+```typescript
+// Use in Gemini generateContentStream
+const config = {
+  tools: [{ functionDeclarations: providerSchemas }],
+  systemInstruction: FRAM_SYSTEM_PROMPT
+};
+
+const result = await ai.models.generateContentStream({
+  model: 'gemini-3-flash-preview',
+  contents: contentsToSend,
+  config
 });
 ```
 
-### 3. Tool Execution (Orchestrator Pattern)
+### 3. Tool Execution (Orchestrator Pattern) ✅
+
+**Current Implementation:**
 
 ```typescript
-export async function POST(req: Request) {
+export async function POST(request: Request) {
   // ... setup ...
 
-  // Initialize state controller
-  const state = createStateController({
-    mode: 'text',  // Explicit mode
-    isActive: true
-  });
+  // Check for function calls in early chunks
+  if (functionCall?.name === "ignore_user") {
+    // Initialize state controller
+    const state = createStateController({
+      mode: 'text',
+      isActive: true
+    }) as any;
 
-  // Text mode budget
-  const TEXT_BUDGET = {
-    MAX_RETRIEVAL_CALLS_PER_TURN: 5,
-    MAX_TOTAL_CALLS_PER_TURN: 10
-  };
+    // Get tool metadata
+    const toolMetadata = toolRegistry.getToolMetadata('ignore_user') as any;
 
-  // Handle tool calls from LLM
-  if (response.choices[0].message.tool_calls) {
-    let retrievalCallsThisTurn = 0;
-
-    for (const toolCall of response.choices[0].message.tool_calls) {
-      const toolName = toolCall.function.name;
-      const toolArgs = JSON.parse(toolCall.function.arguments);
-
-      // Get tool metadata
-      const toolMetadata = toolRegistry.getToolMetadata(toolName);
-
-      if (!toolMetadata) {
-        // Tool not found
-        messages.push({
-          role: 'tool',
-          tool_call_id: toolCall.id,
-          name: toolName,
-          content: JSON.stringify({
-            ok: false,
-            error: {
-              type: ErrorType.NOT_FOUND,
-              message: `Unknown tool: ${toolName}`,
-              retryable: false
-            }
-          })
-        });
-        continue;
+    // Build execution context
+    const executionContext = {
+      clientId: `text-${Date.now()}`,
+      ws: null,  // No WebSocket in text mode
+      geminiSession: null,
+      args: functionCall.args,
+      session: {
+        isActive: state.get('isActive'),
+        toolsVersion: toolRegistry.getVersion(),
+        state: state.getSnapshot()
       }
+    };
 
-      // POLICY: Check mode restrictions
-      if (!toolMetadata.allowedModes.includes('text')) {
-        messages.push({
-          role: 'tool',
-          tool_call_id: toolCall.id,
-          name: toolName,
-          content: JSON.stringify({
-            ok: false,
-            error: {
-              type: ErrorType.MODE_RESTRICTED,
-              message: `Tool ${toolName} not available in text mode`,
-              retryable: false
-            }
-          })
-        });
-        continue;
-      }
+    // Execute tool through registry
+    const startTime = Date.now();
+    const result = await toolRegistry.executeTool('ignore_user', executionContext);
+    const duration = Date.now() - startTime;
 
-      // POLICY: Enforce text retrieval budget
-      if (toolMetadata.category === 'retrieval') {
-        retrievalCallsThisTurn++;
-        if (retrievalCallsThisTurn > TEXT_BUDGET.MAX_RETRIEVAL_CALLS_PER_TURN) {
-          messages.push({
-            role: 'tool',
-            tool_call_id: toolCall.id,
-            name: toolName,
-            content: JSON.stringify({
-              ok: false,
-              error: {
-                type: ErrorType.BUDGET_EXCEEDED,
-                message: `Text retrieval budget exceeded (max ${TEXT_BUDGET.MAX_RETRIEVAL_CALLS_PER_TURN} per turn)`,
-                retryable: false
-              }
-            })
-          });
-          continue;
+    // Structured audit logging
+    console.log(JSON.stringify({
+      event: 'tool_execution',
+      toolId: 'ignore_user',
+      toolVersion: toolMetadata?.version || 'unknown',
+      registryVersion: toolRegistry.getVersion(),
+      duration,
+      ok: result.ok,
+      category: toolMetadata?.category || 'unknown',
+      mode: 'text'
+    }));
+
+    // Return response based on result
+    if (result.ok) {
+      return NextResponse.json({
+        message: result.data.farewellMessage || functionCall.args.farewell_message,
+        timeout: {
+          duration: result.data.durationSeconds || functionCall.args.duration_seconds,
+          until: result.data.timeoutUntil
         }
-      }
+      });
+    } else {
+      console.error('ignore_user tool failed:', result.error);
+      return NextResponse.json({
+        error: result.error.message
+      }, { status: 500 });
+    }
+  }
 
-      // POLICY: Check confirmation requirement
-      if (toolMetadata.requiresConfirmation && !toolArgs.confirmationToken) {
-        // Generate confirmation request
-        messages.push({
-          role: 'tool',
-          tool_call_id: toolCall.id,
-          name: toolName,
-          content: JSON.stringify({
-            ok: false,
-            error: {
-              type: ErrorType.CONFIRMATION_REQUIRED,
-              message: 'This action requires user confirmation',
-              confirmation_request: {
-                token: generateConfirmationToken(toolCall),
-                expires: Date.now() + 300000,
-                tool: toolName,
-                args: toolArgs,
-                preview: generatePreview(toolName, toolArgs)
-              }
-            }
-          })
-        });
-        continue;
-      }
+  // Similar pattern for start_voice_session...
+}
+```
 
-      // Build execution context
-      const executionContext = {
-        clientId: sessionId,
-        ws: null,  // No WebSocket in text mode
-        geminiSession: null,
-        args: toolArgs,
-        session: {
-          isActive: state.get('isActive'),
-          toolsVersion: toolRegistry.getVersion(),
-          state: state.getSnapshot()
-        }
-      };
+**Key Features:**
+- ✅ State controller initialized per request
+- ✅ Tool execution via `toolRegistry.executeTool()`
+- ✅ Structured audit logging
+- ✅ Proper error handling
+- ✅ Tool result data extraction
 
-      // Execute tool through registry
-      const startTime = Date.now();
-      const result = await toolRegistry.executeTool(toolName, executionContext);
-      const duration = Date.now() - startTime;
-
-      // Log execution
+**Note:** Budget enforcement and mode restrictions are handled by the registry's orchestrator pattern. Text mode has more flexible budgets than voice mode.
       console.log(`[${sessionId}] Tool executed: ${toolName} - ok: ${result.ok}, duration: ${duration}ms`);
 
       // POLICY: Warn if latency budget exceeded (SOFT LIMIT)

@@ -26,6 +26,7 @@ import { toolRegistry } from '../tools/_core/registry.js';
 import { createStateController } from '../tools/_core/state-controller.js';
 import { GeminiLiveTransport } from './providers/gemini-live-transport.js';
 import { ToolError, ErrorType } from '../tools/_core/error-types.js';
+import { retryWithBackoff } from '../tools/_core/retry-handler.js';
 
 // Load environment variables from .env file (if present)
 config();
@@ -43,8 +44,10 @@ const geminiToolSchemas = toolRegistry.getProviderSchemas('geminiNative');
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const VERTEXAI_PROJECT = process.env.VERTEXAI_PROJECT;
 const VERTEXAI_LOCATION = process.env.VERTEXAI_LOCATION || 'us-central1';
-const VERTEXAI_API_KEY = process.env.VERTEXAI_API_KEY; // For Railway deployment
-const GOOGLE_APPLICATION_CREDENTIALS = process.env.GOOGLE_APPLICATION_CREDENTIALS; // Service account JSON
+const GOOGLE_APPLICATION_CREDENTIALS = process.env.GOOGLE_APPLICATION_CREDENTIALS; // Service account JSON path
+// VERTEXAI_API_KEY is deprecated - use GOOGLE_APPLICATION_CREDENTIALS instead
+// Only used as fallback for legacy Railway deployments
+const VERTEXAI_API_KEY = process.env.VERTEXAI_API_KEY;
 const PORT = process.env.PORT || 8080;
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'http://localhost:3000').split(',');
 
@@ -59,41 +62,29 @@ if (!USE_VERTEX_AI && !GEMINI_API_KEY) {
 }
 
 if (USE_VERTEX_AI) {
-  console.log(`Using Vertex AI authentication (Project: ${VERTEXAI_PROJECT}, Location: ${VERTEXAI_LOCATION})`);
+  console.log(`Using Vertex AI (Project: ${VERTEXAI_PROJECT}, Location: ${VERTEXAI_LOCATION})`);
   
-  // Handle service account credentials for Railway deployment
-  // Railway can set GOOGLE_APPLICATION_CREDENTIALS as a JSON string
+  // Priority: GOOGLE_APPLICATION_CREDENTIALS > ADC (gcloud auth)
+  // VERTEXAI_API_KEY is only used as legacy fallback for service account JSON strings
   if (GOOGLE_APPLICATION_CREDENTIALS) {
     try {
-      // Try to parse as JSON (Railway environment variable)
+      // Try to parse as JSON (Railway environment variable stores JSON as string)
       const credentials = JSON.parse(GOOGLE_APPLICATION_CREDENTIALS);
       const tempFile = join(tmpdir(), `gcp-credentials-${Date.now()}.json`);
       writeFileSync(tempFile, GOOGLE_APPLICATION_CREDENTIALS);
       process.env.GOOGLE_APPLICATION_CREDENTIALS = tempFile;
-      console.log('✓ Using service account credentials from GOOGLE_APPLICATION_CREDENTIALS (JSON string)');
+      console.log('✓ Using service account from GOOGLE_APPLICATION_CREDENTIALS (JSON string)');
       console.log(`  Service account: ${credentials.client_email}`);
     } catch {
-      // If not JSON, assume it's a file path
-      console.log('Using GOOGLE_APPLICATION_CREDENTIALS as file path');
+      // Not JSON - it's a file path, which is the standard usage
+      console.log('✓ Using service account credentials file');
       console.log(`  Path: ${GOOGLE_APPLICATION_CREDENTIALS}`);
     }
-  } else if (VERTEXAI_API_KEY) {
-    // Check if VERTEXAI_API_KEY is a JSON string (service account)
-    try {
-      const keyData = JSON.parse(VERTEXAI_API_KEY);
-      if (keyData.type === 'service_account') {
-        const tempFile = join(tmpdir(), `gcp-credentials-${Date.now()}.json`);
-        writeFileSync(tempFile, VERTEXAI_API_KEY);
-        process.env.GOOGLE_APPLICATION_CREDENTIALS = tempFile;
-        console.log('Using service account from VERTEXAI_API_KEY');
-      } else {
-        console.log('Using VERTEXAI_API_KEY as API key');
-      }
-    } catch {
-      console.log('Using VERTEXAI_API_KEY as API key');
-    }
   } else {
-    console.log('Note: Using Application Default Credentials (gcloud auth application-default login)');
+    // No explicit credentials - use Application Default Credentials (ADC)
+    // This works when: gcloud auth application-default login was run
+    console.log('✓ Using Application Default Credentials (ADC)');
+    console.log('  Note: Run "gcloud auth application-default login" if not authenticated');
   }
 } else {
   console.log('Using Google AI Studio authentication (API Key)');
@@ -135,15 +126,24 @@ wss.on('connection', async (ws, req) => {
   let conversationTranscripts = { user: [], assistant: [] };
   let conversationHistory = []; // Store for context injection
   let pendingRequest = null; // Store pending user request from text agent handoff
-  let isModelGenerating = false; // Track if model is currently generating a response
-  let userAudioChunkCount = 0; // Count consecutive audio chunks to detect sustained speech
-  let interruptionSent = false; // Track if we've already sent interruption for current model turn
-  let pendingEndVoiceSession = null; // Store end_voice_session details until turn completes
-  let shouldSuppressAudio = false; // Suppress audio after end_voice_session tool is called to prevent double acknowledgements
-  let shouldSuppressTranscript = false; // Suppress output transcripts after end_voice_session tool is called to prevent duplicate messages
-  let audioChunkCounter = 0; // Track total audio chunks sent
-  let lastAudioFingerprint = null; // Track last audio chunk to detect duplicates
-  
+
+  // Initialize state controller for session
+  const state = createStateController({
+    mode: 'voice',
+    isActive: true,
+    pendingEndVoiceSession: null,
+    shouldSuppressAudio: false,
+    shouldSuppressTranscript: false,
+    isModelGenerating: false,
+    userAudioChunkCount: 0,
+    interruptionSent: false,
+    audioChunkCounter: 0,
+    lastAudioFingerprint: null
+  });
+
+  // Transport will be set when geminiSession is created
+  let transport = null;
+
   // Initialize GoogleGenAI with appropriate credentials
   // Note: Don't set apiVersion for Vertex AI - the SDK handles it
   let aiConfig;
@@ -156,10 +156,11 @@ wss.on('connection', async (ws, req) => {
       location: VERTEXAI_LOCATION
     };
     
-    // Handle service account credentials (preferred for production)
+    // Handle service account credentials if provided as JSON string
+    // (Used for Railway deployment where credentials are stored as env var)
     if (GOOGLE_APPLICATION_CREDENTIALS) {
       try {
-        // Try to parse as JSON string (Railway environment variable)
+        // Try to parse as JSON string (Railway stores JSON as string in env vars)
         const credentials = JSON.parse(GOOGLE_APPLICATION_CREDENTIALS);
         aiConfig.googleAuthOptions = {
           credentials: {
@@ -168,30 +169,12 @@ wss.on('connection', async (ws, req) => {
           }
         };
       } catch {
-        // If not JSON, assume it's a file path (already handled above)
-        // SDK will use it via process.env.GOOGLE_APPLICATION_CREDENTIALS
-      }
-    } else if (VERTEXAI_API_KEY) {
-      // Check if VERTEXAI_API_KEY is a service account JSON
-      try {
-        const keyData = JSON.parse(VERTEXAI_API_KEY);
-        if (keyData.type === 'service_account') {
-          // It's a service account JSON
-          aiConfig.googleAuthOptions = {
-            credentials: {
-              client_email: keyData.client_email,
-              private_key: keyData.private_key.replace(/\\n/g, '\n')
-            }
-          };
-        }
-        // Note: API keys are not compatible with Vertex AI project/location mode
-        // If using Vertex AI, only service account credentials are supported
-      } catch {
-        // Not JSON - ignore, will use Application Default Credentials
-        console.log('VERTEXAI_API_KEY is not valid JSON, using Application Default Credentials');
+        // Not JSON - it's a file path, SDK will use process.env.GOOGLE_APPLICATION_CREDENTIALS
+        // No additional config needed
       }
     }
-    // If neither is provided, SDK will use Application Default Credentials
+    // Otherwise, SDK will use Application Default Credentials (ADC)
+    // ADC uses gcloud auth or GOOGLE_APPLICATION_CREDENTIALS file path
   } else {
     // Google AI Studio (standard API)
     aiConfig = {
@@ -228,7 +211,7 @@ wss.on('connection', async (ws, req) => {
   }
 
   // Helper function to handle messages from Gemini
-  function handleGeminiMessage(clientId, message) {
+  async function handleGeminiMessage(clientId, message) {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
 
     // Setup complete
@@ -327,128 +310,175 @@ wss.on('connection', async (ws, req) => {
     // CRITICAL: Process tool calls FIRST before serverContent
     // This ensures suppression flags are set before we process transcripts
     // (toolCall and serverContent can arrive in the same message)
-    if (message.toolCall) {
+    if (message.toolCall && transport) {
       console.log(`[${clientId}] Tool call requested:`, JSON.stringify(message.toolCall, null, 2));
-      
-      // Handle tool calls
-      if (message.toolCall.functionCalls) {
-        for (const call of message.toolCall.functionCalls) {
-          // Validate tool call structure
-          if (!call.name) {
-            console.error(`[${clientId}] ⚠️ Invalid tool call: missing name`, JSON.stringify(call, null, 2));
+
+      // Parse tool calls via transport
+      const toolCalls = transport.receiveToolCalls(message);
+
+      // Voice mode budget tracking
+      let retrievalCallsThisTurn = 0;
+      const VOICE_BUDGET = {
+        MAX_RETRIEVAL_CALLS_PER_TURN: 2,
+        MAX_TOTAL_CALLS_PER_TURN: 3
+      };
+
+      for (const call of toolCalls) {
+        // Validate tool call structure
+        if (!call.name) {
+          console.error(`[${clientId}] Invalid tool call: missing name`, JSON.stringify(call, null, 2));
+          continue;
+        }
+
+        // Get tool metadata for policy enforcement
+        const toolMetadata = toolRegistry.getToolMetadata(call.name);
+
+        if (!toolMetadata) {
+          // Tool not found - send error via transport
+          console.error(`[${clientId}] Unknown tool: ${call.name}`);
+          await transport.sendToolResult({
+            id: call.id,
+            name: call.name,
+            result: {
+              ok: false,
+              error: {
+                type: ErrorType.NOT_FOUND,
+                message: `Unknown tool: ${call.name}`,
+                retryable: false
+              },
+              intents: [],
+              meta: {
+                toolId: call.name,
+                duration: 0,
+                responseSchemaVersion: '1.0.0'
+              }
+            }
+          });
+          continue;
+        }
+
+        // POLICY: Check mode restrictions
+        const currentMode = state.get('mode');
+        if (!toolMetadata.allowedModes.includes(currentMode)) {
+          console.warn(`[${clientId}] Tool ${call.name} not allowed in ${currentMode} mode`);
+          await transport.sendToolResult({
+            id: call.id,
+            name: call.name,
+            result: {
+              ok: false,
+              error: {
+                type: ErrorType.MODE_RESTRICTED,
+                message: `Tool ${call.name} not available in ${currentMode} mode`,
+                retryable: false
+              },
+              intents: [],
+              meta: {
+                toolId: call.name,
+                duration: 0,
+                responseSchemaVersion: '1.0.0'
+              }
+            }
+          });
+          continue;
+        }
+
+        // POLICY: Enforce voice retrieval budget (HARD GATE)
+        if (toolMetadata.category === 'retrieval') {
+          retrievalCallsThisTurn++;
+          if (retrievalCallsThisTurn > VOICE_BUDGET.MAX_RETRIEVAL_CALLS_PER_TURN) {
+            console.warn(`[${clientId}] Retrieval budget exceeded (${retrievalCallsThisTurn}/${VOICE_BUDGET.MAX_RETRIEVAL_CALLS_PER_TURN})`);
+            await transport.sendToolResult({
+              id: call.id,
+              name: call.name,
+              result: {
+                ok: false,
+                error: {
+                  type: ErrorType.BUDGET_EXCEEDED,
+                  message: `Voice retrieval budget exceeded (max ${VOICE_BUDGET.MAX_RETRIEVAL_CALLS_PER_TURN} per turn)`,
+                  retryable: false
+                },
+                intents: [],
+                meta: {
+                  toolId: call.name,
+                  duration: 0,
+                  responseSchemaVersion: '1.0.0'
+                }
+              }
+            });
             continue;
           }
-          
-          // Validate args exist (even if empty)
-          if (call.args === undefined) {
-            console.warn(`[${clientId}] ⚠️ Tool call missing args, using empty object:`, call.name);
-            call.args = {};
+        }
+
+        // Build execution context
+        const executionContext = {
+          clientId,
+          ws,
+          geminiSession,
+          args: call.args || {},
+          session: {
+            isActive: state.get('isActive'),
+            toolsVersion: toolRegistry.getVersion(),
+            state: state.getSnapshot()
           }
-          
-          if (call.name === 'ignore_user') {
-            console.log(`[${clientId}] Executing ignore_user tool:`, call.args);
-            
-            // Extract parameters
-            const durationSeconds = call.args?.duration_seconds || 60;
-            const farewellMessage = call.args?.farewell_message || "I'M ENDING THIS CONVERSATION.";
-            const timeoutUntil = Date.now() + (durationSeconds * 1000);
-            
-            // Send timeout command to client (client will set localStorage and block UI)
-            ws.send(JSON.stringify({
-              type: 'timeout',
-              durationSeconds: durationSeconds,
-              timeoutUntil: timeoutUntil,
-              farewellMessage: farewellMessage
-            }));
-            
-            console.log(`[${clientId}] User timed out for ${durationSeconds} seconds until ${new Date(timeoutUntil).toISOString()}`);
-            
-            // Send tool response back to Gemini to acknowledge execution
-            // Use minimal, non-conversational response to avoid triggering additional audio generation
-            try {
-              if (geminiSession) {
-                geminiSession.sendToolResponse({
-                  functionResponses: [{
-                    name: 'ignore_user',
-                    response: {
-                      success: true
-                    }
-                  }]
-                });
-              }
-            } catch (error) {
-              console.error(`[${clientId}] Error sending tool response:`, error);
-            }
-            
-            // Session will be closed by client after receiving timeout message
-          } else if (call.name === 'end_voice_session') {
-            console.log(`[${clientId}] Executing end_voice_session tool:`, call.args);
-            
-            // Extract parameters
-            const reason = call.args?.reason || 'unspecified';
-            const closingMessage = call.args?.closing_message || "I'LL END OUR VOICE SESSION HERE.";
-            const textResponse = call.args?.text_response || null; // Optional full text response
-            
-            console.log(`[${clientId}] Voice session ending gracefully. Reason: ${reason}`);
-            if (textResponse) {
-              console.log(`[${clientId}] Text response will be sent to chat: ${textResponse.substring(0, 100)}...`);
-            }
-            
-            // Store the end_voice_session details - DON'T send to client yet
-            // We'll wait for the current turn to complete, then send to client
-            pendingEndVoiceSession = { reason, closingMessage, textResponse };
-            
-            // CRITICAL: Suppress any subsequent audio and transcripts after this tool call
-            // This prevents double acknowledgements (one before tool call, one after)
-            // and duplicate messages in chat (transcript + closing_message)
-            shouldSuppressAudio = true;
-            shouldSuppressTranscript = true;
-            console.log(`[${clientId}] Audio and transcript suppression enabled to prevent duplicate acknowledgements and messages`);
-            
-            // Send tool response back to Gemini
-            // Use minimal, non-conversational response to avoid triggering additional audio generation
-            try {
-              if (geminiSession) {
-                geminiSession.sendToolResponse({
-                  functionResponses: [{
-                    name: 'end_voice_session',
-                    response: {
-                      success: true
-                    }
-                  }]
-                });
-                
-                console.log(`[${clientId}] Tool response sent (minimal to avoid extra audio generation)`);
-              }
-            } catch (error) {
-              console.error(`[${clientId}] Error sending tool response:`, error);
-              // Clear pending state on error
-              pendingEndVoiceSession = null;
-              shouldSuppressAudio = false;
-              shouldSuppressTranscript = false;
-            }
-          } else {
-            // Unknown tool name - log and send error response
-            console.error(`[${clientId}] ⚠️ Unknown tool call: ${call.name}`, JSON.stringify(call, null, 2));
-            try {
-              if (geminiSession) {
-                geminiSession.sendToolResponse({
-                  functionResponses: [{
-                    name: call.name,
-                    response: {
-                      error: `Unknown tool: ${call.name}`
-                    }
-                  }]
-                });
-              }
-            } catch (error) {
-              console.error(`[${clientId}] Error sending error response for unknown tool:`, error);
+        };
+
+        // Execute tool through registry with retry logic (text mode only)
+        const startTime = Date.now();
+        const result = await retryWithBackoff(
+          () => toolRegistry.executeTool(call.name, executionContext),
+          {
+            mode: currentMode,
+            maxRetries: 3,
+            toolId: call.name,
+            toolMetadata: toolMetadata,
+            clientId: clientId
+          }
+        );
+        const duration = Date.now() - startTime;
+
+        // Structured audit logging
+        console.log(JSON.stringify({
+          event: 'tool_execution',
+          toolId: call.name,
+          toolVersion: toolMetadata.version,
+          registryVersion: toolRegistry.getVersion(),
+          duration,
+          ok: result.ok,
+          category: toolMetadata.category,
+          sessionId: clientId,
+          mode: currentMode
+        }));
+
+        // POLICY: Warn if latency budget exceeded (SOFT LIMIT)
+        if (duration > toolMetadata.latencyBudgetMs) {
+          console.warn(`[${clientId}] Tool ${call.name} exceeded latency budget: ${duration}ms > ${toolMetadata.latencyBudgetMs}ms`);
+        }
+
+        // Apply intents if successful
+        if (result.ok && result.intents) {
+          for (const intent of result.intents) {
+            // For END_VOICE_SESSION, store full tool data along with intent
+            if (intent.type === 'END_VOICE_SESSION' && result.data) {
+              state.set('pendingEndVoiceSession', {
+                after: intent.after || 'current_turn',
+                reason: result.data.reason || 'user_requested',
+                closingMessage: result.data.finalMessage || null,
+                textResponse: result.data.textResponse || null
+              });
+              console.log(`[${clientId}] Applied intent: ${intent.type} (after: ${intent.after || 'current_turn'})`);
+            } else {
+              state.applyIntent(intent);
+              console.log(`[${clientId}] Applied intent:`, intent.type);
             }
           }
         }
-      } else {
-        // Tool call received but no functionCalls array
-        console.warn(`[${clientId}] ⚠️ Tool call received but no functionCalls array:`, JSON.stringify(message.toolCall, null, 2));
+
+        // Send result via transport (full ToolResponse envelope)
+        await transport.sendToolResult({
+          id: call.id,
+          name: call.name,
+          result: result
+        });
       }
     }
 
@@ -459,11 +489,11 @@ wss.on('connection', async (ws, req) => {
       
       // Track if model is generating
       if (content.modelTurn?.parts?.length > 0) {
-        isModelGenerating = true;
-        userAudioChunkCount = 0; // Reset audio chunk counter when model starts generating
-        interruptionSent = false; // Reset interruption flag for new model turn
-        shouldSuppressAudio = false; // Reset audio suppression for new model turn
-        shouldSuppressTranscript = false; // Reset transcript suppression for new model turn
+        state.set('isModelGenerating', true);
+        state.set('userAudioChunkCount', 0); // Reset audio chunk counter when model starts generating
+        state.set('interruptionSent', false); // Reset interruption flag for new model turn
+        state.set('shouldSuppressAudio', false); // Reset audio suppression for new model turn
+        state.set('shouldSuppressTranscript', false); // Reset transcript suppression for new model turn
         // Don't reset audioChunkCounter or lastAudioFingerprint here - keep them to track across the whole turn
       }
       
@@ -495,20 +525,21 @@ wss.on('connection', async (ws, req) => {
             const fingerprint = audioData ? `${audioData.substring(0, 100)}_${audioSize}` : null;
             
             // Check if this is a duplicate of the last audio chunk
-            const isDuplicate = fingerprint && fingerprint === lastAudioFingerprint;
+            const isDuplicate = fingerprint && fingerprint === state.get('lastAudioFingerprint');
             
             if (isDuplicate) {
               console.log(`[${clientId}] 🚫 DUPLICATE AUDIO DETECTED! Blocking duplicate chunk (${audioSize} chars) - same as previous chunk`);
-            } else if (shouldSuppressAudio) {
+            } else if (state.get('shouldSuppressAudio')) {
               console.log(`[${clientId}] ⚠️ AUDIO SUPPRESSED (${audioSize} chars) - end_voice_session tool was called, preventing duplicate acknowledgement`);
             } else {
-              audioChunkCounter++;
-              lastAudioFingerprint = fingerprint;
-              console.log(`[${clientId}] ✓ AUDIO CHUNK #${audioChunkCounter} RECEIVED! Sending to client (${audioSize} chars base64, ~${Math.round(audioSize * 3 / 4)} bytes, mimeType: ${part.inlineData.mimeType})`);
+              const currentCounter = state.get('audioChunkCounter') + 1;
+              state.set('audioChunkCounter', currentCounter);
+              state.set('lastAudioFingerprint', fingerprint);
+              console.log(`[${clientId}] ✓ AUDIO CHUNK #${currentCounter} RECEIVED! Sending to client (${audioSize} chars base64, ~${Math.round(audioSize * 3 / 4)} bytes, mimeType: ${part.inlineData.mimeType})`);
               
               // Only warn if end_voice_session is pending AND we have multiple chunks
               // Multiple chunks are normal - we only warn if there's a risk of double acknowledgement
-              if (audioChunkCounter > 1 && pendingEndVoiceSession) {
+              if (currentCounter > 1 && state.get('pendingEndVoiceSession')) {
                 console.warn(`[${clientId}] ⚠️ WARNING: Multiple audio chunks detected (${audioChunkCounter} total) with pending end_voice_session. Suppression should prevent duplicates, but monitor for issues.`);
               }
               
@@ -543,7 +574,8 @@ wss.on('connection', async (ws, req) => {
       // Turn complete
       if (content.turnComplete) {
         const turnCompleteReason = content.turnCompleteReason;
-        console.log(`[${clientId}] Turn complete (sent ${audioChunkCounter} audio chunks this turn)${turnCompleteReason ? `, reason: ${turnCompleteReason}` : ''}`);
+        const audioChunksThisTurn = state.get('audioChunkCounter');
+        console.log(`[${clientId}] Turn complete (sent ${audioChunksThisTurn} audio chunks this turn)${turnCompleteReason ? `, reason: ${turnCompleteReason}` : ''}`);
         
         // Handle malformed function calls - this happens when the model tries to call a tool but the call is invalid
         if (turnCompleteReason === 'MALFORMED_FUNCTION_CALL') {
@@ -573,21 +605,26 @@ wss.on('connection', async (ws, req) => {
           }
           
           // Reset state to allow conversation to continue
-          shouldSuppressAudio = false;
-          shouldSuppressTranscript = false;
-          pendingEndVoiceSession = null;
+          state.set('shouldSuppressAudio', false);
+          state.set('shouldSuppressTranscript', false);
+          state.set('pendingEndVoiceSession', null);
         }
         
-        isModelGenerating = false;
-        userAudioChunkCount = 0;
-        interruptionSent = false;
-        audioChunkCounter = 0; // Reset for next turn
-        lastAudioFingerprint = null; // Reset for next turn
+        state.set('isModelGenerating', false);
+        state.set('userAudioChunkCount', 0);
+        state.set('interruptionSent', false);
+        state.set('audioChunkCounter', 0); // Reset for next turn
+        state.set('lastAudioFingerprint', null); // Reset for next turn
         
         // If end_voice_session tool was called, now is the time to send it (after all audio is generated)
+        const pendingEndVoiceSession = state.get('pendingEndVoiceSession');
         if (pendingEndVoiceSession) {
           console.log(`[${clientId}] Turn complete - scheduling end_voice_session with buffer for audio transmission`);
-          const { reason, closingMessage, textResponse } = pendingEndVoiceSession;
+          // pendingEndVoiceSession structure: { after: 'current_turn', reason, closingMessage, textResponse }
+          // Extract data from state (stored by orchestrator when applying intent)
+          const reason = pendingEndVoiceSession.reason || 'user_requested';
+          const closingMessage = pendingEndVoiceSession.closingMessage || pendingEndVoiceSession.finalMessage || null;
+          const textResponse = pendingEndVoiceSession.textResponse || null;
           
           // Add delay to ensure audio chunks have time to:
           // 1. Be transmitted over WebSocket to client
@@ -605,32 +642,34 @@ wss.on('connection', async (ws, req) => {
             }
           }, 1000); // 1 second buffer for WebSocket transmission and queueing
           
-          pendingEndVoiceSession = null; // Clear the pending state
-          shouldSuppressAudio = false; // Reset audio suppression flag
-          shouldSuppressTranscript = false; // Reset transcript suppression flag
+          state.set('pendingEndVoiceSession', null); // Clear the pending state
+          state.set('shouldSuppressAudio', false); // Reset audio suppression flag
+          state.set('shouldSuppressTranscript', false); // Reset transcript suppression flag
         } else {
           // Reset audio and transcript suppression even if no pending end session (for safety)
-          shouldSuppressAudio = false;
-          shouldSuppressTranscript = false;
+          state.set('shouldSuppressAudio', false);
+          state.set('shouldSuppressTranscript', false);
         }
       }
 
       // Interrupted
       if (content.interrupted) {
-        console.log(`[${clientId}] Response interrupted by user input (sent ${audioChunkCounter} audio chunks before interruption)`);
-        isModelGenerating = false;
-        userAudioChunkCount = 0;
-        interruptionSent = false;
-        shouldSuppressAudio = false; // Reset audio suppression on interruption
-        shouldSuppressTranscript = false; // Reset transcript suppression on interruption
-        audioChunkCounter = 0; // Reset for next turn
-        lastAudioFingerprint = null; // Reset for next turn
+        const audioChunksBeforeInterrupt = state.get('audioChunkCounter');
+        console.log(`[${clientId}] Response interrupted by user input (sent ${audioChunksBeforeInterrupt} audio chunks before interruption)`);
+        state.set('isModelGenerating', false);
+        state.set('userAudioChunkCount', 0);
+        state.set('interruptionSent', false);
+        state.set('shouldSuppressAudio', false); // Reset audio suppression on interruption
+        state.set('shouldSuppressTranscript', false); // Reset transcript suppression on interruption
+        state.set('audioChunkCounter', 0); // Reset for next turn
+        state.set('lastAudioFingerprint', null); // Reset for next turn
         
         // Notify client to stop audio playback (if not already sent)
-        if (!interruptionSent) {
+        if (!state.get('interruptionSent')) {
           ws.send(JSON.stringify({
             type: 'interrupted'
           }));
+          state.set('interruptionSent', true);
         }
       }
 
@@ -661,7 +700,7 @@ wss.on('connection', async (ws, req) => {
         console.log(`[${clientId}] Transcript received: assistant - ${transcriptPreview}...`);
         console.log(`[${clientId}] ✓ OUTPUT TRANSCRIPTION RECEIVED: ${content.outputTranscription.text}`);
         
-        if (shouldSuppressTranscript) {
+        if (state.get('shouldSuppressTranscript')) {
           console.log(`[${clientId}] ⚠️ TRANSCRIPT SUPPRESSED - end_voice_session tool was called, preventing duplicate message in chat`);
         } else {
           conversationTranscripts.assistant.push({
@@ -727,8 +766,8 @@ wss.on('connection', async (ws, req) => {
               inputAudioTranscription: {},
               // Enable output audio transcription for debugging
               outputAudioTranscription: {},
-              // Add tool support for ignore_user and end_voice_session functionality
-              tools: [{ functionDeclarations: [ignoreUserTool, endVoiceSessionTool] }]
+              // Add tool support (all 5 tools from registry)
+              tools: [{ functionDeclarations: geminiToolSchemas }]
             };
             
             console.log(`[${clientId}] System prompt injected (${FRAM_SYSTEM_PROMPT.length} chars)`);
@@ -741,9 +780,9 @@ wss.on('connection', async (ws, req) => {
                 onopen: () => {
                   console.log(`[${clientId}] WebSocket to Gemini opened`);
                 },
-                onmessage: (message) => {
+                onmessage: async (message) => {
                   console.log(`[${clientId}] Received message from Gemini:`, JSON.stringify(message, null, 2));
-                  handleGeminiMessage(clientId, message);
+                  await handleGeminiMessage(clientId, message);
                   // Note: History injection and audio buffer flushing are handled in handleGeminiMessage
                   // to ensure correct ordering (history BEFORE audio)
                 },
@@ -802,6 +841,9 @@ wss.on('connection', async (ws, req) => {
               }
             });
 
+            // Initialize transport now that session exists
+            transport = new GeminiLiveTransport(geminiSession);
+
             // Don't send 'started' yet - wait for setupComplete message
             console.log(`[${clientId}] Gemini Live session connecting, waiting for setup complete...`);
           } catch (error) {
@@ -857,14 +899,15 @@ wss.on('connection', async (ws, req) => {
             try {
               // Detect user interruption - when user speaks while model is generating
               // Only interrupt after sustained speech (3+ consecutive chunks = ~0.3-0.5 seconds)
-              if (isModelGenerating) {
-                userAudioChunkCount++;
+              if (state.get('isModelGenerating')) {
+                const currentCount = state.get('userAudioChunkCount') + 1;
+                state.set('userAudioChunkCount', currentCount);
                 
                 // Interrupt only if sustained speech and haven't already interrupted this turn
                 const INTERRUPTION_THRESHOLD = 3; // Require 3 consecutive chunks (~300-500ms)
-                if (userAudioChunkCount >= INTERRUPTION_THRESHOLD && !interruptionSent) {
-                  console.log(`[${clientId}] 🔴 USER INTERRUPTING - sustained speech detected (${userAudioChunkCount} chunks)`);
-                  interruptionSent = true;
+                if (currentCount >= INTERRUPTION_THRESHOLD && !state.get('interruptionSent')) {
+                  console.log(`[${clientId}] 🔴 USER INTERRUPTING - sustained speech detected (${currentCount} chunks)`);
+                  state.set('interruptionSent', true);
                   
                   // The Live API automatically handles interruption when new audio arrives
                   // We just need to notify the client to stop playback
@@ -874,7 +917,7 @@ wss.on('connection', async (ws, req) => {
                 }
               } else {
                 // Reset chunk counter when model is not generating
-                userAudioChunkCount = 0;
+                state.set('userAudioChunkCount', 0);
               }
               
               console.log(`[${clientId}] Sending audio (${base64Length} chars base64, ~${Math.round(base64Length * 3 / 4)} bytes)`);
@@ -909,11 +952,11 @@ wss.on('connection', async (ws, req) => {
               sessionReady = false;
               audioBuffer = [];
               conversationTranscripts = { user: [], assistant: [] };
-              pendingEndVoiceSession = null; // Clear any pending end session
-              shouldSuppressAudio = false; // Reset audio suppression flag
-              shouldSuppressTranscript = false; // Reset transcript suppression flag
-              audioChunkCounter = 0; // Reset audio counter
-              lastAudioFingerprint = null; // Reset audio fingerprint
+              state.set('pendingEndVoiceSession', null); // Clear any pending end session
+              state.set('shouldSuppressAudio', false); // Reset audio suppression flag
+              state.set('shouldSuppressTranscript', false); // Reset transcript suppression flag
+              state.set('audioChunkCounter', 0); // Reset audio counter
+              state.set('lastAudioFingerprint', null); // Reset audio fingerprint
               
               ws.send(JSON.stringify({ type: 'stopped' }));
             } catch (error) {
@@ -930,11 +973,11 @@ wss.on('connection', async (ws, req) => {
             sessionReady = false;
             audioBuffer = [];
             conversationTranscripts = { user: [], assistant: [] };
-            pendingEndVoiceSession = null; // Clear any pending end session
-            shouldSuppressAudio = false; // Reset audio suppression flag
-            shouldSuppressTranscript = false; // Reset transcript suppression flag
-            audioChunkCounter = 0; // Reset audio counter
-            lastAudioFingerprint = null; // Reset audio fingerprint
+            state.set('pendingEndVoiceSession', null); // Clear any pending end session
+            state.set('shouldSuppressAudio', false); // Reset audio suppression flag
+            state.set('shouldSuppressTranscript', false); // Reset transcript suppression flag
+            state.set('audioChunkCounter', 0); // Reset audio counter
+            state.set('lastAudioFingerprint', null); // Reset audio fingerprint
           }
           break;
 

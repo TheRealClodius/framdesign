@@ -874,7 +874,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
   };
 
   return (
-    <section className="w-full max-w-[28rem] md:max-w-[950px] mx-auto px-4 pt-12 pb-9 h-fit md:flex-1 md:flex md:flex-col md:min-h-0">
+    <section className="w-full max-w-[28rem] md:max-w-[950px] mx-auto px-4 pt-12 pb-9 h-fit md:flex-1 md:flex md:flex-col md:min-h-0 overflow-x-hidden">
       <div className="mb-10 text-center flex-shrink-0 flex items-center justify-center gap-4">
         <p className="text-[0.75rem] font-mono text-gray-500 tracking-wider">FRAM ASSISTANT</p>
         <button
@@ -887,7 +887,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
       </div>
 
       <div className="flex flex-col h-[600px] md:flex-1 md:min-h-0 font-mono text-[0.875rem]">
-        <div ref={messagesContainerRef} className="h-[600px] md:flex-1 md:min-h-0 overflow-y-auto mb-2 space-y-6 scrollbar-boxy">
+        <div ref={messagesContainerRef} className="h-[600px] md:flex-1 md:min-h-0 overflow-y-auto overflow-x-hidden mb-2 space-y-6 scrollbar-boxy">
           {messages.map((message, index) => {
             // Skip rendering empty streaming assistant messages - they'll be shown via loading indicator
             if (message.role === "assistant" && message.streaming && !message.content.trim()) {
@@ -902,7 +902,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
                 }`}
               >
                 <div
-                  className={`max-w-[85%] ${
+                  className={`max-w-[85%] overflow-x-hidden ${
                     message.role === "user"
                       ? "text-right"
                       : "text-left"
@@ -912,7 +912,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
                     {message.role === "user" ? "You" : "FRAM"}
                   </p>
                   {message.role === "assistant" ? (
-                    <div className="text-black leading-relaxed">
+                    <div className="text-black leading-relaxed overflow-x-hidden break-words">
                       <MarkdownWithMermaid 
                         content={message.content} 
                         isStreaming={message.streaming}
@@ -922,7 +922,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
                       />
                     </div>
                   ) : (
-                    <p className="text-black leading-relaxed">
+                    <p className="text-black leading-relaxed break-words overflow-x-hidden">
                       {message.content}
                     </p>
                   )}

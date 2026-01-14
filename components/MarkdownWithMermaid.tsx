@@ -206,7 +206,7 @@ export default function MarkdownWithMermaid({ content, className = "", isStreami
   );
 
   return (
-    <div className={`markdown-content ${className}`}>
+    <div className={`markdown-content overflow-x-hidden break-words ${className}`}>
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
         {content}
       </ReactMarkdown>

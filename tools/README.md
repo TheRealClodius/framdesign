@@ -286,18 +286,24 @@ Your action:
 
 ### 4. handler.js (Required)
 
-Execution logic that exports `execute({ args, context })` function.
+Execution logic that exports `execute(context)` function.
 
 **Function signature:**
 ```javascript
 /**
  * Tool execution handler
- * @param {object} params
- * @param {object} params.args - Validated parameters from schema (Ajv already validated)
- * @param {object} params.context - Execution context with capabilities
+ * @param {object} context - Execution context
+ * @param {object} context.args - Validated parameters from schema (Ajv already validated)
+ * @param {string} context.clientId - Client/session identifier
+ * @param {WebSocket|null} context.ws - WebSocket connection (voice mode only)
+ * @param {object|null} context.geminiSession - Gemini session (voice mode only)
+ * @param {object} context.session - Session state
+ * @param {object} context.capabilities - Capability flags
+ * @param {object} context.meta - Tool metadata
  * @returns {Promise<ToolResponse>} - Success or failure response
  */
-export async function execute({ args, context }) {
+export async function execute(context) {
+  const { args, clientId, ws, geminiSession, session, capabilities, meta } = context;
   // Implementation
 }
 ```
@@ -305,25 +311,24 @@ export async function execute({ args, context }) {
 **Context object:**
 ```javascript
 context = {
-  clientId: string,
-  tool: {
-    id: string,
-    version: string,
-    idempotent: boolean
-  },
+  args: object,              // Validated tool parameters
+  clientId: string,          // Client/session identifier
+  ws: WebSocket | null,      // WebSocket connection (voice mode only)
+  geminiSession: object | null, // Gemini session (voice mode only)
   session: {
     isActive: boolean,
     toolsVersion: string,
-    state: object  // Read-only session state
+    state: object  // Read-only session state snapshot
   },
-  messaging: {
-    send: async (message) => { /* Send message to client */ }
+  capabilities: {
+    messaging: boolean,      // Has WebSocket messaging capability
+    voice: boolean,          // Has voice session capability
+    audit: boolean           // Has audit logging capability
   },
-  voice: {
-    isActive: () => boolean  // Check if voice mode active
-  },
-  audit: {
-    log: (event, data) => { /* Log audit event */ }
+  meta: {
+    toolId: string,
+    version: string,
+    category: string
   }
 }
 ```
@@ -362,16 +367,17 @@ throw new ToolError(ErrorType.TRANSIENT, 'WebSocket connection lost', {
 
 **Complete example:**
 ```javascript
-import { ToolError, ErrorType } from '../_core/error-types.js';
+import { ToolError, ErrorType, IntentType } from '../_core/error-types.js';
 
 /**
  * Block user for specified duration
  */
-export async function execute({ args, context }) {
+export async function execute(context) {
+  const { args, clientId, ws, session, capabilities } = context;
   const { duration_seconds, farewell_message } = args;
 
   // Semantic validation (schema already validated types/structure)
-  if (!context.session.isActive) {
+  if (!session.isActive) {
     // Expected domain failure - return as result, not exception
     return {
       ok: false,
@@ -379,6 +385,12 @@ export async function execute({ args, context }) {
         type: ErrorType.SESSION_INACTIVE,
         message: 'Cannot timeout user - session already ended',
         retryable: false
+      },
+      intents: [],
+      meta: {
+        toolId: 'ignore_user',
+        duration: 0,
+        responseSchemaVersion: '1.0.0'
       }
     };
   }
@@ -386,39 +398,41 @@ export async function execute({ args, context }) {
   // Calculate timeout
   const timeoutUntil = Date.now() + (duration_seconds * 1000);
 
-  // Send timeout command to client (side effect)
-  try {
-    await context.messaging.send({
-      type: 'timeout',
-      durationSeconds: duration_seconds,
-      timeoutUntil,
-      farewellMessage: farewell_message
-    });
-  } catch (error) {
-    // Unexpected failure - throw ToolError
-    throw new ToolError(ErrorType.TRANSIENT, 'Failed to send timeout command', {
-      retryable: true,
-      partialSideEffects: false
-    });
+  // Send timeout command to client (voice mode)
+  if (ws && capabilities.messaging) {
+    try {
+      ws.send(JSON.stringify({
+        type: 'timeout',
+        timeoutUntil,
+        durationSeconds: duration_seconds,
+        message: farewell_message
+      }));
+    } catch (error) {
+      // Unexpected failure - throw ToolError
+      throw new ToolError(ErrorType.TRANSIENT, 'Failed to send timeout command', {
+        retryable: true
+      });
+    }
   }
-
-  // Log for audit trail
-  context.audit.log('user_timeout', {
-    duration: duration_seconds,
-    timeoutUntil
-  });
 
   // Return success WITH INTENTS
   return {
     ok: true,
     data: {
       timeoutUntil,
-      duration: duration_seconds
+      durationSeconds: duration_seconds,
+      farewellMessage: farewell_message,
+      farewellDelivered: true
     },
     intents: [
-      { type: 'END_VOICE_SESSION', after: 'farewell_spoken' },
-      { type: 'SUPPRESS_AUDIO', value: true }
-    ]
+      { type: IntentType.END_VOICE_SESSION, after: 'current_turn' },
+      { type: IntentType.SUPPRESS_TRANSCRIPT, value: true }
+    ],
+    meta: {
+      toolId: 'ignore_user',
+      duration: Date.now() - startTime,
+      responseSchemaVersion: '1.0.0'
+    }
   };
 }
 ```
@@ -545,10 +559,38 @@ Check `doc.md` has all 7 required sections (## Summary, ## Preconditions, etc.)
 - Check `npm run build:tools` completed successfully
 - Check `tools/tool_registry.json` exists and contains your tool
 
+## Integration Status
+
+**Current Status:** ✅ **FULLY INTEGRATED**
+
+Both agents are now using the unified tool registry system:
+
+- ✅ **Voice Server** (`voice-server/server.js`)
+  - Registry loads at startup
+  - All 5 tools available via `geminiToolSchemas`
+  - State controller manages session state
+  - Transport layer handles tool call/response protocol
+  - Policy enforcement (budgets, mode restrictions) operational
+
+- ✅ **Text Agent** (`app/api/chat/route.ts`)
+  - Registry loads on first API request
+  - All 5 tools available via `providerSchemas` (JSON Schema format)
+  - State controller initialized per request
+  - Tool execution via `toolRegistry.executeTool()`
+  - Next.js webpack configuration for handler loading
+
+**Available Tools:** 5 tools
+1. `ignore_user` - Block disrespectful users (text + voice)
+2. `start_voice_session` - Initiate voice mode (text only)
+3. `end_voice_session` - End voice session gracefully (voice only)
+4. `kb_search` - Search knowledge base (text + voice)
+5. `kb_get` - Get knowledge base entity (text + voice)
+
 ## Next Steps
 
 After creating a tool, see:
 - `tools/ARCHITECTURE.md` - Understand overall system design
-- `tools/PHASES.md` - See implementation roadmap
+- `tools/PHASES.md` - See implementation roadmap and current status
 - `voice-server/INTEGRATION.md` - How voice agent uses tools
 - `app/api/chat/INTEGRATION.md` - How text agent uses tools
+- `TESTING_GUIDE.md` - How to test tool registry integration

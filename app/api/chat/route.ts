@@ -9,42 +9,54 @@ import {
   TOKEN_CONFIG,
   STREAM_CONFIG,
 } from "@/lib/constants";
+import { toolRegistry } from '@/tools/_core/registry';
+import { ErrorType, ToolError } from '@/tools/_core/error-types';
+import { createStateController } from '@/tools/_core/state-controller';
+import { retryWithBackoff as retryToolExecution } from '@/tools/_core/retry-handler';
 
-// Tool definition for Fram's ignore/timeout capability
-const ignoreUserTool = {
-  name: "ignore_user",
-  description: "Use this when a user is rude, disrespectful, abusive, or crosses a line. This will block the user from sending messages for the specified duration. Use this when words alone are not enough.",
-  parameters: {
-    type: Type.OBJECT,
-    properties: {
-      duration_seconds: {
-        type: Type.NUMBER,
-        description: "How long to ignore the user in seconds. Use 30-60 for mild rudeness, 300-600 for moderate disrespect, 3600 for serious insults, up to 86400 (24 hours) for extreme abuse."
-      },
-      farewell_message: {
-        type: Type.STRING,
-        description: "The final message to deliver before going silent. Should be firm and direct, not petty."
-      }
-    },
-    required: ["duration_seconds", "farewell_message"]
+// Convert geminiNative schema (with uppercase string types like "OBJECT", "STRING") 
+// to JSON Schema format (lowercase: "object", "string") for parametersJsonSchema
+function convertGeminiSchemaToJsonSchema(schema: any): any {
+  if (!schema || typeof schema !== 'object' || Array.isArray(schema)) {
+    return schema;
   }
-};
-
-// Tool definition for starting voice sessions
-const startVoiceSessionTool = {
-  name: "start_voice_session",
-  description: "Start a voice conversation session. Use this when the user wants to switch to voice mode or when voice communication would be more natural. This will activate the microphone and start a real-time voice conversation. IMPORTANT: If the user asks for something beyond just starting voice mode (like 'start voice and tell me a joke' or 'switch to voice mode and explain X'), you MUST specify that request in pending_request so the voice agent addresses it immediately.",
-  parameters: {
-    type: Type.OBJECT,
-    properties: {
-      pending_request: {
-        type: Type.STRING,
-        description: "Any pending user request that should be addressed immediately when voice starts. For example, if user says 'start voice mode and tell me a joke', set this to 'tell a joke'. If user just says 'start voice mode' with no additional request, leave this empty."
-      }
-    },
-    required: []
+  
+  const TYPE_MAP: Record<string, string> = {
+    'STRING': 'string',
+    'NUMBER': 'number',
+    'INTEGER': 'integer',
+    'BOOLEAN': 'boolean',
+    'OBJECT': 'object',
+    'ARRAY': 'array'
+  };
+  
+  // Create a copy to avoid mutating the original
+  const converted: any = { ...schema };
+  
+  // Convert uppercase type to lowercase JSON Schema type
+  if (schema.type && typeof schema.type === 'string') {
+    const upperType = schema.type.toUpperCase();
+    if (TYPE_MAP[upperType]) {
+      converted.type = TYPE_MAP[upperType];
+    }
   }
-};
+  
+  // Recursively convert properties
+  if (schema.properties && typeof schema.properties === 'object') {
+    converted.properties = {};
+    for (const [key, prop] of Object.entries(schema.properties)) {
+      converted.properties[key] = convertGeminiSchemaToJsonSchema(prop);
+    }
+  }
+  
+  // Recursively convert items for arrays
+  if (schema.items) {
+    converted.items = convertGeminiSchemaToJsonSchema(schema.items);
+  }
+  
+  // Preserve other fields (enum, description, required, etc.)
+  return converted;
+}
 
 // In-memory cache store for conversation caches
 // Key: conversation hash, Value: { cacheName: string, cachedMessageCount: number, summary: string | null, summaryUpToIndex: number, createdAt: number }
@@ -215,7 +227,7 @@ function enforceTokenBudget(
  * Creates or retrieves the system prompt cache
  * Automatically invalidates and recreates cache if system prompt changes
  */
-async function getSystemPromptCache(ai: GoogleGenAI): Promise<string | null> {
+async function getSystemPromptCache(ai: GoogleGenAI, providerSchemas: any[]): Promise<string | null> {
   // Calculate current system prompt hash
   const currentPromptHash = hashSystemPrompt(FRAM_SYSTEM_PROMPT);
   
@@ -270,7 +282,7 @@ async function getSystemPromptCache(ai: GoogleGenAI): Promise<string | null> {
         config: {
           systemInstruction: FRAM_SYSTEM_PROMPT,
           contents: systemContent,
-          tools: [{ functionDeclarations: [ignoreUserTool, startVoiceSessionTool] }],
+          tools: [{ functionDeclarations: providerSchemas }],
           ttl: `${CACHE_CONFIG.TTL_SECONDS}s`,
           displayName: "fram-system-prompt"
         }
@@ -306,7 +318,8 @@ async function getConversationCache(
   conversationHash: string,
   summary: string | null,
   recentMessages: Array<{ role: string; parts: Array<{ text: string }> }>,
-  summaryUpToIndex: number
+  summaryUpToIndex: number,
+  providerSchemas: any[]
 ): Promise<{ 
   cacheName: string | null; 
   summaryCacheName: string | null;
@@ -396,7 +409,7 @@ async function getConversationCache(
         config: {
           systemInstruction: FRAM_SYSTEM_PROMPT,
           contents: cacheContent,
-          tools: [{ functionDeclarations: [ignoreUserTool, startVoiceSessionTool] }],
+          tools: [{ functionDeclarations: providerSchemas }],
           ttl: `${CACHE_CONFIG.TTL_SECONDS}s`,
           displayName: `fram-summary-${conversationHash}`
         }
@@ -503,6 +516,27 @@ export async function POST(request: Request) {
 
     const ai = new GoogleGenAI({ apiKey });
 
+    // Load registry if not already loaded
+    if (!toolRegistry.getVersion()) {
+      await toolRegistry.load();
+      toolRegistry.lock();
+      console.log(`✓ Tool registry loaded: v${toolRegistry.getVersion()}`);
+    }
+
+    // Get provider schemas for Gemini 3
+    // Convert geminiNative format (uppercase types) to JSON Schema format (lowercase types)
+    // Use parametersJsonSchema instead of parameters to avoid Type.* enum conversion
+    const geminiNativeSchemas = toolRegistry.getProviderSchemas('geminiNative');
+    const providerSchemas = geminiNativeSchemas.map(schema => {
+      // Convert to JSON Schema format and use parametersJsonSchema
+      const jsonSchema = convertGeminiSchemaToJsonSchema(schema.parameters);
+      return {
+        name: schema.name,
+        description: schema.description,
+        parametersJsonSchema: jsonSchema  // Use JSON Schema format instead of Type.* enums
+      };
+    });
+
     // Enable caching
     const ENABLE_CACHING = true;
 
@@ -594,7 +628,7 @@ export async function POST(request: Request) {
             } else {
               // Try to get system cache (fast operation)
               const systemCache = await Promise.race([
-                getSystemPromptCache(ai),
+                getSystemPromptCache(ai, providerSchemas),
                 new Promise<null>((resolve) => setTimeout(() => resolve(null), 100)) // 100ms timeout
               ]);
               contentsToSend = recentMessages;
@@ -617,7 +651,7 @@ export async function POST(request: Request) {
           
           // Get system prompt cache with timeout
           const systemCache = await Promise.race([
-            getSystemPromptCache(ai),
+            getSystemPromptCache(ai, providerSchemas),
             new Promise<null>((resolve) => setTimeout(() => resolve(null), 200)) // 200ms timeout
           ]);
           
@@ -641,7 +675,7 @@ export async function POST(request: Request) {
           
           // Background: Create conversation cache for next time (don't await)
           if (summary) {
-            getConversationCache(ai, conversationHash, summary, recentMessages, summaryUpToIndex)
+            getConversationCache(ai, conversationHash, summary, recentMessages, summaryUpToIndex, providerSchemas)
               .catch((err) => console.warn("Background cache creation failed:", err));
           }
         }
@@ -721,7 +755,7 @@ export async function POST(request: Request) {
       // When using cached content, tools must be included in the cache, not in the request
       // So we conditionally include tools based on whether we're using cached content
       const config: {
-        tools?: Array<{ functionDeclarations: Array<typeof ignoreUserTool> }>;
+        tools?: Array<{ functionDeclarations: any[] }>;
         cachedContent?: string;
         systemInstruction?: string;
       } = {};
@@ -742,7 +776,7 @@ export async function POST(request: Request) {
 
       // Only add tools/systemInstruction if we're NOT using cached content (tools live in cache when present)
       if (!usingCache) {
-        config.tools = [{ functionDeclarations: [ignoreUserTool] }];
+        config.tools = [{ functionDeclarations: providerSchemas }];
         config.systemInstruction = FRAM_SYSTEM_PROMPT;
       }
 
@@ -757,7 +791,10 @@ export async function POST(request: Request) {
     });
 
     // Check early chunks for function calls, then stream progressively to the client
-    let functionCall: { name: string; args: Record<string, unknown> } | null = null;
+    // Store the full functionCall part including thought_signature (required by Gemini 3)
+    let functionCall: { name: string; args: Record<string, unknown>; thought_signature?: string } | null = null;
+    // Store the full functionCall part as returned by the model (preserves thought_signature)
+    let functionCallPart: { functionCall: { name: string; args: Record<string, unknown>; thought_signature?: string } } | null = null;
     const bufferedChunks: unknown[] = [];
 
     try {
@@ -770,59 +807,347 @@ export async function POST(request: Request) {
         if (done) break;
         bufferedChunks.push(value);
 
-        const typed = value as { candidates?: Array<{ content?: { parts?: Array<{ text?: string; functionCall?: { name: string; args: Record<string, unknown> } }> } }> };
+        const typed = value as { candidates?: Array<{ content?: { parts?: Array<{ text?: string; functionCall?: { name: string; args: Record<string, unknown>; thought_signature?: string } }> } }> };
         const candidates = typed.candidates?.[0]?.content?.parts || [];
         const callPart = candidates.find((part) => part.functionCall);
         if (callPart?.functionCall) {
           functionCall = callPart.functionCall;
+          // Preserve the entire part including thought_signature for follow-up requests
+          functionCallPart = callPart as { functionCall: { name: string; args: Record<string, unknown>; thought_signature?: string } };
           break;
         }
       }
 
       // If function call detected early, handle it and return JSON (no stream)
       if (functionCall?.name === "ignore_user") {
-        const args = functionCall.args as { duration_seconds: number; farewell_message: string };
-        const durationSeconds = args.duration_seconds;
-        const farewellMessage = args.farewell_message;
+        // Initialize state controller
+        const state = createStateController({
+          mode: 'text',
+          isActive: true
+        }) as any;
 
-        console.log("Fram used ignore_user tool:", { durationSeconds, farewellMessage });
+        // Get tool metadata
+        const toolMetadata = toolRegistry.getToolMetadata('ignore_user') as any;
 
-        return NextResponse.json({
-          message: farewellMessage,
-          timeout: {
-            duration: durationSeconds,
-            until: Date.now() + durationSeconds * 1000
+        // Build execution context
+        const executionContext = {
+          clientId: `text-${Date.now()}`,
+          ws: null,  // No WebSocket in text mode
+          geminiSession: null,
+          args: functionCall.args,
+          session: {
+            isActive: state.get('isActive'),
+            toolsVersion: toolRegistry.getVersion(),
+            state: state.getSnapshot()
           }
-        });
+        };
+
+        // Execute tool through registry with retry logic
+        const startTime = Date.now();
+        const result = await retryToolExecution(
+          () => toolRegistry.executeTool('ignore_user', executionContext),
+          {
+            mode: 'text',
+            maxRetries: 3,
+            toolId: 'ignore_user',
+            toolMetadata: toolMetadata,
+            clientId: `text-${Date.now()}`
+          }
+        );
+        const duration = Date.now() - startTime;
+
+        // Structured audit logging
+        console.log(JSON.stringify({
+          event: 'tool_execution',
+          toolId: 'ignore_user',
+          toolVersion: toolMetadata?.version || 'unknown',
+          registryVersion: toolRegistry.getVersion(),
+          duration,
+          ok: result.ok,
+          category: toolMetadata?.category || 'unknown',
+          mode: 'text'
+        }));
+
+        // Return response based on result
+        if (result.ok) {
+          return NextResponse.json({
+            message: result.data.farewellMessage || functionCall.args.farewell_message,
+            timeout: {
+              duration: result.data.durationSeconds || functionCall.args.duration_seconds,
+              until: result.data.timeoutUntil
+            }
+          });
+        } else {
+          console.error('ignore_user tool failed:', result.error);
+          return NextResponse.json({
+            error: result.error.message
+          }, { status: 500 });
+        }
       }
 
       // Handle start_voice_session tool call
       if (functionCall?.name === "start_voice_session") {
-        const pendingRequest = functionCall.args?.pending_request || null;
-        console.log("Fram used start_voice_session tool", pendingRequest ? `with pending_request: "${pendingRequest}"` : "(no pending request)");
+        // Initialize state controller
+        const state = createStateController({
+          mode: 'text',
+          isActive: true
+        }) as any;
 
-        // Extract any text response from buffered chunks for the message
-        let messageText = "";
-        for (const chunk of bufferedChunks) {
-          const typed = chunk as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
-          const candidates = typed.candidates?.[0]?.content?.parts || [];
-          for (const part of candidates) {
-            if (part.text) {
-              messageText += part.text;
+        const toolMetadata = toolRegistry.getToolMetadata('start_voice_session') as any;
+
+        const executionContext = {
+          clientId: `text-${Date.now()}`,
+          ws: null,
+          geminiSession: null,
+          args: functionCall.args || {},
+          session: {
+            isActive: state.get('isActive'),
+            toolsVersion: toolRegistry.getVersion(),
+            state: state.getSnapshot()
+          }
+        };
+
+        const startTime = Date.now();
+        const result = await retryToolExecution(
+          () => toolRegistry.executeTool('start_voice_session', executionContext),
+          {
+            mode: 'text',
+            maxRetries: 3,
+            toolId: 'start_voice_session',
+            toolMetadata: toolMetadata,
+            clientId: `text-${Date.now()}`
+          }
+        );
+        const duration = Date.now() - startTime;
+
+        console.log(JSON.stringify({
+          event: 'tool_execution',
+          toolId: 'start_voice_session',
+          toolVersion: toolMetadata?.version || 'unknown',
+          registryVersion: toolRegistry.getVersion(),
+          duration,
+          ok: result.ok,
+          category: toolMetadata?.category || 'unknown',
+          mode: 'text'
+        }));
+
+        if (result.ok) {
+          const pendingRequest = functionCall.args?.pending_request || null;
+
+          // Extract text response from buffered chunks
+          let messageText = "";
+          for (const chunk of bufferedChunks) {
+            const typed = chunk as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
+            const candidates = typed.candidates?.[0]?.content?.parts || [];
+            for (const part of candidates) {
+              if (part.text) {
+                messageText += part.text;
+              }
             }
           }
+
+          if (!messageText.trim()) {
+            messageText = "Let's switch to voice mode.";
+          }
+
+          return NextResponse.json({
+            message: messageText,
+            startVoiceSession: true,
+            pendingRequest: pendingRequest
+          });
+        } else {
+          console.error('start_voice_session tool failed:', result.error);
+          return NextResponse.json({
+            error: result.error.message
+          }, { status: 500 });
+        }
+      }
+
+      // Handle other function calls (e.g., kb_search, kb_get)
+      if (functionCall && functionCall.name) {
+        const toolName = functionCall.name; // Store in const for type narrowing
+        console.log(`Handling function call: ${toolName}`);
+        
+        // Initialize state controller
+        const state = createStateController({
+          mode: 'text',
+          isActive: true
+        }) as any;
+
+        // Get tool metadata
+        const toolMetadata = toolRegistry.getToolMetadata(toolName) as any;
+        
+        if (!toolMetadata) {
+          console.error(`Unknown tool: ${toolName}`);
+          return NextResponse.json({
+            error: `Unknown tool: ${toolName}`
+          }, { status: 400 });
         }
 
-        // If no message text found, use a default
-        if (!messageText.trim()) {
-          messageText = "Let's switch to voice mode.";
+        // Build execution context
+        const executionContext = {
+          clientId: `text-${Date.now()}`,
+          ws: null,
+          geminiSession: null,
+          args: functionCall.args || {},
+          capabilities: { voice: false },
+          session: {
+            isActive: state.get('isActive'),
+            toolsVersion: toolRegistry.getVersion(),
+            state: state.getSnapshot()
+          }
+        };
+
+        // Execute tool through registry with retry logic
+        const startTime = Date.now();
+        const result = await retryToolExecution(
+          () => toolRegistry.executeTool(toolName, executionContext),
+          {
+            mode: 'text',
+            maxRetries: 3,
+            toolId: toolName,
+            toolMetadata: toolMetadata,
+            clientId: `text-${Date.now()}`
+          }
+        );
+        const duration = Date.now() - startTime;
+
+        console.log(JSON.stringify({
+          event: 'tool_execution',
+          toolId: toolName,
+          toolVersion: toolMetadata?.version || 'unknown',
+          registryVersion: toolRegistry.getVersion(),
+          duration,
+          ok: result.ok,
+          category: toolMetadata?.category || 'unknown',
+          mode: 'text'
+        }));
+
+        if (!result.ok) {
+          console.error(`${toolName} tool failed:`, result.error);
+          return NextResponse.json({
+            error: result.error.message
+          }, { status: 500 });
         }
 
-        return NextResponse.json({
-          message: messageText,
-          startVoiceSession: true,
-          pendingRequest: pendingRequest
+        // Continue conversation with tool result
+        // Add the function call and result to the conversation
+        // IMPORTANT: Use the full functionCallPart which includes thought_signature (required by Gemini 3)
+        const updatedContents = [
+          ...contentsToSend,
+          {
+            role: "model" as const,
+            parts: [
+              // Use the preserved functionCallPart which includes thought_signature
+              functionCallPart || {
+                functionCall: {
+                  name: toolName,
+                  args: functionCall.args || {}
+                }
+              }
+            ]
+          },
+          {
+            role: "user" as const,
+            parts: [
+              {
+                functionResponse: {
+                  name: toolName,
+                  response: result.data
+                }
+              }
+            ]
+          }
+        ];
+
+        // Make a new API call with the tool result
+        const followUpStream = await retryWithBackoff(async () => {
+          const config: {
+            tools?: Array<{ functionDeclarations: any[] }>;
+            cachedContent?: string;
+            systemInstruction?: string;
+          } = {};
+
+          // Use cached content if available
+          if (cachedContent && cachedContent.trim()) {
+            config.cachedContent = cachedContent;
+          } else {
+            config.tools = [{ functionDeclarations: providerSchemas }];
+            config.systemInstruction = FRAM_SYSTEM_PROMPT;
+          }
+
+          return await ai.models.generateContentStream({
+            model: "gemini-3-flash-preview",
+            contents: updatedContents,
+            config
+          });
         });
+
+        // Stream the follow-up response
+        return new Response(
+          new ReadableStream({
+            async start(controller) {
+              const encoder = new TextEncoder();
+              let chunksProcessed = 0;
+              let bytesSent = 0;
+
+              const enqueueTextFromChunk = (chunk: unknown) => {
+                const typed = chunk as any;
+                const candidates = typed?.candidates?.[0]?.content?.parts || [];
+
+                let text: string | undefined;
+                if (typeof typed?.text === "function") {
+                  text = typed.text();
+                } else if (typed?.text) {
+                  text = typed.text;
+                } else if (candidates?.[0]?.text) {
+                  text = candidates[0].text;
+                }
+
+                if (text) {
+                  const encoded = encoder.encode(text);
+                  bytesSent += encoded.length;
+                  controller.enqueue(encoded);
+                  chunksProcessed++;
+                }
+              };
+
+              try {
+                const iterator = followUpStream[Symbol.asyncIterator]();
+                while (true) {
+                  const { value, done } = await iterator.next();
+                  if (done) break;
+                  enqueueTextFromChunk(value);
+                }
+
+                console.log(`Tool response stream completed: ${chunksProcessed} chunks, ${bytesSent} bytes`);
+                
+                // Background: Update cache with new summary if it was generated
+                if (summaryPromise) {
+                  summaryPromise.then((newSummary) => {
+                    if (newSummary) {
+                      console.log("Background: Updating cache with new summary");
+                      getConversationCache(ai, conversationHash, newSummary, recentMessages, summaryUpToIndex, providerSchemas)
+                        .catch((err) => console.warn("Background cache update failed:", err));
+                    }
+                  }).catch((err) => console.warn("Background summarization failed:", err));
+                }
+                
+                controller.close();
+              } catch (error) {
+                console.error("Error streaming tool response:", error);
+                controller.error(error);
+              }
+            }
+          }),
+          {
+            headers: {
+              'Content-Type': 'text/plain; charset=utf-8',
+              'Cache-Control': 'no-cache',
+              'Connection': 'keep-alive',
+            },
+          }
+        );
       }
 
       // Otherwise, stream buffered chunks and then the rest as they arrive
@@ -861,6 +1186,7 @@ export async function POST(request: Request) {
               }
 
               // Continue streaming remaining chunks
+              const iterator = stream[Symbol.asyncIterator]();
               while (true) {
                 const { value, done } = await iterator.next();
                 if (done) break;
@@ -874,7 +1200,7 @@ export async function POST(request: Request) {
                 summaryPromise.then((newSummary) => {
                   if (newSummary) {
                     console.log("Background: Updating cache with new summary");
-                    getConversationCache(ai, conversationHash, newSummary, recentMessages, summaryUpToIndex)
+                    getConversationCache(ai, conversationHash, newSummary, recentMessages, summaryUpToIndex, providerSchemas)
                       .catch((err) => console.warn("Background cache update failed:", err));
                   }
                 }).catch((err) => console.warn("Background summarization failed:", err));

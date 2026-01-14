@@ -31,6 +31,23 @@ export default function ConsoleFilter() {
       ) {
         return;
       }
+      // Filter out WebSocket errors with empty objects (they're logged with better context elsewhere)
+      if (message.includes("WebSocket error:")) {
+        // Check if any argument after the message is an empty object
+        const hasEmptyObject = args.slice(1).some(arg => 
+          typeof arg === 'object' && 
+          arg !== null && 
+          !Array.isArray(arg) &&
+          Object.keys(arg).length === 0
+        );
+        if (hasEmptyObject) {
+          return;
+        }
+      }
+      // Filter out any single empty object argument
+      if (args.length === 1 && typeof args[0] === 'object' && args[0] !== null && !Array.isArray(args[0]) && Object.keys(args[0]).length === 0) {
+        return;
+      }
       originalError.apply(console, args);
     };
 

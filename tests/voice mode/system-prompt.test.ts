@@ -50,7 +50,10 @@ describe('Voice Mode: System Prompt Injection', () => {
 
   test('should include voice mode specific instructions', () => {
     expect(FRAM_SYSTEM_PROMPT).toContain('VOICE');
-    expect(FRAM_SYSTEM_PROMPT).toContain('end_voice_session');
+    // Check for content from end_voice_session tool (the header is stripped, so check for actual content)
+    expect(FRAM_SYSTEM_PROMPT).toContain('END THE CALL');
+    expect(FRAM_SYSTEM_PROMPT).toContain('CALL THIS TOOL');
+    // Check for ignore_user tool content
     expect(FRAM_SYSTEM_PROMPT).toContain('ignore_user');
   });
 });

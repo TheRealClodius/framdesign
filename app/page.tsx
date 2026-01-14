@@ -16,11 +16,11 @@ export default function Home() {
   }, []);
 
   return (
-    <main className="min-h-screen flex flex-col items-center justify-between bg-black">
+    <main className="min-h-screen flex flex-col items-center justify-between bg-black overflow-x-hidden">
       <Hero />
       {/* Black spacer to cover safe area on mobile */}
       <div className="w-full bg-black safe-area-spacer" style={{ minHeight: '60px' }} />
-      <div className="w-full bg-white form-container md:h-[95vh] md:flex md:flex-col">
+      <div className="w-full bg-white form-container md:h-[95vh] md:flex md:flex-col overflow-x-hidden">
         <ChatInterface />
         
         <footer className="w-full text-center pt-8 pb-9 text-[10px] font-mono text-gray-500 footer-safe-area flex-shrink-0">

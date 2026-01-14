@@ -42,3 +42,4 @@ next-env.d.ts
 
 # tool registry build artifact
 tools/tool_registry.json
+.env*.local

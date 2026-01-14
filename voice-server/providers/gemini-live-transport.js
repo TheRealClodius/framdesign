@@ -26,12 +26,15 @@
  *         {
  *           name: 'tool_name',
  *           id: 'call_id',
- *           response: { ... } // Full ToolResponse envelope
+ *           response: { ... } // Just the data (if ok) or error (if failed)
  *         }
  *       ]
  *     }
  *   }
  * }
+ * 
+ * NOTE: Gemini Live API expects only the data/error, not the full ToolResponse envelope.
+ * The full envelope ({ ok, data/error, intents, meta }) is for internal use only.
  */
 
 import { ToolTransport } from './transport-interface.js';
@@ -78,7 +81,11 @@ export class GeminiLiveTransport extends ToolTransport {
    * @returns {Promise<void>}
    */
   async sendToolResult({ id, name, result }) {
-    // CRITICAL: Send full ToolResponse envelope
+    // CRITICAL: Gemini Live API expects only the data/error, not the full envelope
+    // Send result.data for success, or result.error for failure
+    // The full envelope ({ ok, data/error, intents, meta }) is for internal use only
+    const responseData = result.ok ? result.data : result.error;
+    
     const message = {
       clientContent: {
         toolResponse: {
@@ -86,7 +93,7 @@ export class GeminiLiveTransport extends ToolTransport {
             {
               id,
               name,
-              response: result // Full envelope: { ok, data/error, intents, meta }
+              response: responseData // Just the data or error, not the full envelope
             }
           ]
         }
