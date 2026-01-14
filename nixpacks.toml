@@ -1,0 +1,22 @@
+# Nixpacks configuration for Railway voice-service deployment
+# This project has two services:
+# 1. Next.js frontend (deployed to Vercel)
+# 2. Voice server (deployed to Railway)
+#
+# Railway deploys the voice server from the project root
+# because it needs access to the tools/ directory
+
+[phases.setup]
+nixPkgs = ["nodejs_20"]
+
+[phases.install]
+cmds = [
+  "npm install --ignore-scripts --no-optional || npm install --ignore-scripts",
+  "cd voice-server && npm install"
+]
+
+[phases.build]
+cmds = []
+
+[start]
+cmd = "cd voice-server && npm start"
