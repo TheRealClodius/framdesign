@@ -2,6 +2,8 @@
 
 # Railway Deployment Script for Voice Server
 # This script helps automate the Railway deployment process for the Voice Server
+#
+# Usage: ./scripts/Deployment/prod/deploy-voice-server.sh
 
 set -e
 
@@ -16,8 +18,8 @@ if ! command -v railway &> /dev/null; then
     exit 1
 fi
 
-# Navigate to voice-server directory
-cd "$(dirname "$0")/../voice-server" || exit 1
+# Navigate to voice-server directory (from scripts/Deployment/prod/)
+cd "$(dirname "$0")/../../../voice-server" || exit 1
 
 echo "📁 Current directory: $(pwd)"
 echo ""

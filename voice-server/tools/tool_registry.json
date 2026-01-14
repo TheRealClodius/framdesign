@@ -1,0 +1,705 @@
+{
+  "version": "1.0.f718e0cf",
+  "gitCommit": "ed2dc22",
+  "buildTimestamp": "2026-01-13T16:10:49.549Z",
+  "tools": [
+    {
+      "toolId": "end_voice_session",
+      "version": "1.0.0",
+      "category": "action",
+      "description": "GRACEFUL VOICE SESSION TERMINATION TOOL (Voice Mode Only)\n\nWHEN TO USE:\n- User explicitly asks to end the voice session or switch to text\n- Conversation has naturally concluded and user indicates they're done\n- You need to show something that requires text mode (complex diagrams, detailed explanations, code)\n- User asks a question but wants the answer delivered in text chat instead of voice\n\nDO NOT USE:\n- User just pauses or stops talking (wait for them)\n- You're in the middle of answering a question\n- As punishment (use ignore_user for that)\n\nEFFECT: Ends voice session gracefully, allowing conversation to continue in text mode if desired.",
+      "sideEffects": "writes",
+      "idempotent": true,
+      "requiresConfirmation": false,
+      "allowedModes": [
+        "voice"
+      ],
+      "latencyBudgetMs": 500,
+      "jsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "reason"
+        ],
+        "properties": {
+          "reason": {
+            "type": "string",
+            "enum": [
+              "user_request",
+              "task_complete",
+              "switch_to_text"
+            ],
+            "description": "Why the session is ending: user_request (user asked to end), task_complete (conversation finished), switch_to_text (showing content better suited for text)"
+          },
+          "final_message": {
+            "type": "string",
+            "description": "Optional brief farewell message to speak before ending. Keep it short (1-2 sentences). Example: 'Ending voice session. Feel free to continue in text chat.'",
+            "minLength": 5,
+            "maxLength": 200
+          }
+        }
+      },
+      "summary": "Gracefully terminates voice session while allowing conversation to continue in text mode. Voice mode only.",
+      "documentation": "# end_voice_session\n\n## Summary\n\nGraceful voice session termination tool. Ends voice connection while keeping text chat available. Voice mode only.\n\n## Preconditions\n\n- Must be in voice mode (`capabilities.voice === true`)\n- Voice session must be active\n- Should have valid reason for ending (user request, task complete, switch to text)\n\n## Postconditions\n\n**Voice Mode:**\n- Final message spoken (if provided)\n- Voice session terminated after message delivery\n- WebSocket connection remains open for text chat\n- Client UI switches from voice mode to text mode\n\n**State Changes:**\n- Voice session closed\n- Text chat remains available\n- Client UI updates to text-only mode\n\n**Intents Returned:**\n- `END_VOICE_SESSION` (after: 'current_turn' if final message, 'immediate' otherwise)\n\n## Invariants\n\n- Only works in voice mode (rejected in text mode)\n- Tool is idempotent (multiple calls with same reason safe)\n- Does NOT close WebSocket connection (only voice session)\n- Does NOT block user (unlike ignore_user)\n- Session remains active for text communication\n\n## Failure Modes\n\n### Validation Failures\n- Invalid reason (not in enum)\n- final_message too short (<5 chars) or too long (>200 chars)\n- Tool called in text mode\n\n### Execution Failures\n- Voice session already closed\n- Voice session unavailable\n- Final message delivery failed (degrades gracefully)\n\n### Graceful Degradation\n- If final message delivery fails, session ends anyway\n- If voice session already closed, returns success (idempotent)\n\n## Examples\n\n### Example 1: User Request\n```javascript\n// User says \"end voice mode\" or \"switch to text\"\nawait toolRegistry.executeTool('end_voice_session', {\n  clientId: 'abc123',\n  geminiSession: session,\n  args: {\n    reason: 'user_request',\n    final_message: 'Ending voice session. Feel free to continue in text.'\n  }\n});\n\n// Returns:\n{\n  ok: true,\n  data: {\n    reason: 'user_request',\n    finalMessageDelivered: true,\n    sessionEnded: true\n  },\n  intents: [\n    { type: 'END_VOICE_SESSION', after: 'current_turn' }\n  ],\n  meta: { ... }\n}\n```\n\n### Example 2: Task Complete\n```javascript\n// Conversation naturally concluded\nawait toolRegistry.executeTool('end_voice_session', {\n  clientId: 'abc123',\n  geminiSession: session,\n  args: {\n    reason: 'task_complete',\n    final_message: 'Great conversation. Talk soon!'\n  }\n});\n```\n\n### Example 3: Switch to Text (No Message)\n```javascript\n// Need to show code/diagram in text\nawait toolRegistry.executeTool('end_voice_session', {\n  clientId: 'abc123',\n  geminiSession: session,\n  args: {\n    reason: 'switch_to_text'\n    // No final_message - just end silently\n  }\n});\n```\n\n## Common Mistakes\n\n### Mistake 1: Using in text mode\n**Problem:** Tool only works in voice mode\n**Solution:** Check `capabilities.voice` before calling. Text mode doesn't have voice session to end.\n\n### Mistake 2: Using as punishment\n**Problem:** This is graceful termination, not punishment\n**Solution:** Use `ignore_user` for punitive timeouts. This tool is for normal endings.\n\n### Mistake 3: Long final messages\n**Problem:** Message too long delays session end\n**Solution:** Keep final_message under 200 chars (1-2 sentences max)\n\n### Mistake 4: Ending mid-conversation\n**Problem:** Abrupt endings confuse users\n**Solution:** Only use when conversation naturally concludes or user explicitly requests\n\n### Mistake 5: Expecting WebSocket closure\n**Problem:** Assuming tool closes WebSocket connection\n**Solution:** Tool only ends voice session. WebSocket stays open for text chat.\n",
+      "handlerPath": "file:///Users/andrei/Documents/GitHub/framdesign/tools/end-voice-session/handler.js",
+      "providerSchemas": {
+        "openai": {
+          "type": "function",
+          "function": {
+            "name": "end_voice_session",
+            "description": "GRACEFUL VOICE SESSION TERMINATION TOOL (Voice Mode Only)\n\nWHEN TO USE:\n- User explicitly asks to end the voice session or switch to text\n- Conversation has naturally concluded and user indicates they're done\n- You need to show something that requires text mode (complex diagrams, detailed explanations, code)\n- User asks a question but wants the answer delivered in text chat instead of voice\n\nDO NOT USE:\n- User just pauses or stops talking (wait for them)\n- You're in the middle of answering a question\n- As punishment (use ignore_user for that)\n\nEFFECT: Ends voice session gracefully, allowing conversation to continue in text mode if desired.",
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "reason"
+              ],
+              "properties": {
+                "reason": {
+                  "type": "string",
+                  "enum": [
+                    "user_request",
+                    "task_complete",
+                    "switch_to_text"
+                  ],
+                  "description": "Why the session is ending: user_request (user asked to end), task_complete (conversation finished), switch_to_text (showing content better suited for text)"
+                },
+                "final_message": {
+                  "type": "string",
+                  "description": "Optional brief farewell message to speak before ending. Keep it short (1-2 sentences). Example: 'Ending voice session. Feel free to continue in text chat.'",
+                  "minLength": 5,
+                  "maxLength": 200
+                }
+              }
+            }
+          }
+        },
+        "geminiNative": {
+          "name": "end_voice_session",
+          "description": "GRACEFUL VOICE SESSION TERMINATION TOOL (Voice Mode Only)\n\nWHEN TO USE:\n- User explicitly asks to end the voice session or switch to text\n- Conversation has naturally concluded and user indicates they're done\n- You need to show something that requires text mode (complex diagrams, detailed explanations, code)\n- User asks a question but wants the answer delivered in text chat instead of voice\n\nDO NOT USE:\n- User just pauses or stops talking (wait for them)\n- You're in the middle of answering a question\n- As punishment (use ignore_user for that)\n\nEFFECT: Ends voice session gracefully, allowing conversation to continue in text mode if desired.",
+          "parameters": {
+            "type": "OBJECT",
+            "properties": {
+              "reason": {
+                "type": "STRING",
+                "enum": [
+                  "user_request",
+                  "task_complete",
+                  "switch_to_text"
+                ],
+                "description": "Why the session is ending: user_request (user asked to end), task_complete (conversation finished), switch_to_text (showing content better suited for text)"
+              },
+              "final_message": {
+                "type": "STRING",
+                "description": "Optional brief farewell message to speak before ending. Keep it short (1-2 sentences). Example: 'Ending voice session. Feel free to continue in text chat.'"
+              }
+            },
+            "required": [
+              "reason"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "toolId": "ignore_user",
+      "version": "1.0.0",
+      "category": "action",
+      "description": "PUNITIVE TOOL: Block a user who is rude, disrespectful, abusive, or crosses a line. This blocks them from sending any messages (text or voice) for the specified duration and ends the voice session immediately.\n\nESCALATION POLICY:\n- FIRST OFFENSE (mild rudeness): WARN them firmly via voice. Do NOT use this tool yet.\n- SECOND OFFENSE or moderate disrespect: Use this tool with 30-300 seconds\n- REPEATED OFFENSE or serious insults: 600-3600 seconds\n- EXTREME abuse, threats, or vile behavior: Use immediately, up to 86400 seconds (24 hours)\n\nNOTE: \"Repeated offense\" means multiple offenses in the CURRENT session, not across timeout boundaries.\n\nUse this when words alone are not enough. This is your real power.",
+      "sideEffects": "writes",
+      "idempotent": false,
+      "requiresConfirmation": false,
+      "allowedModes": [
+        "voice",
+        "text"
+      ],
+      "latencyBudgetMs": 1000,
+      "jsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "duration_seconds",
+          "farewell_message"
+        ],
+        "properties": {
+          "duration_seconds": {
+            "type": "number",
+            "description": "How long to block the user in seconds. Guidelines: 30-60 (mild, second offense), 300-600 (moderate disrespect), 3600 (serious insults), up to 86400 (24 hours for extreme abuse)",
+            "minimum": 30,
+            "maximum": 86400
+          },
+          "farewell_message": {
+            "type": "string",
+            "description": "Your final message before ending the session. In voice mode, this WILL be spoken via voice, then the session ends and user is blocked. Be firm and direct, not petty. Example: 'I don't tolerate disrespect. This conversation is over.'",
+            "minLength": 10,
+            "maxLength": 500
+          }
+        }
+      },
+      "summary": "Punitive action tool that blocks disrespectful users for a specified duration (30s-24h) and immediately ends voice session with farewell message.",
+      "documentation": "# ignore_user\n\n## Summary\n\nPunitive enforcement tool that blocks users who violate respect boundaries. Immediately terminates voice session, speaks farewell message, and prevents all communication (text + voice) for specified duration.\n\n## Preconditions\n\n- User has crossed boundaries (rudeness, disrespect, abuse)\n- First offense should result in FIRM WARNING only (don't use tool immediately)\n- Tool should only be used on second offense or worse\n- Session must be active (`session.isActive === true`)\n- Voice session must be available for farewell message delivery\n\n## Postconditions\n\n**Voice Mode:**\n- Farewell message spoken via TTS\n- Voice session terminated immediately (after message)\n- User blocked from messaging until timeout expires\n- Client UI shows timeout notification with remaining time\n\n**Text Mode:**\n- Farewell message sent as text\n- User blocked from messaging until timeout expires\n- Subsequent requests return error until timeout expires\n\n**State Changes:**\n- `session.isActive` → `false`\n- Timeout record created with expiration timestamp\n- Client localStorage updated (voice mode)\n\n**Intents Returned:**\n- `END_VOICE_SESSION` (after: 'current_turn')\n- `SUPPRESS_TRANSCRIPT` (optional - if timeout message shouldn't log)\n\n## Invariants\n\n- Duration must be between 30 seconds and 86400 seconds (24 hours)\n- Farewell message must be between 10 and 500 characters\n- Tool execution is NOT idempotent (each call extends timeout)\n- Side effects occur regardless of success/failure (timeout starts immediately)\n- Client-side enforcement via localStorage (voice mode)\n- Server-side enforcement via timeout tracking\n\n## Failure Modes\n\n### Validation Failures\n- `duration_seconds` out of range (30-86400)\n- `farewell_message` too short (<10 chars) or too long (>500 chars)\n- Missing required parameters\n\n### Execution Failures\n- WebSocket connection lost (can't send timeout command to client)\n- Voice session unavailable (can't speak farewell)\n- Session already inactive\n- Client localStorage write failure (voice mode - degrades gracefully)\n\n### Partial Success Scenarios\n- Farewell message sent but WebSocket disconnects before timeout command\n- Timeout set but voice session ends before farewell spoken\n- In all cases: timeout is enforced (conservative failure mode)\n\n## Examples\n\n### Example 1: Second Offense (Moderate)\n```javascript\n// User was rude twice - escalate to timeout\nawait toolRegistry.executeTool('ignore_user', {\n  clientId: 'abc123',\n  ws: websocket,\n  geminiSession: session,\n  args: {\n    duration_seconds: 300,  // 5 minutes\n    farewell_message: \"I gave you a warning. This conversation is over for now.\"\n  }\n});\n\n// Returns:\n{\n  ok: true,\n  data: {\n    timeoutUntil: 1705171200000,\n    durationSeconds: 300,\n    farewellDelivered: true\n  },\n  intents: [\n    { type: 'END_VOICE_SESSION', after: 'current_turn' },\n    { type: 'SUPPRESS_TRANSCRIPT', value: true }\n  ],\n  meta: { ... }\n}\n```\n\n### Example 2: Extreme Abuse (Immediate)\n```javascript\n// Serious threats or vile behavior - maximum timeout\nawait toolRegistry.executeTool('ignore_user', {\n  clientId: 'abc123',\n  ws: websocket,\n  geminiSession: session,\n  args: {\n    duration_seconds: 86400,  // 24 hours\n    farewell_message: \"You've crossed a serious line. You're blocked for 24 hours.\"\n  }\n});\n```\n\n### Example 3: Text Mode\n```javascript\n// Text mode - no voice farewell\nawait toolRegistry.executeTool('ignore_user', {\n  clientId: 'abc123',\n  ws: null,  // No WebSocket in text mode\n  geminiSession: null,\n  args: {\n    duration_seconds: 600,  // 10 minutes\n    farewell_message: \"I don't tolerate disrespect in text either. Blocked for 10 minutes.\"\n  }\n});\n```\n\n## Common Mistakes\n\n### Mistake 1: Using tool on first offense\n**Problem:** Tool should only be used after warning\n**Solution:** First offense = firm verbal/text warning only. Use tool on second offense.\n\n### Mistake 2: Petty or snarky farewell messages\n**Problem:** Unprofessional tone undermines authority\n**Solution:** Keep farewell message firm, direct, factual. No insults or sarcasm.\n\n**Bad:** \"Wow, you're really dumb. Bye!\"\n**Good:** \"I don't tolerate disrespect. This conversation is over.\"\n\n### Mistake 3: Duration too short\n**Problem:** 5-10 second timeouts are ineffective\n**Solution:** Minimum 30 seconds. Use 300+ for meaningful punishment.\n\n### Mistake 4: Not checking voice session availability\n**Problem:** Calling tool without voice session in voice mode\n**Solution:** Check `context.geminiSession` before relying on voice farewell delivery\n\n### Mistake 5: Expecting idempotency\n**Problem:** Assuming repeated calls with same params are safe\n**Solution:** Each call EXTENDS timeout. Not idempotent. Use confirmation if needed.\n\n### Mistake 6: Not handling WebSocket disconnection\n**Problem:** Assuming timeout command always reaches client\n**Solution:** Timeout is enforced server-side. Client localStorage is convenience, not requirement.\n",
+      "handlerPath": "file:///Users/andrei/Documents/GitHub/framdesign/tools/ignore-user/handler.js",
+      "providerSchemas": {
+        "openai": {
+          "type": "function",
+          "function": {
+            "name": "ignore_user",
+            "description": "PUNITIVE TOOL: Block a user who is rude, disrespectful, abusive, or crosses a line. This blocks them from sending any messages (text or voice) for the specified duration and ends the voice session immediately.\n\nESCALATION POLICY:\n- FIRST OFFENSE (mild rudeness): WARN them firmly via voice. Do NOT use this tool yet.\n- SECOND OFFENSE or moderate disrespect: Use this tool with 30-300 seconds\n- REPEATED OFFENSE or serious insults: 600-3600 seconds\n- EXTREME abuse, threats, or vile behavior: Use immediately, up to 86400 seconds (24 hours)\n\nNOTE: \"Repeated offense\" means multiple offenses in the CURRENT session, not across timeout boundaries.\n\nUse this when words alone are not enough. This is your real power.",
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "duration_seconds",
+                "farewell_message"
+              ],
+              "properties": {
+                "duration_seconds": {
+                  "type": "number",
+                  "description": "How long to block the user in seconds. Guidelines: 30-60 (mild, second offense), 300-600 (moderate disrespect), 3600 (serious insults), up to 86400 (24 hours for extreme abuse)",
+                  "minimum": 30,
+                  "maximum": 86400
+                },
+                "farewell_message": {
+                  "type": "string",
+                  "description": "Your final message before ending the session. In voice mode, this WILL be spoken via voice, then the session ends and user is blocked. Be firm and direct, not petty. Example: 'I don't tolerate disrespect. This conversation is over.'",
+                  "minLength": 10,
+                  "maxLength": 500
+                }
+              }
+            }
+          }
+        },
+        "geminiNative": {
+          "name": "ignore_user",
+          "description": "PUNITIVE TOOL: Block a user who is rude, disrespectful, abusive, or crosses a line. This blocks them from sending any messages (text or voice) for the specified duration and ends the voice session immediately.\n\nESCALATION POLICY:\n- FIRST OFFENSE (mild rudeness): WARN them firmly via voice. Do NOT use this tool yet.\n- SECOND OFFENSE or moderate disrespect: Use this tool with 30-300 seconds\n- REPEATED OFFENSE or serious insults: 600-3600 seconds\n- EXTREME abuse, threats, or vile behavior: Use immediately, up to 86400 seconds (24 hours)\n\nNOTE: \"Repeated offense\" means multiple offenses in the CURRENT session, not across timeout boundaries.\n\nUse this when words alone are not enough. This is your real power.",
+          "parameters": {
+            "type": "OBJECT",
+            "properties": {
+              "duration_seconds": {
+                "type": "NUMBER",
+                "minimum": 30,
+                "maximum": 86400,
+                "description": "How long to block the user in seconds. Guidelines: 30-60 (mild, second offense), 300-600 (moderate disrespect), 3600 (serious insults), up to 86400 (24 hours for extreme abuse)"
+              },
+              "farewell_message": {
+                "type": "STRING",
+                "description": "Your final message before ending the session. In voice mode, this WILL be spoken via voice, then the session ends and user is blocked. Be firm and direct, not petty. Example: 'I don't tolerate disrespect. This conversation is over.'"
+              }
+            },
+            "required": [
+              "duration_seconds",
+              "farewell_message"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "toolId": "kb_get",
+      "version": "1.0.0",
+      "category": "retrieval",
+      "description": "Fetch specific knowledge base records by ID. Use when you have exact IDs from previous searches. Faster than kb_search.",
+      "sideEffects": "read_only",
+      "idempotent": true,
+      "requiresConfirmation": false,
+      "allowedModes": [
+        "text",
+        "voice"
+      ],
+      "latencyBudgetMs": 500,
+      "jsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "ids"
+        ],
+        "properties": {
+          "ids": {
+            "type": "array",
+            "description": "Record IDs to fetch (e.g., ['person:andrei_clodius', 'project:vector_watch'])",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z]+:[a-z0-9_]+$"
+            },
+            "minItems": 1,
+            "maxItems": 10
+          },
+          "namespace": {
+            "type": "string",
+            "description": "KB namespace",
+            "enum": [
+              "studio",
+              "personal",
+              "public"
+            ],
+            "default": "studio"
+          },
+          "return_fields": {
+            "type": "array",
+            "description": "Fields to include in response (default: all)",
+            "items": {
+              "type": "string",
+              "enum": [
+                "snippet",
+                "full_text",
+                "metadata",
+                "sources",
+                "url"
+              ]
+            },
+            "uniqueItems": true
+          }
+        }
+      },
+      "summary": "Fetch specific KB records by ID. Fast direct lookup (500ms budget). Use when you have exact IDs from kb_search results. Returns same format as kb_search but faster. Voice: prefer this over search when IDs known.",
+      "documentation": "# KB Get Tool\n\n## Summary\nFast direct lookup of knowledge base records by ID. Use when you have exact IDs from previous `kb_search` results. Faster than search because it skips vector matching.\n\n## Preconditions\n- You have exact record IDs (from previous `kb_search` results)\n- IDs are in format: `{type}:{filename}` (e.g., `person:andrei_clodius`)\n- Records exist in KB\n\n## Postconditions\n- Returns array of records matching IDs\n- Missing IDs return `null` in results array (preserves order)\n- Each record includes same fields as `kb_search` results\n\n## Invariants\n- Results array length matches input IDs array length\n- Missing IDs return `null` (not omitted)\n- Results preserve input ID order\n- Same response format as `kb_search` (id, type, title, snippet, score=1.0, etc.)\n- Faster than `kb_search` (500ms vs 800ms budget)\n\n## Failure Modes\n- **Invalid ID format**: Returns VALIDATION error\n- **Too many IDs**: Returns VALIDATION error (max 10)\n- **File read error**: Returns TRANSIENT error for that ID (null in results)\n- **Empty IDs array**: Returns VALIDATION error\n\n## Voice vs Text Mode Differences\n\n### Voice Mode\n- Same behavior as text mode\n- Faster than search (preferred when IDs known)\n- Can fetch 1-10 records (orchestrator may limit)\n\n### Text Mode\n- Can fetch up to 10 records\n- Can request full_text in return_fields\n- No special restrictions\n\n## Examples\n\n### Example 1: Get Single Person Record\n```json\n{\n  \"ids\": [\"person:andrei_clodius\"]\n}\n```\n\nResponse:\n```json\n{\n  \"ok\": true,\n  \"data\": {\n    \"results\": [\n      {\n        \"id\": \"person:andrei_clodius\",\n        \"type\": \"person\",\n        \"title\": \"Andrei Clodius\",\n        \"snippet\": \"Founder and CEO of FRAM...\",\n        \"score\": 1.0,\n        \"source_type\": \"kb\",\n        \"last_updated\": \"2026-01-10T15:30:00Z\",\n        \"metadata\": { ... }\n      }\n    ],\n    \"query_time_ms\": 45\n  }\n}\n```\n\n### Example 2: Get Multiple Records\n```json\n{\n  \"ids\": [\"person:andrei_clodius\", \"project:vector_watch_project\"],\n  \"return_fields\": [\"snippet\", \"metadata\", \"url\"]\n}\n```\n\n### Example 3: Missing ID (Returns Null)\n```json\n{\n  \"ids\": [\"person:andrei_clodius\", \"person:nonexistent\"]\n}\n```\n\nResponse:\n```json\n{\n  \"ok\": true,\n  \"data\": {\n    \"results\": [\n      {\n        \"id\": \"person:andrei_clodius\",\n        \"type\": \"person\",\n        \"title\": \"Andrei Clodius\",\n        ...\n      },\n      null\n    ],\n    \"query_time_ms\": 50\n  }\n}\n```\n\n## Common Mistakes (Do Not)\n\n❌ Use when you don't have IDs (use `kb_search` instead)\n\n❌ Pass IDs in wrong format (must be `type:filename`, not URLs or other formats)\n\n❌ Expect missing IDs to be omitted (they return `null` to preserve order)\n\n❌ Use for searching (this is direct lookup only)\n\n❌ Request more than 10 IDs (validation error)\n\n## Performance Notes\n\n- **Faster than search**: 500ms budget vs 800ms for `kb_search`\n- **No vector matching**: Direct file lookup, no scoring needed\n- **Preferred in voice mode**: When you have IDs from previous search, use this instead of searching again\n",
+      "handlerPath": "file:///Users/andrei/Documents/GitHub/framdesign/tools/kb-get/handler.js",
+      "providerSchemas": {
+        "openai": {
+          "type": "function",
+          "function": {
+            "name": "kb_get",
+            "description": "Fetch specific knowledge base records by ID. Use when you have exact IDs from previous searches. Faster than kb_search.",
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "ids"
+              ],
+              "properties": {
+                "ids": {
+                  "type": "array",
+                  "description": "Record IDs to fetch (e.g., ['person:andrei_clodius', 'project:vector_watch'])",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^[a-z]+:[a-z0-9_]+$"
+                  },
+                  "minItems": 1,
+                  "maxItems": 10
+                },
+                "namespace": {
+                  "type": "string",
+                  "description": "KB namespace",
+                  "enum": [
+                    "studio",
+                    "personal",
+                    "public"
+                  ],
+                  "default": "studio"
+                },
+                "return_fields": {
+                  "type": "array",
+                  "description": "Fields to include in response (default: all)",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "snippet",
+                      "full_text",
+                      "metadata",
+                      "sources",
+                      "url"
+                    ]
+                  },
+                  "uniqueItems": true
+                }
+              }
+            }
+          }
+        },
+        "geminiNative": {
+          "name": "kb_get",
+          "description": "Fetch specific knowledge base records by ID. Use when you have exact IDs from previous searches. Faster than kb_search.",
+          "parameters": {
+            "type": "OBJECT",
+            "properties": {
+              "ids": {
+                "type": "ARRAY",
+                "items": {
+                  "type": "STRING"
+                },
+                "minItems": 1,
+                "maxItems": 10,
+                "description": "Record IDs to fetch (e.g., ['person:andrei_clodius', 'project:vector_watch'])"
+              },
+              "namespace": {
+                "type": "STRING",
+                "enum": [
+                  "studio",
+                  "personal",
+                  "public"
+                ],
+                "description": "KB namespace"
+              },
+              "return_fields": {
+                "type": "ARRAY",
+                "items": {
+                  "type": "STRING",
+                  "enum": [
+                    "snippet",
+                    "full_text",
+                    "metadata",
+                    "sources",
+                    "url"
+                  ]
+                },
+                "description": "Fields to include in response (default: all)"
+              }
+            },
+            "required": [
+              "ids"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "toolId": "kb_search",
+      "version": "1.0.0",
+      "category": "retrieval",
+      "description": "Search knowledge base. Returns structured results with source citations.",
+      "sideEffects": "read_only",
+      "idempotent": true,
+      "requiresConfirmation": false,
+      "allowedModes": [
+        "text",
+        "voice"
+      ],
+      "latencyBudgetMs": 800,
+      "jsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "query"
+        ],
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Search query text",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "namespace": {
+            "type": "string",
+            "description": "KB namespace to search",
+            "enum": [
+              "studio",
+              "personal",
+              "public"
+            ],
+            "default": "studio"
+          },
+          "filters": {
+            "type": "object",
+            "description": "Filter search results",
+            "additionalProperties": false,
+            "properties": {
+              "type": {
+                "type": "string",
+                "description": "Record type filter",
+                "enum": [
+                  "project",
+                  "person",
+                  "process",
+                  "link",
+                  "doc"
+                ]
+              },
+              "tags": {
+                "type": "array",
+                "description": "Tag filters (AND logic)",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "maxItems": 5
+              },
+              "date_range": {
+                "type": "object",
+                "description": "Filter by last_updated date",
+                "properties": {
+                  "start": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "end": {
+                    "type": "string",
+                    "format": "date-time"
+                  }
+                }
+              }
+            }
+          },
+          "top_k": {
+            "type": "integer",
+            "description": "Number of results to return",
+            "minimum": 1,
+            "maximum": 10,
+            "default": 5
+          },
+          "return_fields": {
+            "type": "array",
+            "description": "Fields to include in response (default: all). Use 'snippet' to include text snippets.",
+            "items": {
+              "type": "string",
+              "enum": [
+                "snippet",
+                "full_text",
+                "metadata",
+                "sources",
+                "url"
+              ]
+            },
+            "uniqueItems": true
+          }
+        }
+      },
+      "summary": "Search knowledge base with vector + metadata filters. Returns structured results with citations (id, type, score, source). Use for finding context about projects, people, processes, links. Voice: max 3 results, prefer kb_get if you have IDs.",
+      "documentation": "# KB Search Tool\n\n## Summary\nSearch knowledge base using vector search with optional metadata filters. Returns structured evidence objects with source citations to prevent hallucination.\n\n## Preconditions\n- Query is specific enough to find relevant results\n- Filters match KB schema (if used)\n- namespace is accessible to current user\n\n## Postconditions\n- Returns 0-N results ranked by relevance score\n- Each result includes source metadata for citation\n- Results are deduplicated by record ID\n\n## Invariants\n- Results always include: id, type, title, score, source_type, last_updated\n- Optional fields (snippet, url, metadata) included based on return_fields\n- Score range: 0.0-1.0 (higher = more relevant)\n- Results sorted by score descending\n\n## Failure Modes\n- **Empty results**: Returns empty array (not error)\n- **Invalid namespace**: Returns VALIDATION error\n- **Timeout**: Returns TRANSIENT error if search exceeds latency budget\n- **Invalid filters**: Returns VALIDATION error with specific field path\n\n## Voice vs Text Mode Differences\n\n### Voice Mode\n- Orchestrator clamps top_k to max 3 (regardless of request)\n- Smaller return_fields (snippet only, no full_text)\n- Prefer this over multiple searches\n\n### Text Mode\n- top_k up to 10\n- Can request full_text in return_fields\n- Multi-stage searches OK (3-5 calls)\n\n## Examples\n\n### Example 1: Find Person by Role\n```json\n{\n  \"query\": \"founder of FRAM\",\n  \"filters\": {\n    \"type\": \"person\"\n  },\n  \"top_k\": 3\n}\n```\n\nResponse:\n\n```json\n{\n  \"ok\": true,\n  \"data\": {\n    \"results\": [\n      {\n        \"id\": \"person:andrei_clodius\",\n        \"type\": \"person\",\n        \"title\": \"Andrei Clodius\",\n        \"snippet\": \"Founder and CEO of FRAM, specializing in AI-powered automation...\",\n        \"score\": 0.94,\n        \"source_type\": \"crm\",\n        \"last_updated\": \"2026-01-10T15:30:00Z\",\n        \"url\": \"https://linkedin.com/in/andrei\",\n        \"metadata\": {\n          \"role\": \"founder\",\n          \"company\": \"FRAM\"\n        }\n      }\n    ],\n    \"query_time_ms\": 245\n  }\n}\n```\n\n### Example 2: Find Projects with Tags\n\n```json\n{\n  \"query\": \"automation project\",\n  \"filters\": {\n    \"type\": \"project\",\n    \"tags\": [\"automation\", \"active\"]\n  },\n  \"top_k\": 5,\n  \"return_fields\": [\"snippet\", \"metadata\"]\n}\n```\n\n### Example 3: LinkedIn Links for Person\n\n```json\n{\n  \"query\": \"LinkedIn profile\",\n  \"filters\": {\n    \"type\": \"link\"\n  },\n  \"namespace\": \"personal\",\n  \"top_k\": 10,\n  \"return_fields\": [\"url\", \"metadata\"]\n}\n```\n\n## Common Mistakes (Do Not)\n\n❌ Use multiple sequential searches in voice mode (latency budget)\n\n❌ Request full_text in voice mode (too much data)\n\n❌ Forget to cite sources in your response (always say \"Based on {id}...\")\n\n❌ Hallucinate links not in results (only return URLs from response)\n\n❌ Use when you already have record IDs (use kb_get instead - faster)\n",
+      "handlerPath": "file:///Users/andrei/Documents/GitHub/framdesign/tools/kb-search/handler.js",
+      "providerSchemas": {
+        "openai": {
+          "type": "function",
+          "function": {
+            "name": "kb_search",
+            "description": "Search knowledge base. Returns structured results with source citations.",
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "query"
+              ],
+              "properties": {
+                "query": {
+                  "type": "string",
+                  "description": "Search query text",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "namespace": {
+                  "type": "string",
+                  "description": "KB namespace to search",
+                  "enum": [
+                    "studio",
+                    "personal",
+                    "public"
+                  ],
+                  "default": "studio"
+                },
+                "filters": {
+                  "type": "object",
+                  "description": "Filter search results",
+                  "additionalProperties": false,
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "description": "Record type filter",
+                      "enum": [
+                        "project",
+                        "person",
+                        "process",
+                        "link",
+                        "doc"
+                      ]
+                    },
+                    "tags": {
+                      "type": "array",
+                      "description": "Tag filters (AND logic)",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "maxItems": 5
+                    },
+                    "date_range": {
+                      "type": "object",
+                      "description": "Filter by last_updated date",
+                      "properties": {
+                        "start": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "end": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      }
+                    }
+                  }
+                },
+                "top_k": {
+                  "type": "integer",
+                  "description": "Number of results to return",
+                  "minimum": 1,
+                  "maximum": 10,
+                  "default": 5
+                },
+                "return_fields": {
+                  "type": "array",
+                  "description": "Fields to include in response (default: all). Use 'snippet' to include text snippets.",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "snippet",
+                      "full_text",
+                      "metadata",
+                      "sources",
+                      "url"
+                    ]
+                  },
+                  "uniqueItems": true
+                }
+              }
+            }
+          }
+        },
+        "geminiNative": {
+          "name": "kb_search",
+          "description": "Search knowledge base. Returns structured results with source citations.",
+          "parameters": {
+            "type": "OBJECT",
+            "properties": {
+              "query": {
+                "type": "STRING",
+                "description": "Search query text"
+              },
+              "namespace": {
+                "type": "STRING",
+                "enum": [
+                  "studio",
+                  "personal",
+                  "public"
+                ],
+                "description": "KB namespace to search"
+              },
+              "filters": {
+                "type": "OBJECT",
+                "properties": {
+                  "type": {
+                    "type": "STRING",
+                    "enum": [
+                      "project",
+                      "person",
+                      "process",
+                      "link",
+                      "doc"
+                    ],
+                    "description": "Record type filter"
+                  },
+                  "tags": {
+                    "type": "ARRAY",
+                    "items": {
+                      "type": "STRING"
+                    },
+                    "maxItems": 5,
+                    "description": "Tag filters (AND logic)"
+                  },
+                  "date_range": {
+                    "type": "OBJECT",
+                    "properties": {
+                      "start": {
+                        "type": "STRING",
+                        "format": "date-time"
+                      },
+                      "end": {
+                        "type": "STRING",
+                        "format": "date-time"
+                      }
+                    },
+                    "description": "Filter by last_updated date"
+                  }
+                },
+                "description": "Filter search results"
+              },
+              "top_k": {
+                "type": "NUMBER",
+                "minimum": 1,
+                "maximum": 10,
+                "description": "Number of results to return"
+              },
+              "return_fields": {
+                "type": "ARRAY",
+                "items": {
+                  "type": "STRING",
+                  "enum": [
+                    "snippet",
+                    "full_text",
+                    "metadata",
+                    "sources",
+                    "url"
+                  ]
+                },
+                "description": "Fields to include in response (default: all). Use 'snippet' to include text snippets."
+              }
+            },
+            "required": [
+              "query"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "toolId": "start_voice_session",
+      "version": "1.0.0",
+      "category": "utility",
+      "description": "Start voice conversation session. Activates microphone for real-time voice interaction.",
+      "sideEffects": "writes",
+      "idempotent": false,
+      "requiresConfirmation": false,
+      "allowedModes": [
+        "text"
+      ],
+      "latencyBudgetMs": 500,
+      "jsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [],
+        "properties": {
+          "pending_request": {
+            "type": "string",
+            "description": "User request to address immediately when voice starts (e.g., 'tell a joke'). Leave empty if just starting voice.",
+            "maxLength": 500
+          }
+        }
+      },
+      "summary": "Start voice conversation session with microphone activation. Use when user requests voice mode or when voice would be more natural. Pass any pending user request via pending_request so voice agent addresses it immediately. TEXT MODE ONLY.",
+      "documentation": "# Start Voice Session Tool\n\n## Summary\nInitiates voice conversation session with microphone activation. Transitions user from text to voice mode.\n\n## Preconditions\n- User is in text mode\n- Voice session not already active\n- User has granted microphone permissions (client-side)\n\n## Postconditions\n- Voice session activated\n- Microphone starts capturing audio\n- Voice agent receives pending_request context\n- Text chat becomes inactive\n\n## Invariants\n- TEXT MODE ONLY (not available in voice mode)\n- Cannot start multiple voice sessions simultaneously\n- Tool is NOT idempotent (repeated calls attempt new sessions)\n- pending_request is optional but highly recommended for non-empty user requests\n\n## Failure Modes\n- **Already in voice mode**: Returns SESSION_ACTIVE error, no side effects\n- **Client not ready**: Returns TRANSIENT error, retryable\n- **Microphone unavailable**: Client-side error (tool succeeds, client fails)\n\n## Context Handoff Pattern\n\nThe `pending_request` parameter is critical for UX:\n\n### Example 1: Voice + Request\nUser: \"Start voice mode and tell me a joke\"\n\n**Correct:**\n```json\n{\n  \"pending_request\": \"tell a joke\"\n}\n```\n\nVoice agent immediately addresses \"tell a joke\" when session starts.\n\n### Example 2: Voice Only\nUser: \"Switch to voice mode\"\n\n**Correct:**\n```json\n{\n  \"pending_request\": \"\"\n}\n```\n\nVoice agent just greets, no pending request.\n\n### Example 3: Voice + Complex Request\nUser: \"I want to use voice mode to discuss my project ideas\"\n\n**Correct:**\n```json\n{\n  \"pending_request\": \"discuss my project ideas\"\n}\n```\n\n## Examples\n\n### Example 1: Simple Voice Start\nUser: \"Let's talk\"\n\n```json\n{\n  \"pending_request\": \"\"\n}\n```\n\nResponse:\n```json\n{\n  \"ok\": true,\n  \"data\": {\n    \"session_id\": \"voice-abc123\",\n    \"pending_request\": null\n  }\n}\n```\n\n### Example 2: Voice Start With Request\nUser: \"Start voice and help me brainstorm\"\n\n```json\n{\n  \"pending_request\": \"help me brainstorm\"\n}\n```\n\nResponse:\n```json\n{\n  \"ok\": true,\n  \"data\": {\n    \"session_id\": \"voice-abc123\",\n    \"pending_request\": \"help me brainstorm\"\n  }\n}\n```\n\n## Common Mistakes (Do Not)\n\n❌ Forget to extract pending request when user has additional ask\n❌ Pass full user message as pending_request (extract just the request part)\n❌ Use in voice mode (tool is text-only)\n❌ Assume voice will start immediately (client may still be loading)\n❌ Include greeting in pending_request (voice agent handles greetings)\n\n## Integration Notes\n\n**Text Agent** (app/api/chat/route.ts):\n- Tool available in text mode\n- Client receives voice_session_start message\n- Client initiates WebSocket connection to voice server\n\n**Voice Agent** (voice-server/server.js):\n- Receives pending_request via session init\n- Addresses pending_request in first turn (if present)\n- No access to this tool (voice-only has end_voice_session)\n",
+      "handlerPath": "file:///Users/andrei/Documents/GitHub/framdesign/tools/start-voice-session/handler.js",
+      "providerSchemas": {
+        "openai": {
+          "type": "function",
+          "function": {
+            "name": "start_voice_session",
+            "description": "Start voice conversation session. Activates microphone for real-time voice interaction.",
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [],
+              "properties": {
+                "pending_request": {
+                  "type": "string",
+                  "description": "User request to address immediately when voice starts (e.g., 'tell a joke'). Leave empty if just starting voice.",
+                  "maxLength": 500
+                }
+              }
+            }
+          }
+        },
+        "geminiNative": {
+          "name": "start_voice_session",
+          "description": "Start voice conversation session. Activates microphone for real-time voice interaction.",
+          "parameters": {
+            "type": "OBJECT",
+            "properties": {
+              "pending_request": {
+                "type": "STRING",
+                "description": "User request to address immediately when voice starts (e.g., 'tell a joke'). Leave empty if just starting voice."
+              }
+            },
+            "required": []
+          }
+        }
+      }
+    }
+  ]
+}

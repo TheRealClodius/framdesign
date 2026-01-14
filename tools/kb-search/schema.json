@@ -1,0 +1,48 @@
+{
+  "toolId": "kb_search",
+  "version": "1.0.0",
+  "category": "retrieval",
+  "description": "Semantic search over knowledge base. Searches people, labs, and projects using natural language queries. Returns relevant documents with citations.",
+  "parameters": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["query"],
+    "properties": {
+      "query": {
+        "type": "string",
+        "description": "Natural language search query",
+        "minLength": 3,
+        "maxLength": 500
+      },
+      "top_k": {
+        "type": "number",
+        "description": "Number of results (default: 5, max: 10, voice auto-clamps to 3)",
+        "minimum": 1,
+        "maximum": 10,
+        "default": 5
+      },
+      "filters": {
+        "type": "object",
+        "description": "Optional metadata filters",
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["person", "lab", "project"],
+            "description": "Filter by entity type"
+          }
+        }
+      },
+      "include_snippets": {
+        "type": "boolean",
+        "description": "Include text snippets (default: true)",
+        "default": true
+      }
+    }
+  },
+  "sideEffects": "read_only",
+  "idempotent": true,
+  "requiresConfirmation": false,
+  "allowedModes": ["voice", "text"],
+  "latencyBudgetMs": 800
+}

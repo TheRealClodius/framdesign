@@ -1,0 +1,23 @@
+{
+  "toolId": "start_voice_session",
+  "version": "1.0.0",
+  "category": "action",
+  "description": "Transition from text to voice mode. Activates microphone for real-time voice conversation. Text mode only. If user requests something along with starting voice, pass via pending_request.",
+  "parameters": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "pending_request": {
+        "type": "string",
+        "description": "Optional request to address when voice starts (e.g., 'explain X'). Leave empty if just starting voice.",
+        "minLength": 3,
+        "maxLength": 200
+      }
+    }
+  },
+  "sideEffects": "writes",
+  "idempotent": true,
+  "requiresConfirmation": false,
+  "allowedModes": ["text"],
+  "latencyBudgetMs": 500
+}

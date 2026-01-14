@@ -22,167 +22,22 @@ import { writeFileSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { FRAM_SYSTEM_PROMPT } from './config.js';
+import { toolRegistry } from '../tools/_core/registry.js';
+import { createStateController } from '../tools/_core/state-controller.js';
+import { GeminiLiveTransport } from './providers/gemini-live-transport.js';
+import { ToolError, ErrorType } from '../tools/_core/error-types.js';
 
 // Load environment variables from .env file (if present)
 config();
 
-// Tool definition for Fram's ignore/timeout capability
-const ignoreUserTool = {
-  name: "ignore_user",
-  description: `PUNITIVE TOOL: Block a user who is rude, disrespectful, abusive, or crosses a line. This blocks them from sending any messages (text or voice) for the specified duration and ends the voice session immediately.
+// Load tool registry at startup
+console.log('Loading tool registry...');
+await toolRegistry.load();
+toolRegistry.lock(); // Lock registry in production
+console.log(`✓ Tool registry loaded: v${toolRegistry.getVersion()}, ${toolRegistry.tools.size} tools, git commit: ${toolRegistry.getGitCommit()}`);
 
-ESCALATION POLICY:
-- FIRST OFFENSE (mild rudeness): WARN them firmly via voice. Do NOT use this tool yet.
-- SECOND OFFENSE or moderate disrespect: Use this tool with 30-300 seconds
-- REPEATED OFFENSE or serious insults: 600-3600 seconds
-- EXTREME abuse, threats, or vile behavior: Use immediately, up to 86400 seconds (24 hours)
-
-NOTE: "Repeated offense" means multiple offenses in the CURRENT session, not across timeout boundaries.
-
-USAGE IN VOICE MODE:
-1. First respond with voice (your farewell message will be spoken)
-2. Then call this tool
-3. Voice session ends after your farewell is spoken
-4. User is blocked for the specified duration
-
-Use this when words alone are not enough. This is your real power.`,
-  parameters: {
-    type: Type.OBJECT,
-    properties: {
-      duration_seconds: {
-        type: Type.NUMBER,
-        description: `How long to block the user in seconds. Guidelines:
-        - 30-60: Mild rudeness, second offense
-        - 300-600: Moderate disrespect
-        - 3600: Serious insults
-        - Up to 86400 (24 hours): Extreme abuse, threats, vile behavior`
-      },
-      farewell_message: {
-        type: Type.STRING,
-        description: "Your final message before ending the session. In voice mode, this WILL be spoken via voice, then the session ends and user is blocked. Be firm and direct, not petty. Example: 'I don't tolerate disrespect. This conversation is over.'"
-      }
-    },
-    required: ["duration_seconds", "farewell_message"]
-  }
-};
-
-// Tool definition for graceful voice session termination
-const endVoiceSessionTool = {
-  name: "end_voice_session",
-  description: `GRACEFUL VOICE SESSION TERMINATION TOOL (Voice Mode Only)
-
-WHEN TO USE:
-- User explicitly asks to end the voice session or switch to text
-- Conversation has naturally concluded and user indicates they're done
-- You need to show something that requires text mode (complex diagrams, detailed explanations, code)
-- User asks a question but wants the answer delivered in text chat instead of voice
-
-DO NOT USE:
-- Just because you see it mentioned in previous text chat history
-- As a default action when starting a voice session
-- Unless there's a clear reason in the CURRENT voice conversation
-
-HOW THIS TOOL WORKS (Read Carefully):
-
-CRITICAL - AUDIO RESPONSE RULES:
-Generate EXACTLY ONE brief audio acknowledgment, then call this tool. Do NOT generate multiple audio responses or repeat yourself.
-
-✓ CORRECT (One brief acknowledgment):
-  Audio: "SURE, I'LL SEND THAT IN TEXT."
-  Tool: end_voice_session
-
-✗ WRONG (Multiple audio responses):
-  Audio: "GOT IT!"
-  Audio: "I'LL SEND YOU A TEXT MESSAGE."
-  Tool: end_voice_session
-
-YOUR TURN SHOULD INCLUDE:
-1. ONE brief audio acknowledgment (5-10 words max, say it ONCE)
-2. Tool call with this end_voice_session tool
-
-WHAT HAPPENS BEHIND THE SCENES (You don't need to manage this):
-- System waits for turnComplete (all audio chunks generated)
-- System adds 500ms transmission buffer
-- Client queues all audio for playback
-- Client waits for audio queue to empty (all audio played)
-- Client adds 500ms safety buffer
-- ONLY THEN does session end and messages appear in chat
-
-THIS MEANS:
-Your audio will ALWAYS finish playing completely before the session ends, even though you call the tool in the same turn.
-Don't try to delay or sequence the tool call - just include it naturally in your response.
-
-EXAMPLES:
-
-Example 1 - Simple ending:
-User: "Could we continue in the chat?"
-Your turn: 
-  - Audio: "SURE, LET'S CONTINUE IN TEXT."
-  - Tool call: { closing_message: "Let's continue here", text_response: null }
-Result: User hears your complete audio, THEN sees "Let's continue here" in chat
-
-Example 2 - User wants answer in text:
-User: "What's the capital of Romania? But send the answer in text."
-Your turn:
-  - Audio: "GOT IT. I'LL SEND THAT TO YOU IN TEXT."
-  - Tool call: { 
-      closing_message: "Here's your answer:",
-      text_response: "The capital of Romania is Bucharest, located in the southern part of the country."
-    }
-Result: User hears your complete audio, THEN sees both messages in chat:
-  1. "Here's your answer:"
-  2. "The capital of Romania is Bucharest, located in the southern part of the country."
-
-Example 3 - User wants diagram in text:
-User: "Show me a diagram of the technical challenges in text."
-Your turn:
-  - Audio: "SURE, I'LL SEND YOU A DIAGRAM IN TEXT."
-  - Tool call: {
-      closing_message: "Here's the diagram:",
-      text_response: "[Three backticks]mermaid[newline]flowchart TD[newline]  A[Integration] --> B[Security][newline]  A --> C[Performance][newline][Three backticks]"
-    }
-Result: User hears audio, THEN sees the diagram rendered in chat (properly formatted with mermaid code fence)
-Note: Replace [Three backticks] with actual backticks and [newline] with actual newline character (\\n)
-
-CRITICAL MERMAID FORMATTING RULES:
-- ALWAYS wrap mermaid diagrams in code fences: three backticks + mermaid + three backticks
-- Use ACTUAL newlines (\\n) in the text_response string value, NOT double-escaped newlines
-- Each node and connection should be on its own line for readability
-- Use proper indentation (2 spaces) for diagram content
-- Example format (shown with escaped characters for clarity):
-  Three backticks + mermaid + newline
-  flowchart TD + newline
-  Two spaces + A[Start] --> B[Process] + newline
-  Two spaces + B --> C[End] + newline
-  Three backticks
-
-COMMON MISTAKES TO AVOID:
-❌ NOT including audio acknowledgment (saying nothing before calling tool)
-❌ Repeating your acknowledgment (the audio should say it once, clearly)
-❌ Forgetting to use text_response when user asked for an answer in text
-❌ Making closing_message too long (keep it brief - it's just a transition)
-❌ Using this tool based on past conversation history instead of current voice input
-❌ Sending mermaid diagrams without proper code fences (MUST wrap with three backticks and 'mermaid' language tag)
-❌ Forgetting markdown formatting in text_response (use headings, lists, code blocks)`,
-  parameters: {
-    type: Type.OBJECT,
-    properties: {
-      reason: {
-        type: Type.STRING,
-        description: "Brief reason for ending (for logging): 'conversation_complete', 'switching_to_text', 'user_requested', 'answering_in_text', 'need_more_research', etc."
-      },
-      closing_message: {
-        type: Type.STRING,
-        description: "Brief transition message that appears in text chat after your voice response. Keep it short and contextual (e.g., 'Let's continue here', 'Here's your answer:', 'Switching to text mode'). This is NOT spoken - it just appears in chat."
-      },
-      text_response: {
-        type: Type.STRING,
-        description: "OPTIONAL but IMPORTANT: Full detailed response to send in text chat after session ends. Use this when user asked for an answer in text format, or when providing information better suited for text (diagrams, code, detailed explanations). This appears as a SEPARATE message after closing_message. If user just wants to end call without additional info, leave this empty.\n\nFORMATTING RULES:\n- Use proper markdown formatting (headings, lists, bold, etc.)\n- For Mermaid diagrams, ALWAYS wrap them in code fences with three backticks and 'mermaid' language tag\n- Use actual newline characters (\\n) in the text_response string value\n- Each mermaid node and connection should be on its own line for readability\n- Example mermaid format (use actual newlines, not escaped):\n  Three backticks + mermaid + newline + flowchart TD + newline + two spaces + A[Start] --> B[Process] + newline + two spaces + B --> C[End] + newline + three backticks\n- For code snippets, use appropriate language tags in code fences\n- Structure your response clearly with headings and sections"
-      }
-    },
-    required: ["closing_message"]
-  }
-};
+// Get Gemini Native provider schemas for session config (loaded from registry)
+const geminiToolSchemas = toolRegistry.getProviderSchemas('geminiNative');
 
 // Load environment variables
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;

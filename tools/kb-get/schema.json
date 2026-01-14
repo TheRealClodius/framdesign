@@ -1,0 +1,25 @@
+{
+  "toolId": "kb_get",
+  "version": "1.0.0",
+  "category": "retrieval",
+  "description": "Retrieve complete KB document by exact ID. Faster than search when entity ID is known. Returns full document with all metadata.",
+  "parameters": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["id"],
+    "properties": {
+      "id": {
+        "type": "string",
+        "description": "Exact entity ID (e.g., 'person:andrei_clodius', 'project:vector_watch_project')",
+        "minLength": 3,
+        "maxLength": 100,
+        "pattern": "^[a-z_]+:[a-z0-9_]+$"
+      }
+    }
+  },
+  "sideEffects": "read_only",
+  "idempotent": true,
+  "requiresConfirmation": false,
+  "allowedModes": ["voice", "text"],
+  "latencyBudgetMs": 500
+}
