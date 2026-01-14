@@ -32,7 +32,13 @@
   ],
   "exclude": [
     "node_modules",
-    "tools/**/*",
+    "tools/_build/**/*",
+    "tools/end-voice-session/**/*",
+    "tools/ignore-user/**/*",
+    "tools/kb-get/**/*",
+    "tools/kb-search/**/*",
+    "tools/start-voice-session/**/*",
+    "tools/*.json",
     "voice-server/**/*",
     "scripts/**/*",
     "vector-search-api/**/*"
