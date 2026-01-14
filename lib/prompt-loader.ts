@@ -1,19 +1,22 @@
 /**
- * Prompt Loader - Composes system prompts from markdown files
- * Reads from prompts/ directory and combines core + mode-specific + tools
+ * Prompt Loader - Composes system prompts from markdown files.
+ *
+ * IMPORTANT (Vercel/serverless):
+ * - Do NOT read prompt files via fs at runtime (file may not be present in the lambda bundle).
+ * - Instead, import markdown as source at build time so it is bundled reliably.
+ *
+ * next.config.ts configures `.md` as `asset/source`, so these imports become strings.
  */
 
-import { readFileSync } from 'fs';
-import { join } from 'path';
-
-const PROMPTS_DIR = join(process.cwd(), 'prompts');
+import coreMd from '../prompts/core.md';
+import voiceBehaviorMd from '../prompts/voice-behavior.md';
+import ignoreUserToolMd from '../prompts/tools/ignore_user.md';
+import endVoiceSessionToolMd from '../prompts/tools/end_voice_session.md';
 
 /**
- * Helper to read and strip top-level markdown header from a file
+ * Helper to strip the top-level markdown header from a file.
  */
-function readPromptFile(filename: string): string {
-  const content = readFileSync(join(PROMPTS_DIR, filename), 'utf-8');
-  // Strip top-level markdown header (# Title)
+function normalizePrompt(content: string): string {
   return content.replace(/^# .*$/m, '').trim();
 }
 
@@ -23,13 +26,13 @@ function readPromptFile(filename: string): string {
  */
 export function loadTextPrompt(): string {
   try {
-    const core = readPromptFile('core.md');
-    const ignoreUserTool = readPromptFile('tools/ignore_user.md');
+    const core = normalizePrompt(coreMd);
+    const ignoreUserTool = normalizePrompt(ignoreUserToolMd);
 
     return `${core}\n\n${ignoreUserTool}`;
   } catch (error) {
     console.error('Error loading text prompt:', error);
-    throw new Error(`Failed to load text mode prompt files from ${PROMPTS_DIR}`);
+    throw new Error('Failed to load text mode prompt files (build-time import)');
   }
 }
 
@@ -39,14 +42,14 @@ export function loadTextPrompt(): string {
  */
 export function loadVoicePrompt(): string {
   try {
-    const core = readPromptFile('core.md');
-    const voiceBehavior = readPromptFile('voice-behavior.md');
-    const ignoreUserTool = readPromptFile('tools/ignore_user.md');
-    const endVoiceSessionTool = readPromptFile('tools/end_voice_session.md');
+    const core = normalizePrompt(coreMd);
+    const voiceBehavior = normalizePrompt(voiceBehaviorMd);
+    const ignoreUserTool = normalizePrompt(ignoreUserToolMd);
+    const endVoiceSessionTool = normalizePrompt(endVoiceSessionToolMd);
 
     return `${core}\n\n${voiceBehavior}\n\n${ignoreUserTool}\n\n${endVoiceSessionTool}`;
   } catch (error) {
     console.error('Error loading voice prompt:', error);
-    throw new Error(`Failed to load voice mode prompt files from ${PROMPTS_DIR}`);
+    throw new Error('Failed to load voice mode prompt files (build-time import)');
   }
 }

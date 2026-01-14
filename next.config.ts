@@ -1,6 +1,11 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Ensure serverless bundles include runtime-read assets.
+  // The tool registry is generated at build time and loaded via fs at runtime.
+  outputFileTracingIncludes: {
+    "/api/chat": ["./tools/tool_registry.json"],
+  },
   async headers() {
     return [
       {

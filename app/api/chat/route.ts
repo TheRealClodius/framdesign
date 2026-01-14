@@ -14,6 +14,10 @@ import { ErrorType, ToolError } from '@/tools/_core/error-types';
 import { createStateController } from '@/tools/_core/state-controller';
 import { retryWithBackoff as retryToolExecution } from '@/tools/_core/retry-handler';
 
+// Ensure this route runs on the Node.js runtime (not Edge).
+// It depends on Node-only APIs (crypto, tool registry fs reads, etc.).
+export const runtime = "nodejs";
+
 // Convert geminiNative schema (with uppercase string types like "OBJECT", "STRING") 
 // to JSON Schema format (lowercase: "object", "string") for parametersJsonSchema
 function convertGeminiSchemaToJsonSchema(schema: any): any {
