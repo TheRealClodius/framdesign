@@ -14,6 +14,7 @@
     "build": "next build --webpack",
     "build:tools": "node tools/_build/tool-builder.js",
     "prebuild": "npm run build:tools",
+    "postbuild:tools": "test -f tools/tool_registry.json || (echo 'ERROR: tool_registry.json not generated!' && exit 1)",
     "prestart": "npm run build:tools",
     "start": "next start",
     "lint": "eslint",

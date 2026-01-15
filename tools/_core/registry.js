@@ -14,7 +14,7 @@
  * - NO provider SDK imports (Type.* enums, etc.)
  */
 
-import { readFileSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
 import { join, dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
@@ -68,7 +68,16 @@ class ToolRegistry {
     }
 
     console.log('Loading tool registry...');
+    console.log(`Registry path: ${REGISTRY_PATH}`);
+    console.log(`__dirname: ${__dirname}`);
     const loadStartTime = Date.now();
+
+    // Check if registry file exists
+    if (!existsSync(REGISTRY_PATH)) {
+      const errorMsg = `Tool registry file not found at ${REGISTRY_PATH}. Please run 'npm run build:tools' to generate it.`;
+      console.error(errorMsg);
+      throw new Error(errorMsg);
+    }
 
     // Read registry file
     const registryJson = readFileSync(REGISTRY_PATH, 'utf-8');
