@@ -29,12 +29,21 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 // Import the path helper to ensure webpack traces the file dependency
 import { getRegistryPath, REGISTRY_FILE_PATH } from './registry-path.js';
 
+// In Vercel serverless functions, the file structure is different
+// Try multiple locations in order of likelihood
 const projectRoot = process.cwd() || resolve(__dirname, '..', '..');
-// Try multiple paths, with explicit string reference to help static analysis
-const REGISTRY_PATH = [
-  join(projectRoot, 'tools', 'tool_registry.json'), // Explicit path for tracing
-  join(__dirname, '..', 'tool_registry.json'), // Relative fallback
-].find(path => existsSync(path)) || getRegistryPath();
+const possiblePaths = [
+  // 1. .next/server/tools/ (copied during build)
+  join(projectRoot, '.next', 'server', 'tools', 'tool_registry.json'),
+  // 2. Project root tools/ (for file tracing)
+  join(projectRoot, 'tools', 'tool_registry.json'),
+  // 3. Relative to this file
+  join(__dirname, '..', 'tool_registry.json'),
+  // 4. Try parent directories (for different Vercel path structures)
+  resolve(__dirname, '..', '..', 'tools', 'tool_registry.json'),
+];
+
+const REGISTRY_PATH = possiblePaths.find(path => existsSync(path)) || possiblePaths[1];
 // Create require function for resolving modules  
 const require = createRequire(import.meta.url);
 // Project root is two levels up from _core
@@ -83,14 +92,9 @@ class ToolRegistry {
     console.log(`projectRoot: ${projectRoot}`);
     
     // Log all paths we're checking
-    const pathsToCheck = [
-      join(projectRoot, 'public', 'tools', 'tool_registry.json'),
-      join(projectRoot, 'tools', 'tool_registry.json'),
-      join(__dirname, '..', 'tool_registry.json'),
-    ];
     console.log('Checking paths:');
-    pathsToCheck.forEach((path, i) => {
-      console.log(`  ${i + 1}. ${path} - ${existsSync(path) ? 'EXISTS' : 'NOT FOUND'}`);
+    possiblePaths.forEach((path, i) => {
+      console.log(`  ${i + 1}. ${path} - ${existsSync(path) ? 'EXISTS ✓' : 'NOT FOUND ✗'}`);
     });
     
     const loadStartTime = Date.now();
