@@ -1,12 +1,8 @@
-import type { NextConfig } from "next";
-import { resolve, join, dirname } from "path";
-import { existsSync } from "fs";
-import { fileURLToPath } from "url";
+const { resolve, join } = require("path");
+const { existsSync } = require("fs");
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-const nextConfig: NextConfig = {
+/** @type {import('next').NextConfig} */
+const nextConfig = {
   // Set the root directory for file tracing to prevent workspace detection issues
   // This ensures Vercel correctly identifies the project root when parent directories have package.json files
   outputFileTracingRoot: resolve(__dirname),
@@ -40,7 +36,7 @@ const nextConfig: NextConfig = {
     '/api/**': ['tools/tool_registry.json'],
     // Fallback for all routes
     '/*': ['tools/tool_registry.json'],
-  } as Record<string, string[]>,
+  },
   experimental: {
     scrollRestoration: false,
     // Optimize package imports to reduce bundle size and compilation time
@@ -235,4 +231,4 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+module.exports = nextConfig;
