@@ -3,6 +3,8 @@ import { resolve, join } from "path";
 import { existsSync } from "fs";
 
 const nextConfig: NextConfig = {
+  // Enable standalone output for better file inclusion control
+  output: 'standalone',
   async headers() {
     return [
       {
