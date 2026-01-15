@@ -41,7 +41,7 @@ yarn-error.log*
 next-env.d.ts
 
 # tool registry build artifact
-tools/tool_registry.json
+# tools/tool_registry.json - commented out so Vercel can include it via outputFileTracingIncludes
 .env*.local
 
 # vector-search-api dependencies (should never be committed)
