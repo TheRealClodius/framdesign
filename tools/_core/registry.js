@@ -25,10 +25,13 @@ import { validateToolResponse, TOOL_RESPONSE_SCHEMA_VERSION } from './tool-respo
 import { recordToolExecution, recordError, recordBudgetViolation, recordRegistryLoadTime } from './metrics.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-// Path to tool_registry.json relative to this file
-// Since the file is generated at build time and included via outputFileTracingIncludes,
-// it will be available at this relative path in both local and Vercel environments
-const REGISTRY_PATH = join(__dirname, '..', 'tool_registry.json');
+// Path to tool_registry.json - use process.cwd() for explicit path resolution
+// This helps Next.js file tracing detect the file dependency
+// The file is generated at build time by 'npm run build:tools' and should be included
+// via outputFileTracingIncludes in next.config.ts
+const REGISTRY_PATH = process.cwd() 
+  ? join(process.cwd(), 'tools', 'tool_registry.json')
+  : join(__dirname, '..', 'tool_registry.json');
 // Create require function for resolving modules  
 const require = createRequire(import.meta.url);
 // Project root is two levels up from _core
