@@ -80,13 +80,15 @@ class ToolRegistry {
     const loadStartTime = Date.now();
 
     // Try to find the registry file in multiple locations
+    // Check .next/server/tools/ first (where we copy it in buildCommand)
+    // Then check project root tools/ (where outputFileTracingIncludes should include it)
+    // Finally check relative to this file (for local dev)
     let registryPath = REGISTRY_PATH;
     if (!existsSync(registryPath)) {
-      // Try alternative locations as fallback
       const altPaths = [
-        join(__dirname, '..', 'tool_registry.json'),
-        join(process.cwd() || '', '.next', 'server', 'tools', 'tool_registry.json'),
-        join(process.cwd() || '', 'tools', 'tool_registry.json'),
+        join(process.cwd() || '', '.next', 'server', 'tools', 'tool_registry.json'), // Copied in buildCommand
+        join(process.cwd() || '', 'tools', 'tool_registry.json'), // Project root (outputFileTracingIncludes)
+        join(__dirname, '..', 'tool_registry.json'), // Relative fallback
       ];
       const foundPath = altPaths.find(p => existsSync(p));
       if (foundPath) {
