@@ -1,5 +1,4 @@
 {
   "framework": "nextjs",
-  "installCommand": "npm install && (rm -rf node_modules/@lancedb || true)",
-  "_comment": "Using default Next.js build. prebuild hook runs build:tools, then Next.js build, then postbuild hook copies tool_registry.json"
+  "installCommand": "npm install && (rm -rf node_modules/@lancedb || true)"
 }
