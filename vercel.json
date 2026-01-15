@@ -1,7 +1,7 @@
 {
-  "buildCommand": "npm run build:tools && npm run build",
+  "buildCommand": "npm run build:tools && npm run build && cp tools/tool_registry.json .next/server/tools/tool_registry.json 2>/dev/null || true",
   "outputDirectory": ".next",
   "framework": "nextjs",
   "installCommand": "npm install && rm -rf node_modules/@lancedb",
-  "_comment": "buildCommand generates tools/tool_registry.json before Next.js build so it can be traced and included in the deployment via outputFileTracingIncludes in next.config.ts"
+  "_comment": "buildCommand generates tools/tool_registry.json before Next.js build, then copies it to .next/server/tools/ to ensure it's included in serverless function bundles"
 }
