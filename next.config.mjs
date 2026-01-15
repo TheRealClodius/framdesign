@@ -1,5 +1,9 @@
-const { resolve, join } = require("path");
-const { existsSync } = require("fs");
+import { resolve, join, dirname } from "path";
+import { existsSync } from "fs";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -113,7 +117,7 @@ const nextConfig = {
       // Externalize native .node modules - they should be loaded at runtime, not bundled
       // This prevents Webpack from trying to parse binary files
       const originalExternals = config.externals;
-      const externalizeNativeModules = ({ request, context }: { request?: string; context?: string }, callback: (err?: Error | null, result?: string) => void) => {
+      const externalizeNativeModules = ({ request, context }, callback) => {
         // Externalize LanceDB and its native platform-specific packages
         if (request && typeof request === 'string') {
           // Externalize the main @lancedb/lancedb package entirely
@@ -168,31 +172,11 @@ const nextConfig = {
         moduleIds: 'deterministic',
       };
 
-      // Copy tool_registry.json to serverless function output
-      // CopyPlugin copies files relative to webpack output directory
-      // For Next.js server builds, we need the file accessible at runtime
-      // where process.cwd() points to the project root
-      const registryPath = join(process.cwd(), 'tools', 'tool_registry.json');
-      if (existsSync(registryPath)) {
-        const CopyPlugin = require('copy-webpack-plugin');
-        config.plugins = config.plugins || [];
-        // Copy maintaining directory structure - this ensures file is in the bundle
-        // The 'to' path is relative to webpack output, but Next.js file tracing
-        // should include files from project root, so we rely on outputFileTracingIncludes
-        config.plugins.push(
-          new CopyPlugin({
-            patterns: [
-              {
-                from: 'tools/tool_registry.json',
-                to: 'tools/tool_registry.json',
-                context: process.cwd(),
-                noErrorOnMissing: false,
-                force: true,
-              },
-            ],
-          })
-        );
-      }
+      // Note: tool_registry.json is handled via:
+      // 1. prebuild hook generates it
+      // 2. outputFileTracingIncludes ensures it's included in serverless functions
+      // 3. postbuild hook copies it to .next/server/tools/
+      // No webpack CopyPlugin needed.
     }
 
     // Exclude server-only modules from client bundle
@@ -231,4 +215,4 @@ const nextConfig = {
   },
 };
 
-module.exports = nextConfig;
+export default nextConfig;
