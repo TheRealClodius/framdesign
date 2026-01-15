@@ -13,8 +13,6 @@ domains:
   - wearables
   - mobile
   - IoT
-links:
-  website: https://vectorwatch.com
 ---
 
 ## Overview

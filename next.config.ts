@@ -1,4 +1,12 @@
 import type { NextConfig } from "next";
+import { copyFileSync, existsSync } from "fs";
+import { join } from "path";
+
+// Ensure tool_registry.json exists before build
+const registryPath = join(process.cwd(), "tools", "tool_registry.json");
+if (!existsSync(registryPath)) {
+  console.warn("⚠️  tool_registry.json not found. Run 'npm run build:tools' first.");
+}
 
 const nextConfig: NextConfig = {
   async headers() {
@@ -146,6 +154,24 @@ const nextConfig: NextConfig = {
         // Don't try to optimize dynamic imports that use computed paths
         moduleIds: 'deterministic',
       };
+      
+      // Ensure tool_registry.json is included in the build
+      // Add a plugin to copy it to the output directory
+      const CopyWebpackPlugin = require('copy-webpack-plugin');
+      config.plugins = config.plugins || [];
+      if (existsSync(registryPath)) {
+        config.plugins.push(
+          new CopyWebpackPlugin({
+            patterns: [
+              {
+                from: registryPath,
+                to: join(config.output?.path || '.next', 'server', 'tools', 'tool_registry.json'),
+                noErrorOnMissing: false,
+              },
+            ],
+          })
+        );
+      }
     }
 
     // Exclude server-only modules from client bundle
