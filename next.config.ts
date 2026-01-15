@@ -1,12 +1,4 @@
 import type { NextConfig } from "next";
-import { copyFileSync, existsSync } from "fs";
-import { join } from "path";
-
-// Ensure tool_registry.json exists before build
-const registryPath = join(process.cwd(), "tools", "tool_registry.json");
-if (!existsSync(registryPath)) {
-  console.warn("⚠️  tool_registry.json not found. Run 'npm run build:tools' first.");
-}
 
 const nextConfig: NextConfig = {
   async headers() {
@@ -31,6 +23,12 @@ const nextConfig: NextConfig = {
     // Note: @lancedb/lancedb is excluded because it contains native .node modules
     // that should be loaded at runtime, not bundled
     optimizePackageImports: ['mermaid', '@google/genai'],
+  },
+  // Ensure tool_registry.json (generated at build time) is included in serverless function bundles
+  // This is the recommended Next.js way to include build-time generated files for Vercel
+  outputFileTracingIncludes: {
+    '/api/chat': ['./tools/tool_registry.json'],
+    '/api/**': ['./tools/tool_registry.json'],
   },
   // Use webpack explicitly for builds that need native module handling
   // Empty turbopack config to acknowledge we're using webpack intentionally
@@ -154,31 +152,6 @@ const nextConfig: NextConfig = {
         // Don't try to optimize dynamic imports that use computed paths
         moduleIds: 'deterministic',
       };
-      
-      // Ensure tool_registry.json is included in the build
-      // Copy it to the server output so it's available at runtime
-      const CopyWebpackPlugin = require('copy-webpack-plugin');
-      config.plugins = config.plugins || [];
-      if (existsSync(registryPath)) {
-        const outputPath = config.output?.path || join(process.cwd(), '.next');
-        config.plugins.push(
-          new CopyWebpackPlugin({
-            patterns: [
-              {
-                from: registryPath,
-                to: join(outputPath, 'server', 'tools', 'tool_registry.json'),
-                noErrorOnMissing: false,
-              },
-              // Also copy to root of server output as fallback
-              {
-                from: registryPath,
-                to: join(outputPath, 'server', 'tool_registry.json'),
-                noErrorOnMissing: false,
-              },
-            ],
-          })
-        );
-      }
     }
 
     // Exclude server-only modules from client bundle

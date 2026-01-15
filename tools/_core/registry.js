@@ -25,15 +25,10 @@ import { validateToolResponse, TOOL_RESPONSE_SCHEMA_VERSION } from './tool-respo
 import { recordToolExecution, recordError, recordBudgetViolation, recordRegistryLoadTime } from './metrics.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-// Try multiple possible paths for tool_registry.json
-// 1. Relative to this file (tools/_core/registry.js -> tools/tool_registry.json)
-const relativePath = join(__dirname, '..', 'tool_registry.json');
-// 2. From project root (for Vercel/serverless environments)
-const projectRootPath = join(process.cwd(), 'tools', 'tool_registry.json');
-// Use the first path that exists, or fall back to relative path
-const REGISTRY_PATH = existsSync(relativePath) ? relativePath : 
-                       existsSync(projectRootPath) ? projectRootPath : 
-                       relativePath; // Default to relative for error message
+// Path to tool_registry.json relative to this file
+// Since the file is generated at build time and included via outputFileTracingIncludes,
+// it will be available at this relative path in both local and Vercel environments
+const REGISTRY_PATH = join(__dirname, '..', 'tool_registry.json');
 // Create require function for resolving modules  
 const require = createRequire(import.meta.url);
 // Project root is two levels up from _core
