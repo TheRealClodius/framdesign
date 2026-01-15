@@ -1,7 +1,5 @@
 {
-  "buildCommand": "npm run build",
-  "outputDirectory": ".next",
   "framework": "nextjs",
   "installCommand": "npm install && rm -rf node_modules/@lancedb",
-  "_comment": "buildCommand runs 'npm run build' which triggers prebuild hook that runs build:tools, then Next.js build, then postbuild hook that copies tool_registry.json"
+  "_comment": "Using default Next.js build. prebuild hook runs build:tools, then Next.js build, then postbuild hook copies tool_registry.json"
 }

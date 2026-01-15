@@ -1,6 +1,10 @@
 import type { NextConfig } from "next";
-import { resolve, join } from "path";
+import { resolve, join, dirname } from "path";
 import { existsSync } from "fs";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const nextConfig: NextConfig = {
   // Set the root directory for file tracing to prevent workspace detection issues
