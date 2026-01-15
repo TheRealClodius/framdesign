@@ -166,11 +166,16 @@ const nextConfig: NextConfig = {
       };
 
       // Copy tool_registry.json to serverless function output
-      // Use relative path from context to ensure proper copying
+      // CopyPlugin copies files relative to webpack output directory
+      // For Next.js server builds, we need the file accessible at runtime
+      // where process.cwd() points to the project root
       const registryPath = join(process.cwd(), 'tools', 'tool_registry.json');
       if (existsSync(registryPath)) {
         const CopyPlugin = require('copy-webpack-plugin');
         config.plugins = config.plugins || [];
+        // Copy maintaining directory structure - this ensures file is in the bundle
+        // The 'to' path is relative to webpack output, but Next.js file tracing
+        // should include files from project root, so we rely on outputFileTracingIncludes
         config.plugins.push(
           new CopyPlugin({
             patterns: [
@@ -179,6 +184,7 @@ const nextConfig: NextConfig = {
                 to: 'tools/tool_registry.json',
                 context: process.cwd(),
                 noErrorOnMissing: false,
+                force: true,
               },
             ],
           })
