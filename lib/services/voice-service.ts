@@ -172,6 +172,27 @@ export class VoiceService extends EventTarget {
       this.startPromiseResolve = resolve;
       this.startPromiseReject = reject;
 
+      // Add timeout to prevent hanging indefinitely
+      const timeout = setTimeout(() => {
+        if (this.startPromiseReject) {
+          const error = new Error(
+            'Voice server connection timeout. The server may not be running or accessible. ' +
+            'Please check NEXT_PUBLIC_VOICE_SERVER_URL is configured correctly.'
+          );
+          this.startPromiseReject(error);
+          this.startPromiseResolve = null;
+          this.startPromiseReject = null;
+          this.cleanup();
+        }
+      }, 10000); // 10 second timeout
+
+      // Clear timeout if connection succeeds
+      const originalResolve = resolve;
+      this.startPromiseResolve = () => {
+        clearTimeout(timeout);
+        originalResolve();
+      };
+
       try {
         this.ws = new WebSocket(VOICE_CONFIG.WEBSOCKET_URL);
 
@@ -223,11 +244,22 @@ export class VoiceService extends EventTarget {
         };
 
         this.ws.onclose = (event) => {
+          clearTimeout(timeout);
           console.log('WebSocket closed', { code: event.code, reason: event.reason });
-          
+
           // Stop heartbeat
           this.stopHeartbeat();
-          
+
+          // If closed before session started, reject with helpful error
+          if (this.startPromiseReject && !this.isActive) {
+            this.startPromiseReject(new Error(
+              'Voice server connection closed before session started. ' +
+              'The server may not be available. Please try again later.'
+            ));
+            this.startPromiseResolve = null;
+            this.startPromiseReject = null;
+          }
+
           // Only attempt reconnection if not intentionally stopping and session was active
           if (!this.isIntentionallyStopping && this.isActive) {
             this.attemptReconnection();
@@ -239,6 +271,7 @@ export class VoiceService extends EventTarget {
           }
         };
       } catch (error) {
+        clearTimeout(timeout);
         console.error('Failed to create WebSocket:', error);
         this.dispatchEvent(new CustomEvent('error', {
           detail: { message: 'Failed to create WebSocket connection' }
