@@ -2,6 +2,7 @@
  * Unit tests for state-controller.js
  */
 
+import { jest, describe, test, expect } from '@jest/globals';
 import { createStateController } from '../../../tools/_core/state-controller.js';
 import { IntentType } from '../../../tools/_core/error-types.js';
 

@@ -2,6 +2,7 @@
  * Unit tests for tool-response.js
  */
 
+import { describe, test, expect } from '@jest/globals';
 import { validateToolResponse, TOOL_RESPONSE_SCHEMA_VERSION } from '../../../tools/_core/tool-response.js';
 import { ErrorType } from '../../../tools/_core/error-types.js';
 

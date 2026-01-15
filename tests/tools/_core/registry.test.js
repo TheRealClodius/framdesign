@@ -2,6 +2,7 @@
  * Unit tests for registry.js
  */
 
+import { jest, describe, test, expect, beforeEach } from '@jest/globals';
 import { readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';

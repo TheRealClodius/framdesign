@@ -2,6 +2,7 @@
  * Unit tests for error-types.js
  */
 
+import { describe, test, expect } from '@jest/globals';
 import { ErrorType, ToolError, IntentType } from '../../../tools/_core/error-types.js';
 
 describe('ErrorType', () => {

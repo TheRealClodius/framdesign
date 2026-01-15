@@ -12,6 +12,7 @@ process.env.JEST_IGNORE_PATTERNS = '.cursor|.antigravity|.vscode|.local'
 const customJestConfig = {
   setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'],
   testEnvironment: 'jest-environment-node',
+  injectGlobals: true,
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/$1',
   },

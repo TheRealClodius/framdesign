@@ -3,6 +3,7 @@
  * Tests loop detection in realistic voice server scenarios
  */
 
+import { describe, test, expect, beforeAll } from '@jest/globals';
 import { toolRegistry } from '../../tools/_core/registry.js';
 import { loopDetector } from '../../tools/_core/loop-detector.js';
 import { createStateController } from '../../tools/_core/state-controller.js';

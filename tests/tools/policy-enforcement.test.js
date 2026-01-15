@@ -3,6 +3,7 @@
  * Tests mode restrictions, budget limits, and confirmation requirements
  */
 
+import { describe, test, expect, beforeAll } from '@jest/globals';
 import { ErrorType } from '../../tools/_core/error-types.js';
 import { toolRegistry } from '../../tools/_core/registry.js';
 

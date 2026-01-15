@@ -3,6 +3,7 @@
  * Tests latency budgets, concurrent executions, registry load time
  */
 
+import { describe, test, expect, beforeAll } from '@jest/globals';
 import { toolRegistry } from '../../tools/_core/registry.js';
 import { createStateController } from '../../tools/_core/state-controller.js';
 import { getMetricsSummary } from '../../tools/_core/metrics.js';

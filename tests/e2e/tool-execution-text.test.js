@@ -3,6 +3,7 @@
  * Tests full tool execution flow with HTTP transport
  */
 
+import { describe, test, expect, beforeAll } from '@jest/globals';
 import { toolRegistry } from '../../tools/_core/registry.js';
 import { createStateController } from '../../tools/_core/state-controller.js';
 import { retryWithBackoff } from '../../tools/_core/retry-handler.js';

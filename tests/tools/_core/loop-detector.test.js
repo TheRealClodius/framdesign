@@ -3,6 +3,7 @@
  * Tests loop detection for repeated tool calls and empty results
  */
 
+import { describe, test, expect, beforeEach } from '@jest/globals';
 import { LoopDetector } from '../../../tools/_core/loop-detector.js';
 
 describe('LoopDetector', () => {

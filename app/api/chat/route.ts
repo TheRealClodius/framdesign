@@ -1095,13 +1095,24 @@ export async function POST(request: Request) {
                 const typed = chunk as any;
                 const candidates = typed?.candidates?.[0]?.content?.parts || [];
 
+                // Try direct text property first
                 let text: string | undefined;
                 if (typeof typed?.text === "function") {
                   text = typed.text();
                 } else if (typed?.text) {
                   text = typed.text;
-                } else if (candidates?.[0]?.text) {
-                  text = candidates[0].text;
+                } else {
+                  // Iterate through all parts to find text parts
+                  // When there are function calls, parts can contain both text and functionCall parts
+                  const textParts: string[] = [];
+                  for (const part of candidates) {
+                    if (part.text) {
+                      textParts.push(part.text);
+                    }
+                  }
+                  if (textParts.length > 0) {
+                    text = textParts.join('');
+                  }
                 }
 
                 if (text) {
@@ -1162,13 +1173,24 @@ export async function POST(request: Request) {
               const typed = chunk as { text?: string | (() => string); candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
               const candidates = typed.candidates?.[0]?.content?.parts || [];
 
+              // Try direct text property first
               let text: string | undefined;
               if (typeof typed.text === "function") {
                 text = typed.text();
               } else if (typed.text) {
                 text = typed.text;
-              } else if (candidates?.[0]?.text) {
-                text = candidates[0].text;
+              } else {
+                // Iterate through all parts to find text parts
+                // When there are function calls, parts can contain both text and functionCall parts
+                const textParts: string[] = [];
+                for (const part of candidates) {
+                  if (part.text) {
+                    textParts.push(part.text);
+                  }
+                }
+                if (textParts.length > 0) {
+                  text = textParts.join('');
+                }
               }
 
               if (text) {

@@ -3,6 +3,7 @@
  * Tests successful execution, failure scenarios, and error handling
  */
 
+import { describe, test, expect, beforeAll } from '@jest/globals';
 import { toolRegistry } from '../../tools/_core/registry.js';
 import { ErrorType, ToolError } from '../../tools/_core/error-types.js';
 import { IntentType } from '../../tools/_core/error-types.js';

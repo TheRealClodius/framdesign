@@ -3,6 +3,7 @@
  * Tests response size tracking, token estimation, and session metrics
  */
 
+import { describe, test, expect, beforeEach } from '@jest/globals';
 import {
   recordToolExecution,
   recordResponseMetrics,

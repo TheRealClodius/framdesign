@@ -3,6 +3,7 @@
  * Tests budget exceeded, mode restrictions, validation failures, etc.
  */
 
+import { describe, test, expect, beforeAll } from '@jest/globals';
 import { toolRegistry } from '../../tools/_core/registry.js';
 import { createStateController } from '../../tools/_core/state-controller.js';
 import { ErrorType } from '../../tools/_core/error-types.js';
