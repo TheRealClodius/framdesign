@@ -123,8 +123,16 @@ export class VoiceService extends EventTarget {
     }
 
     // Validate WebSocket URL
+    console.log('[Voice Service] Validating WebSocket URL:', {
+      raw: VOICE_CONFIG.WEBSOCKET_URL,
+      trimmed: VOICE_CONFIG.WEBSOCKET_URL?.trim(),
+      hasWs: VOICE_CONFIG.WEBSOCKET_URL?.startsWith('ws://'),
+      hasWss: VOICE_CONFIG.WEBSOCKET_URL?.startsWith('wss://'),
+      envVar: process.env.NEXT_PUBLIC_VOICE_SERVER_URL
+    });
+
     if (!VOICE_CONFIG.WEBSOCKET_URL || (!VOICE_CONFIG.WEBSOCKET_URL.startsWith('ws://') && !VOICE_CONFIG.WEBSOCKET_URL.startsWith('wss://'))) {
-      const error = new Error('Invalid WebSocket URL. Please configure NEXT_PUBLIC_VOICE_SERVER_URL');
+      const error = new Error(`Invalid WebSocket URL: "${VOICE_CONFIG.WEBSOCKET_URL}". Please configure NEXT_PUBLIC_VOICE_SERVER_URL with a valid ws:// or wss:// URL`);
       this.dispatchEvent(new CustomEvent('error', {
         detail: { message: error.message }
       }));

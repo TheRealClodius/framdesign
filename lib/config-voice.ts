@@ -2,8 +2,16 @@
  * Voice configuration constants
  */
 
+// Sanitize WebSocket URL: trim whitespace and remove trailing slash
+const sanitizeWebSocketUrl = (url: string | undefined): string => {
+  if (!url) return 'ws://localhost:8080';
+  const trimmed = url.trim();
+  // Remove trailing slash if present
+  return trimmed.endsWith('/') ? trimmed.slice(0, -1) : trimmed;
+};
+
 export const VOICE_CONFIG = {
-  WEBSOCKET_URL: process.env.NEXT_PUBLIC_VOICE_SERVER_URL || 'ws://localhost:8080',
+  WEBSOCKET_URL: sanitizeWebSocketUrl(process.env.NEXT_PUBLIC_VOICE_SERVER_URL),
   AUDIO_FORMAT: {
     sampleRate: 16000,
     channels: 1,

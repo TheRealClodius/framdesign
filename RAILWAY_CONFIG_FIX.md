@@ -41,8 +41,11 @@ NEXT_PUBLIC_VOICE_SERVER_URL=wss://voice-service-production-17a5.up.railway.app
 ```
 
 **Important:**
-- No trailing slash on `VECTOR_SEARCH_API_URL`
+- No trailing slash on `VECTOR_SEARCH_API_URL` (automatically sanitized)
 - Use `wss://` (secure WebSocket) for `NEXT_PUBLIC_VOICE_SERVER_URL`
+- No trailing slash on `NEXT_PUBLIC_VOICE_SERVER_URL` (automatically sanitized)
+- Ensure no extra whitespace around URLs (automatically trimmed)
+- After adding environment variables in Vercel/Railway, **you must redeploy** for changes to take effect
 
 ## Step-by-Step Railway Configuration
 
@@ -111,12 +114,46 @@ curl https://voice-service-production-17a5.up.railway.app/health
 
 ## Common Issues
 
+### Issue: "Invalid WebSocket URL" Error
+
+**Symptoms:**
+- Error message: "Invalid WebSocket URL. Please configure NEXT_PUBLIC_VOICE_SERVER_URL"
+- Voice button doesn't work
+
+**Causes & Solutions:**
+
+1. **Environment variable not set:**
+   - Check that `NEXT_PUBLIC_VOICE_SERVER_URL` is set in your deployment platform (Vercel/Railway)
+   - Must start with `wss://` (secure) or `ws://` (local dev only)
+   - Example: `wss://voice-service-production.up.railway.app`
+
+2. **Environment variable not loaded:**
+   - In Next.js, `NEXT_PUBLIC_*` variables are embedded at build time
+   - **You must redeploy your frontend** after adding/changing this variable
+   - Simply adding the variable is not enough - rebuild is required
+
+3. **Whitespace or formatting issues:**
+   - Check for trailing slashes (now automatically removed)
+   - Check for leading/trailing whitespace (now automatically trimmed)
+   - Check browser console for diagnostic logs showing the actual URL value
+
+4. **Local development:**
+   - Create `.env.local` file in project root
+   - Add: `NEXT_PUBLIC_VOICE_SERVER_URL=ws://localhost:8080`
+   - Restart your dev server (`npm run dev`)
+
+**Debug steps:**
+1. Open browser console (F12)
+2. Try to start voice session
+3. Look for log message: `[Voice Service] Validating WebSocket URL:`
+4. Check what value is being read - it will show the raw URL and validation results
+
 ### Issue: Still getting 404 after configuring ALLOWED_ORIGINS
 
 **Possible causes:**
 1. Railway hasn't finished redeploying (wait 2-3 minutes)
 2. Your frontend is using old environment variables (redeploy frontend)
-3. URL has trailing slash - remove it from `VECTOR_SEARCH_API_URL`
+3. URL has trailing slash (now automatically removed)
 
 ### Issue: Voice connects but vector search fails
 
