@@ -79,12 +79,27 @@ class ToolRegistry {
     console.log('Loading tool registry...');
     console.log(`Registry path: ${REGISTRY_PATH}`);
     console.log(`__dirname: ${__dirname}`);
+    console.log(`process.cwd(): ${process.cwd()}`);
+    console.log(`projectRoot: ${projectRoot}`);
+    
+    // Log all paths we're checking
+    const pathsToCheck = [
+      join(projectRoot, 'public', 'tools', 'tool_registry.json'),
+      join(projectRoot, 'tools', 'tool_registry.json'),
+      join(__dirname, '..', 'tool_registry.json'),
+    ];
+    console.log('Checking paths:');
+    pathsToCheck.forEach((path, i) => {
+      console.log(`  ${i + 1}. ${path} - ${existsSync(path) ? 'EXISTS' : 'NOT FOUND'}`);
+    });
+    
     const loadStartTime = Date.now();
 
     // Check if registry file exists
     if (!existsSync(REGISTRY_PATH)) {
       const errorMsg = `Tool registry file not found at ${REGISTRY_PATH}. Please run 'npm run build:tools' to generate it.`;
       console.error(errorMsg);
+      console.error('Checked paths:', pathsToCheck);
       throw new Error(errorMsg);
     }
 
