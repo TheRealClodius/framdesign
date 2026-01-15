@@ -18,7 +18,11 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Local LanceDB path (stores data in project directory)
-const LANCE_DB_PATH = path.join(__dirname, '../../.lancedb');
+// In Railway environment, use /app/.lancedb for persistent storage
+// Otherwise use project root .lancedb directory
+const LANCE_DB_PATH = process.env.RAILWAY_ENVIRONMENT
+  ? '/app/.lancedb'
+  : process.env.LANCE_DB_PATH || path.join(__dirname, '../../.lancedb');
 const TABLE_NAME = 'kb_documents';
 const VECTOR_SEARCH_API_URL = process.env.VECTOR_SEARCH_API_URL;
 

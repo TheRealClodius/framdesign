@@ -37,7 +37,11 @@ app.get('/health', (req, res) => {
 app.get('/status', async (req, res) => {
   try {
     // Check if .lancedb directory exists with kb_documents table
-    const lancedbPath = join(__dirname, '..', '.lancedb');
+    // In Railway, the path is /app/.lancedb
+    // In local dev, it's relative to project root
+    const lancedbPath = process.env.RAILWAY_ENVIRONMENT
+      ? '/app/.lancedb'
+      : join(__dirname, '..', '.lancedb');
     const initialized = existsSync(lancedbPath);
 
     let documentCount = 0;
@@ -88,7 +92,9 @@ app.post('/search', async (req, res) => {
     }
 
     // Check if vector store is initialized
-    const lancedbPath = join(__dirname, '..', '.lancedb');
+    const lancedbPath = process.env.RAILWAY_ENVIRONMENT
+      ? '/app/.lancedb'
+      : join(__dirname, '..', '.lancedb');
     if (!existsSync(lancedbPath)) {
       return res.status(503).json({
         error: 'Vector store not initialized',

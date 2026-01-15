@@ -2,7 +2,7 @@
   "$schema": "https://railway.app/railway.schema.json",
   "build": {
     "builder": "NIXPACKS",
-    "buildCommand": "cd .. && npm install && npx tsx scripts/Embed/embed-kb.ts && cd vector-search-api && npm install"
+    "buildCommand": "cd .. && npm install && LANCE_DB_PATH=/app/.lancedb npx tsx scripts/Embed/embed-kb.ts && cd vector-search-api && npm install"
   },
   "deploy": {
     "numReplicas": 1,
