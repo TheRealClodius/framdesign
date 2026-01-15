@@ -49,10 +49,11 @@ async function getLanceDB() {
   
   if (!lancedbModule) {
     try {
-      // Dynamic import using a variable to prevent Webpack static analysis
+      // Dynamic import using eval to completely prevent Webpack static analysis
       // This ensures Webpack doesn't try to bundle LanceDB when in API mode
-      const modulePath = '@lancedb/lancedb';
-      lancedbModule = await import(/* webpackIgnore: true */ modulePath);
+      // The eval prevents webpack from analyzing the import at build time
+      const importFunc = new Function('moduleName', 'return import(moduleName)');
+      lancedbModule = await importFunc('@lancedb/lancedb');
     } catch (error: any) {
       throw new Error(
         `Failed to load LanceDB. This is expected in serverless environments. ` +
@@ -96,13 +97,13 @@ async function getTable() {
 
 /**
  * Upsert documents into vector store
- * 
+ *
  * Drops and recreates the table on each call to ensure clean schema.
  * This prevents schema conflicts when metadata structure changes.
- * 
+ *
  * Important: The 'id' field in metadata is excluded to prevent overwriting
  * the document ID. Frontmatter 'id' should be stored as 'entity_id' instead.
- * 
+ *
  * @param documents - Array of document objects with id, text, embedding, metadata
  *   - id: Unique chunk ID (format: {entity_id}_chunk_{index})
  *   - text: Chunk text content
@@ -118,6 +119,10 @@ export async function upsertDocuments(
     metadata?: Record<string, any>;
   }>
 ): Promise<void> {
+  if (IS_API_MODE) {
+    throw new Error('[vector-store] upsertDocuments is not available in API mode. Use the vector-search-api service directly.');
+  }
+
   try {
     const database = await getDB();
     
@@ -308,6 +313,10 @@ export async function searchSimilar(
  * @param ids - Array of document IDs to delete
  */
 export async function deleteDocuments(ids: string[]): Promise<void> {
+  if (IS_API_MODE) {
+    throw new Error('[vector-store] deleteDocuments is not available in API mode. Use the vector-search-api service directly.');
+  }
+
   try {
     const database = await getDB();
     
@@ -343,6 +352,10 @@ export async function deleteDocuments(ids: string[]): Promise<void> {
  * Get all document IDs in the table
  */
 export async function getAllDocumentIds(): Promise<string[]> {
+  if (IS_API_MODE) {
+    throw new Error('[vector-store] getAllDocumentIds is not available in API mode. Use the vector-search-api service directly.');
+  }
+
   try {
     const database = await getDB();
     
