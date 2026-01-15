@@ -25,16 +25,13 @@ import { validateToolResponse, TOOL_RESPONSE_SCHEMA_VERSION } from './tool-respo
 import { recordToolExecution, recordError, recordBudgetViolation, recordRegistryLoadTime } from './metrics.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-// Path to tool_registry.json - try multiple locations
-// 1. Project root tools/ (where outputFileTracingIncludes should include it)
-// 2. Relative to this file (for local development)
+// Path to tool_registry.json
 // The file is generated at build time by 'npm run build:tools' and should be
 // included in serverless functions via outputFileTracingIncludes in next.config.ts
-const projectRoot = process.cwd() || resolve(__dirname, '..', '..');
-const REGISTRY_PATH = [
-  join(projectRoot, 'tools', 'tool_registry.json'), // Primary path for Vercel
-  join(__dirname, '..', 'tool_registry.json'), // Fallback for local dev
-].find(path => existsSync(path)) || join(projectRoot, 'tools', 'tool_registry.json');
+// Use process.cwd() for Vercel's serverless environment, fallback to relative path
+const REGISTRY_PATH = process.cwd() 
+  ? join(process.cwd(), 'tools', 'tool_registry.json')
+  : join(__dirname, '..', 'tool_registry.json');
 // Create require function for resolving modules  
 const require = createRequire(import.meta.url);
 // Project root is two levels up from _core
@@ -78,15 +75,38 @@ class ToolRegistry {
 
     console.log('Loading tool registry...');
     console.log(`Registry path: ${REGISTRY_PATH}`);
+    console.log(`process.cwd(): ${process.cwd()}`);
     console.log(`__dirname: ${__dirname}`);
     const loadStartTime = Date.now();
 
     // Check if registry file exists
     if (!existsSync(REGISTRY_PATH)) {
-      const errorMsg = `Tool registry file not found at ${REGISTRY_PATH}. Please run 'npm run build:tools' to generate it.`;
-      console.error(errorMsg);
-      throw new Error(errorMsg);
+      // Try alternative locations as fallback
+      const altPaths = [
+        join(__dirname, '..', 'tool_registry.json'),
+        join(process.cwd() || '', '.next', 'server', 'tools', 'tool_registry.json'),
+        join(process.cwd() || '', 'tools', 'tool_registry.json'),
+      ];
+      const foundPath = altPaths.find(p => existsSync(p));
+      if (foundPath) {
+        console.log(`Found registry at alternative path: ${foundPath}`);
+        // Update REGISTRY_PATH for this load
+        const registryJson = readFileSync(foundPath, 'utf-8');
+        const registry = JSON.parse(registryJson);
+        this.version = registry.version;
+        this.gitCommit = registry.gitCommit;
+        // Continue with rest of load logic...
+      } else {
+        const errorMsg = `Tool registry file not found at ${REGISTRY_PATH}. Checked paths: ${[REGISTRY_PATH, ...altPaths].join(', ')}. Please run 'npm run build:tools' to generate it.`;
+        console.error(errorMsg);
+        throw new Error(errorMsg);
+      }
+      return; // Early return if we used alternative path
     }
+
+    // Normal path - file exists at REGISTRY_PATH
+    const registryJson = readFileSync(REGISTRY_PATH, 'utf-8');
+    const registry = JSON.parse(registryJson);
 
     // Read registry file
     const registryJson = readFileSync(REGISTRY_PATH, 'utf-8');
