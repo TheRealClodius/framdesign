@@ -130,13 +130,21 @@ The Vercel deployment uses this API when `VECTOR_SEARCH_API_URL` is set:
 
 ```typescript
 // In Vercel environment
-VECTOR_SEARCH_API_URL=https://vector-search-api-production.up.railway.app/
+VECTOR_SEARCH_API_URL=https://vector-search-api-production.up.railway.app
 
 // The vector-store-service.ts automatically uses API mode
 const results = await searchSimilar([], 5, {}, "query text");
 ```
 
 ## Troubleshooting
+
+### 404 Not Found errors
+- **CRITICAL**: Ensure `VECTOR_SEARCH_API_URL` has NO trailing slash
+  - ✅ Correct: `https://vector-search-api-production.up.railway.app`
+  - ❌ Wrong: `https://vector-search-api-production.up.railway.app/`
+  - A trailing slash causes double slashes in API calls (e.g., `//search`) resulting in 404 errors
+- Check that `ALLOWED_ORIGINS` environment variable is set in Railway dashboard
+- Verify the service is deployed and responding (test with `/health` endpoint)
 
 ### "Vector store not initialized" error
 - The embedding script didn't run during build
