@@ -8,6 +8,31 @@
 4. **Explicit Contracts** - ToolResponse envelope is formal and versioned
 5. **Intent-Based State** - Tools return intents, orchestrators apply them to session state
 
+## Tool Discovery Model
+
+**Full Declarations with Prompt Caching**
+
+All tools are declared to the Gemini Live session at initialization with complete documentation:
+- Tool schemas (parameters, validation rules)
+- Tool guides (when/how to use, examples, common pitfalls)
+
+This approach relies on Gemini's prompt caching to avoid context window bloat:
+- Initial session setup sends ~12-15k tokens (system prompt + tool declarations)
+- Gemini caches this context across multiple turns
+- Subsequent turns only add conversation history, not full tool docs
+
+**Why Not Dynamic Discovery?**
+- Gemini Live API requires all tool declarations at session start (API constraint)
+- Prompt caching makes full upfront declarations efficient
+- Simpler than meta-tools (no `list_tools()` or `get_tool_docs()` complexity)
+- Agent has complete tool context from turn 1
+
+**Context Window Monitoring**
+- Session init token estimates logged at startup
+- Per-tool response token averages tracked
+- Peak context usage monitored via `/metrics` endpoint
+- Alerts if approaching Gemini's 1M token limit
+
 ## Directory Structure
 
 ```
@@ -16,7 +41,9 @@ tools/
 │   ├── error-types.js      # ErrorType enum, ToolError class, IntentType enum
 │   ├── tool-response.js    # ToolResponse schema + validator
 │   ├── registry.js         # Runtime registry loader
-│   └── state-controller.js # State management helper
+│   ├── state-controller.js # State management helper
+│   ├── metrics.js          # Response metrics, token tracking, session metrics
+│   └── loop-detector.js    # Loop detection (same call 3x, empty results 2x)
 │
 ├── _build/                 # Build-time infrastructure (run once, generate artifact)
 │   ├── tool-builder.js     # Main build script
@@ -27,8 +54,7 @@ tools/
 │
 ├── {tool-name}/            # Individual tool directories
 │   ├── schema.json         # JSON Schema + orchestration metadata
-│   ├── doc_summary.md      # 2-4 line summary (always in prompts)
-│   ├── doc.md              # Full structured docs (on-demand)
+│   ├── guide.md            # Tool documentation (simplified format)
 │   └── handler.js          # Execution logic
 │
 └── tool_registry.json      # GENERATED BUILD ARTIFACT (gitignored)
@@ -61,7 +87,7 @@ import { GeminiLiveTransport } from './providers/gemini-live-transport.js';
 - Max 2 retrieval calls per turn (voice latency budget) - **HARD GATE**
 - Max 3 total tool calls per turn - **HARD GATE**
 - Max 800ms per retrieval tool (soft limit, logs warning)
-- Tool summaries only in prompt (tight for performance)
+- Loop detection: Same tool+args 3x or empty results 2x → feedback to agent
 
 **Available Tools:** All 5 tools (ignore_user, start_voice_session, end_voice_session, kb_search, kb_get)
 
@@ -108,10 +134,17 @@ npm run build:tools
 **What happens:**
 1. `tools/_build/tool-builder.js` scans `tools/*/` directories
 2. Validates `schema.json` with Ajv (JSON Schema draft 2020-12)
-3. Validates `doc.md` has required sections
+3. Validates `guide.md` exists and extracts summary (second non-empty line)
 4. Validates `handler.js` exists and exports `execute()`
 5. Generates provider-specific schemas via adapters (OpenAI + Gemini Native)
 6. Outputs `tools/tool_registry.json` with content-based version hash
+
+**Simplified Documentation Format:**
+- `guide.md` replaces old `doc_summary.md` + `doc.md` structure
+- No required section structure (flexible format)
+- Recommended sections: Parameters, Examples, Watch Out
+- Summary auto-extracted from first non-heading line
+- Full guide content included in system instruction for agent context
 
 **Build artifact structure:**
 ```json
@@ -160,7 +193,7 @@ See `tools/README.md` for detailed guide.
 
 **Quick steps:**
 1. Create `tools/{tool-name}/` directory
-2. Add 4 required files (schema.json, doc_summary.md, doc.md, handler.js)
+2. Add 3 required files (schema.json, guide.md, handler.js)
 3. Run `npm run build:tools`
 4. Restart agents
 5. Tool is automatically available
@@ -169,6 +202,26 @@ See `tools/README.md` for detailed guide.
 - Agent code (server.js, route.ts)
 - Prompt files
 - Configuration
+
+**guide.md Format:**
+```markdown
+# tool_name
+[1-2 sentence description]
+
+## Parameters
+- param1 (required): description
+- param2 (optional): description, default value
+
+## Examples
+**Scenario 1:**
+\```json
+{ "param1": "value" }
+\```
+
+## Watch Out (optional)
+- Common mistake 1
+- Common mistake 2
+```
 
 ## Contracts & Versioning
 
@@ -241,11 +294,162 @@ const transport = new OpenAITransport(client, conversationId);
 - Future-proof (OpenAPI, AsyncAPI compatible)
 - Runtime validation consistency
 
-### Why Two-Tier Documentation?
-- Voice mode needs tight prompts (<800ms retrieval budget)
-- Summaries always loaded (2-4 lines, performance-critical)
-- Full docs on-demand only (when agent needs detail)
-- Scalable as tool count grows
+### Why Single-Source Documentation?
+- All tool docs in `/tools/{tool-name}/guide.md` (single source of truth)
+- Complete documentation included in system instruction at session start
+- Gemini's prompt caching handles token efficiency
+- No duplication between voice-server prompts and tool directories
+- Simpler maintenance: one place to edit per tool
+
+## Observability & Monitoring
+
+### Loop Detection (`tools/_core/loop-detector.js`)
+
+**Problem:** Agents can get stuck calling the same tool repeatedly or searching for non-existent data.
+
+**Solution:** Per-turn loop detection with agent feedback
+
+**Detection Rules:**
+1. **Same Call Repeated**: Tool called 3+ times with identical arguments in one turn
+   - Returns: `LOOP_DETECTED` error with message
+   - Example: `"Loop detected: kb_search called 3 times with identical arguments. Try a different approach or rephrase your query."`
+
+2. **Empty Results Repeated**: Tool returns empty/blank results 2+ times in one turn
+   - Returns: `LOOP_DETECTED` error with suggestion
+   - Example: `"kb_search returned empty results 2 times. Data may not exist. Try different search terms or a different tool."`
+
+**Implementation:**
+```javascript
+// Before tool execution
+const loopCheck = loopDetector.detectLoop(sessionId, currentTurn, toolId, args);
+if (loopCheck.detected) {
+  // Return feedback to agent instead of executing
+  await transport.sendToolResult({
+    id: call.id,
+    name: call.name,
+    result: {
+      ok: false,
+      error: {
+        type: 'LOOP_DETECTED',
+        message: loopCheck.message,
+        retryable: false
+      }
+    }
+  });
+  continue;  // Skip execution
+}
+
+// After execution
+loopDetector.recordCall(sessionId, currentTurn, toolId, args, result);
+```
+
+**Cleanup:** History retained for last 5 turns per session, automatically pruned.
+
+### Response Size & Token Tracking (`tools/_core/metrics.js`)
+
+**Tracked Metrics:**
+- **Response sizes** (chars): P50, P95, P99 per tool (last 1000 responses)
+- **Token estimates**: Rough estimate using `chars / 4` formula
+- **Response latency**: Per-tool execution time percentiles
+- **Session metrics**: Tool calls per session, turn count, session duration
+
+**Token Estimation:**
+```javascript
+function estimateTokens(text) {
+  if (!text) return 0;
+  return Math.ceil(text.length / 4);
+}
+```
+
+**Alert Thresholds:**
+- P95 response size > 1500 chars → logged as warning
+- Average tokens per tool tracked for capacity planning
+
+**Access via:**
+```bash
+curl http://localhost:8080/metrics
+```
+
+Example response:
+```json
+{
+  "responseSizes": {
+    "kb_search": { "p50": 320, "p95": 890, "p99": 1450 },
+    "kb_get": { "p50": 780, "p95": 2100, "p99": 3200 }
+  },
+  "responseTokens": {
+    "kb_search": { "avg": 80, "p95": 225 },
+    "kb_get": { "avg": 195, "p95": 525 }
+  },
+  "context": {
+    "sessionInitTokens": 12500,
+    "systemPromptTokens": 3200,
+    "toolDeclTokens": 9300
+  },
+  "loopDetection": {
+    "activeSessions": 3,
+    "totalTurnsTracked": 47
+  }
+}
+```
+
+### Context Window Monitoring
+
+**Goal:** Ensure Gemini's 1M token context window is not exceeded.
+
+**Tracked at Session Init:**
+- System prompt token count
+- Tool declaration token count (all schemas + guides)
+- Total session init context
+
+**Logged Example:**
+```
+[Context] Session init: ~12,847 tokens
+  - System prompt: ~3,215 tokens
+  - Tool declarations: ~9,632 tokens
+```
+
+**Monitoring Strategy:**
+1. Track session init baseline (~12-15k tokens)
+2. Monitor per-tool response averages (typically 80-500 tokens)
+3. Alert if peak usage trends toward 900k+ tokens
+4. Rely on Gemini's prompt caching to keep context efficient
+
+**Context Budget Assumptions:**
+- Session init: ~15k tokens (cached)
+- Average conversation: 10-20 turns × 200-500 tokens/turn = 2-10k tokens
+- Tool responses: 5-10 calls × 100-500 tokens = 0.5-5k tokens
+- **Total typical usage:** ~20-30k tokens (well under 1M limit)
+
+### Per-Session Tracking
+
+**Session Lifecycle:**
+```javascript
+// On connection
+startSession(sessionId);
+
+// During conversation
+recordSessionToolCall(sessionId, toolId, args, duration, ok);
+recordResponseMetrics(toolId, responseData);
+
+// On turn complete
+startNewTurn(sessionId);
+
+// On disconnect
+endSession(sessionId);
+```
+
+**Session Data:**
+- Session ID, start time, duration
+- Tool calls per session (with args, timing, success/failure)
+- Turn count
+- Loop detection history (per turn)
+
+**Use Cases:**
+- Debug agent behavior patterns
+- Identify problematic tool usage
+- Track performance regressions
+- Audit tool reliability
 
 ## Performance Considerations
 

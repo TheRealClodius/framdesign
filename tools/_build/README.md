@@ -17,13 +17,12 @@ This runs `node tools/_build/tool-builder.js`
 ### 1. Tool Discovery
 - Scans `tools/*/` directories
 - Ignores `_core/`, `_build/`, and hidden directories
-- Each directory must contain 4 files
+- Each directory must contain 3 files
 
 ### 2. File Validation
 For each tool directory, validates:
 - ✅ `schema.json` exists and is valid JSON
-- ✅ `doc_summary.md` exists and is under 250 characters
-- ✅ `doc.md` exists and has all required sections
+- ✅ `guide.md` exists
 - ✅ `handler.js` exists
 
 ### 3. Schema Validation
@@ -36,15 +35,10 @@ For each tool directory, validates:
 - Check toolId matches directory name (with dash→underscore)
 
 ### 4. Documentation Validation
-- Check `doc_summary.md` length (max 250 chars)
-- Parse `doc.md` and verify required sections:
-  - ## Summary
-  - ## Preconditions
-  - ## Postconditions
-  - ## Invariants
-  - ## Failure Modes
-  - ## Examples
-  - ## Common Mistakes
+- Check `guide.md` exists
+- Extract summary from first non-heading line
+- Validate summary is under 250 chars
+- No required section structure (flexible format)
 
 ### 5. Provider Schema Generation
 - Convert canonical JSON Schema to provider-specific formats
@@ -212,14 +206,13 @@ addFormats(ajv);  // Add format validators (email, date-time, uri, etc.)
 
 ### Build Failures
 Build fails if:
-- Missing required files (schema.json, doc_summary.md, doc.md, handler.js)
+- Missing required files (schema.json, guide.md, handler.js)
 - Invalid JSON in schema.json
 - Invalid JSON Schema syntax in parameters
 - Missing required schema fields
 - Invalid category or allowedModes values
 - toolId doesn't match directory name
-- doc_summary.md too long (>250 chars)
-- doc.md missing required sections
+- guide.md summary missing or too long (>250 chars)
 - Missing `additionalProperties: false` in parameters
 
 ### Error Messages

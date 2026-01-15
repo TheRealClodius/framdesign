@@ -2,12 +2,12 @@
 
 ## Quick Start
 
-Creating a new tool requires 4 files in a single directory:
+Creating a new tool requires 3 files in a single directory:
 
 ```bash
 mkdir tools/{tool-name}
 cd tools/{tool-name}
-touch schema.json doc_summary.md doc.md handler.js
+touch schema.json guide.md handler.js
 ```
 
 After creating files:
@@ -149,142 +149,80 @@ JSON Schema (draft 2020-12) with orchestration metadata.
 }
 ```
 
-### 2. doc_summary.md (Required)
+### 2. guide.md (Required)
 
-**2-4 line summary** injected into agent system prompts.
+Tool documentation in a simplified, flexible format.
 
-**Keep tight** - Voice mode has strict latency budgets. Every word counts.
-
-**Good example:**
+**Format:**
 ```markdown
-Block user who is rude/abusive for specified duration (30s-24h). Ends voice session after farewell is spoken. Follow escalation: warn first (unless extreme), then escalate based on severity.
-```
+# tool_name
+[1-2 sentence description]
 
-**Bad example (too verbose):**
-```markdown
-This tool allows you to block users who are being rude, disrespectful, or abusive in any way. The user will not be able to send messages for the specified duration, which can be anywhere from 30 seconds to 24 hours. After you call this tool, the voice session will end after your farewell message is spoken to the user. You should follow the escalation policy documented in core.md, which means you should warn the user first unless the abuse is extreme, and then escalate the timeout duration based on the severity of the offense.
-```
-
-### 3. doc.md (Required)
-
-Full structured documentation with **required sections** (build script validates):
-
-**Required sections:**
-- `## Summary`
-- `## Preconditions`
-- `## Postconditions`
-- `## Invariants`
-- `## Failure Modes`
-- `## Examples`
-- `## Common Mistakes`
-
-**Template:**
-```markdown
-# {Tool Name}
-
-## Summary
-Brief description of what this tool does and when to use it.
-
-## Preconditions
-What must be true before calling this tool?
-- Condition 1
-- Condition 2
-
-## Postconditions
-What will be true after successful execution?
-- State change 1
-- Side effect 2
-
-## Invariants
-What is always true about this tool?
-- Invariant 1 (e.g., "Duration always between 30-86400 seconds")
-- Invariant 2 (e.g., "Tool is NOT idempotent")
-
-## Failure Modes
-How can this tool fail and what happens?
-- **Error Type 1**: Description, retryability, side effects
-- **Error Type 2**: Description, retryability, side effects
+## Parameters
+- param1 (required): description
+- param2 (optional): description, default value
 
 ## Examples
 
-### Example 1: {Scenario Name}
-Context: {Describe situation}
-Action:
+**Scenario 1:**
 \`\`\`json
-{
-  "param1": "value1"
-}
+{ "param1": "value" }
 \`\`\`
-Result: {What happens}
+Description of what happens.
 
-### Example 2: {Another Scenario}
-{Similar structure}
+**Scenario 2:**
+\`\`\`json
+{ "param1": "value", "param2": "custom" }
+\`\`\`
+Description of what happens.
 
-## Common Mistakes (Do Not)
-❌ Mistake 1 - Why it's wrong
-❌ Mistake 2 - Why it's wrong
-✅ Correct approach
+## Watch Out (optional)
+- Common mistake 1
+- Common mistake 2
 ```
+
+**Guidelines:**
+- First non-heading line becomes the summary (used in system prompts)
+- Keep concise - especially for voice mode
+- Focus on "when to use" and "common gotchas"
+- Include 2-3 realistic examples with JSON
 
 **Real Example:**
 ```markdown
-# Timeout Tool (ignore_user)
+# kb_search
 
-## Summary
-Block users who are rude, disrespectful, or abusive. User cannot send messages for the specified duration.
+Semantic search over knowledge base using natural language queries. Returns relevant people, labs, and projects with scores and citations. Voice mode auto-clamps to 3 results.
 
-## Preconditions
-- User has committed offense worthy of timeout
-- You have followed escalation policy (see core.md) unless extreme abuse
-
-## Postconditions
-- Voice session ends after farewell is spoken
-- User blocked for duration_seconds
-- Client UI shows timeout message and countdown
-- Audit log entry created with reason
-
-## Invariants
-- Farewell message WILL be spoken in voice mode before block takes effect
-- Duration between 30-86400 seconds (enforced by schema)
-- Tool is NOT idempotent (repeated calls extend timeout)
-
-## Failure Modes
-- **SESSION_INACTIVE**: Session already ended, returns error, no side effects
-- **VALIDATION**: Invalid duration, registry rejects before execution
-- **TRANSIENT**: WebSocket closed, logs issue, no timeout applied
+## Parameters
+- **query** (required): Natural language search query (3-500 chars)
+- **top_k** (optional): Number of results to return (default: 5, max: 10, voice mode: auto-clamps to 3)
 
 ## Examples
 
-### Example 1: Second Offense
-User: "You're being really annoying"
-Your response: [Verbal warning per core.md policy]
-User: "Seriously, shut up"
-Your action:
+**General search:**
 \`\`\`json
 {
-  "duration_seconds": 60,
-  "farewell_message": "I don't tolerate disrespect. This conversation is over."
+  "query": "AI researchers working on language models"
 }
 \`\`\`
+Returns top 5 results with relevance scores.
 
-### Example 2: Extreme Abuse
-User: [Vile insult/threat]
-Your action:
+**Specific search with limit:**
 \`\`\`json
 {
-  "duration_seconds": 86400,
-  "farewell_message": "That behavior is completely unacceptable. You're blocked for 24 hours."
+  "query": "robotics labs in California",
+  "top_k": 3
 }
 \`\`\`
+Returns exactly 3 results.
 
-## Common Mistakes (Do Not)
-❌ Use this tool based on past conversation history (only current session)
-❌ Threaten to use it (either warn or act)
-❌ Use out of annoyance (only when respect is broken)
-❌ Forget expired timeouts are "paid for" (reset escalation after timeout)
+## Watch Out
+- **Empty results don't mean failure**: Query may be too specific or data doesn't exist. Try broader terms.
+- **Voice mode limits**: top_k automatically clamped to 3 for latency. Don't specify top_k > 3 in voice.
+- **Use natural language**: "AI researchers" works better than keywords like "AI AND research".
 ```
 
-### 4. handler.js (Required)
+### 3. handler.js (Required)
 
 Execution logic that exports `execute(context)` function.
 
@@ -445,11 +383,11 @@ npm run build:tools
 ```
 
 ### What gets validated
-- ✅ All 4 files exist (schema.json, doc_summary.md, doc.md, handler.js)
+- ✅ All 3 files exist (schema.json, guide.md, handler.js)
 - ✅ schema.json has all required fields
 - ✅ parameters is valid JSON Schema
-- ✅ doc_summary.md is under 250 characters
-- ✅ doc.md has all required sections
+- ✅ guide.md exists and has extractable summary
+- ✅ Summary is under 250 characters
 - ✅ toolId matches directory name
 - ✅ category is valid (retrieval/action/utility)
 - ✅ allowedModes is non-empty array
@@ -547,8 +485,8 @@ Check `schema.json` has all required fields (see schema.json section above)
 - Ensure `additionalProperties: false` is present
 - Check format fields are supported (email, date-time, uri, uuid)
 
-### Build fails with "Missing required section"
-Check `doc.md` has all 7 required sections (## Summary, ## Preconditions, etc.)
+### Build fails with "Summary missing or too long"
+Check `guide.md` first non-heading line exists and is under 250 characters
 
 ### Build fails with "toolId doesn't match directory"
 - Directory: `tools/my-tool/` → toolId: `"my_tool"` (underscore)
@@ -586,11 +524,92 @@ Both agents are now using the unified tool registry system:
 4. `kb_search` - Search knowledge base (text + voice)
 5. `kb_get` - Get knowledge base entity (text + voice)
 
+## Documentation Maintenance
+
+### Single Source of Truth Principle
+
+To prevent documentation conflicts and drift:
+
+**1. Tool-specific docs: ONLY in `/tools/{tool-name}/guide.md`**
+- NEVER duplicate in voice-server/prompts/
+- NEVER copy-paste into other docs (link instead)
+- Tool documentation lives with the tool code
+
+**2. Tool system docs: ONLY in `/tools/ARCHITECTURE.md`**
+- Discovery model, registry design, build process
+- Other docs should link here, not duplicate
+
+**3. Tool authoring: ONLY in `/tools/README.md`** (this file)
+- How to create new tools, guide.md format
+- schema.json structure, handler.js requirements
+
+**4. Metrics & observability: ONLY in `/tools/OBSERVABILITY.md`**
+- Loop detection, response metrics, context monitoring
+- How to use /metrics endpoint
+
+**5. Voice behavior: ONLY in `/voice-server/prompts/*.md`**
+- System personality, voice-specific behavior
+- NO tool documentation here (tools pull from registry)
+
+### Before Adding Documentation
+
+1. **Check:** Does this info exist elsewhere?
+2. **If yes:** Link to existing doc instead of duplicating
+3. **If no:** Choose the right home based on hierarchy above
+4. **Update:** Add cross-references so others can find it
+
+### Red Flags (Signs of Documentation Drift)
+
+- Same concept explained in 2+ places
+- Copy-pasted code examples
+- Conflicting version numbers or architectures
+- Outdated tool structure references (doc.md, doc_summary.md)
+- References to removed folders (voice-server/prompts/tools/)
+
+### Documentation Hierarchy
+
+```
+├── README.md (project overview, quick start)
+│
+├── tools/
+│   ├── ARCHITECTURE.md (system design, discovery model, registry)
+│   ├── README.md (tool authoring guide ← YOU ARE HERE)
+│   ├── OBSERVABILITY.md (metrics, loop detection, monitoring)
+│   ├── PHASES.md (implementation phases)
+│   ├── TROUBLESHOOTING.md (common issues)
+│   └── {tool-name}/guide.md (tool-specific docs)
+│
+├── voice-server/
+│   ├── README.md (voice server setup, deployment)
+│   └── prompts/*.md (system behavior, NO tool docs)
+│
+└── DEPLOYMENT_CHECKLIST.md (deployment process)
+```
+
+### When Updating Tools
+
+**If you change a tool:**
+1. Update `tools/{tool-name}/guide.md` (examples, parameters, etc.)
+2. Update `tools/{tool-name}/schema.json` if parameters changed
+3. Run `npm run build:tools` to regenerate registry
+4. Restart agents (voice-server and/or Next.js app)
+5. Do NOT edit voice-server prompts for tool-specific changes
+
+**If you change the tool system architecture:**
+1. Update `tools/ARCHITECTURE.md`
+2. Cross-reference from other docs that reference the architecture
+3. Update build scripts if validation changed
+4. Update this file (README.md) if authoring process changed
+
+**If you add new metrics or observability:**
+1. Update `tools/OBSERVABILITY.md`
+2. Update metrics endpoint implementation
+3. Add examples and troubleshooting guidance
+
 ## Next Steps
 
 After creating a tool, see:
-- `tools/ARCHITECTURE.md` - Understand overall system design
-- `tools/PHASES.md` - See implementation roadmap and current status
-- `voice-server/INTEGRATION.md` - How voice agent uses tools
-- `app/api/chat/INTEGRATION.md` - How text agent uses tools
-- `TESTING_GUIDE.md` - How to test tool registry integration
+- [tools/ARCHITECTURE.md](./ARCHITECTURE.md) - Understand overall system design
+- [tools/OBSERVABILITY.md](./OBSERVABILITY.md) - Monitor tool performance and behavior
+- [tools/PHASES.md](./PHASES.md) - See implementation roadmap and current status
+- [tools/TROUBLESHOOTING.md](./TROUBLESHOOTING.md) - Debug common issues

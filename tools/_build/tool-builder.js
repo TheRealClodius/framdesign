@@ -33,18 +33,8 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const TOOLS_DIR = join(__dirname, '..');
 const OUTPUT_FILE = join(TOOLS_DIR, 'tool_registry.json');
 
-/**
- * Required sections in doc.md
- */
-const REQUIRED_DOC_SECTIONS = [
-  '## Summary',
-  '## Preconditions',
-  '## Postconditions',
-  '## Invariants',
-  '## Failure Modes',
-  '## Examples',
-  '## Common Mistakes'
-];
+// NOTE: Doc linting removed - no longer require specific sections
+// Tools now use simplified guide.md format
 
 /**
  * Configure Ajv validator
@@ -110,17 +100,7 @@ function generateRegistryVersion(tools) {
   return `1.0.${hash}`;
 }
 
-/**
- * Validate documentation structure
- */
-function lintDocumentation(doc, toolDirName) {
-  for (const section of REQUIRED_DOC_SECTIONS) {
-    if (!doc.includes(section)) {
-      throw new Error(`Tool ${toolDirName}: Missing required section "${section}" in doc.md`);
-    }
-  }
-  return true;
-}
+// lintDocumentation() removed - no longer enforcing doc structure
 
 /**
  * Validate schema structure
@@ -180,20 +160,16 @@ function buildTool(toolDirName) {
 
   console.log(`  Building ${toolDirName}...`);
 
-  // Check required files
+  // Check required files (updated for guide.md format)
   const schemaPath = join(toolDir, 'schema.json');
-  const docSummaryPath = join(toolDir, 'doc_summary.md');
-  const docPath = join(toolDir, 'doc.md');
+  const guidePath = join(toolDir, 'guide.md');
   const handlerPath = join(toolDir, 'handler.js');
 
   if (!checkFileExists(schemaPath)) {
     throw new Error(`Tool ${toolDirName}: Missing schema.json`);
   }
-  if (!checkFileExists(docSummaryPath)) {
-    throw new Error(`Tool ${toolDirName}: Missing doc_summary.md`);
-  }
-  if (!checkFileExists(docPath)) {
-    throw new Error(`Tool ${toolDirName}: Missing doc.md`);
+  if (!checkFileExists(guidePath)) {
+    throw new Error(`Tool ${toolDirName}: Missing guide.md`);
   }
   if (!checkFileExists(handlerPath)) {
     throw new Error(`Tool ${toolDirName}: Missing handler.js`);
@@ -202,21 +178,37 @@ function buildTool(toolDirName) {
   // Read files
   const schemaJson = readFileSync(schemaPath, 'utf-8');
   const schema = JSON.parse(schemaJson);
-  const docSummary = readFileSync(docSummaryPath, 'utf-8').trim();
-  const doc = readFileSync(docPath, 'utf-8');
+  const guideContent = readFileSync(guidePath, 'utf-8').trim();
 
   // Validate schema
   lintSchema(schema, toolDirName);
 
-  // Validate doc_summary length
-  if (docSummary.length > 250) {
-    throw new Error(`Tool ${toolDirName}: doc_summary.md too long (${docSummary.length} chars, max 250)`);
+  // Extract summary from guide.md (second non-empty line after # title)
+  const guideLines = guideContent.split('\n');
+  let summary = '';
+  let foundTitle = false;
+  for (const line of guideLines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    if (trimmed.startsWith('#')) {
+      foundTitle = true;
+      continue;
+    }
+    if (foundTitle && !trimmed.startsWith('#')) {
+      summary = trimmed;
+      break;
+    }
   }
 
-  // Validate documentation structure
-  lintDocumentation(doc, toolDirName);
+  // Validate summary
+  if (!summary) {
+    throw new Error(`Tool ${toolDirName}: guide.md must have a description (second non-empty line after title)`);
+  }
+  if (summary.length > 250) {
+    throw new Error(`Tool ${toolDirName}: Summary too long (${summary.length} chars, max 250)`);
+  }
 
-  // Build tool definition with JSON Schema
+  // Build tool definition with JSON Schema (updated for guide.md)
   const toolDefinition = {
     toolId: schema.toolId,
     version: schema.version,
@@ -228,8 +220,8 @@ function buildTool(toolDirName) {
     allowedModes: schema.allowedModes,
     latencyBudgetMs: schema.latencyBudgetMs,
     jsonSchema: schema.parameters,
-    summary: docSummary,
-    documentation: doc,
+    summary: summary,
+    documentation: guideContent,
     handlerPath: pathToFileURL(handlerPath).href
   };
 

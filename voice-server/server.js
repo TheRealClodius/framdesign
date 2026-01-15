@@ -21,12 +21,21 @@ import { config } from 'dotenv';
 import { writeFileSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
-import { FRAM_SYSTEM_PROMPT } from './config.js';
+import { buildSystemInstruction } from './config.js';
 import { toolRegistry } from './tools/_core/registry.js';
 import { createStateController } from './tools/_core/state-controller.js';
 import { GeminiLiveTransport } from './providers/gemini-live-transport.js';
 import { ToolError, ErrorType } from './tools/_core/error-types.js';
 import { retryWithBackoff } from './tools/_core/retry-handler.js';
+import { loopDetector } from './tools/_core/loop-detector.js';
+import {
+  startSession,
+  endSession,
+  recordSessionToolCall,
+  startNewTurn,
+  recordResponseMetrics,
+  setContextInitTokens
+} from './tools/_core/metrics.js';
 
 // Load environment variables from .env file (if present)
 config();
@@ -111,11 +120,15 @@ wss.on('connection', async (ws, req) => {
   const clientId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   console.log(`[${clientId}] Client connected`);
 
+  // Start session tracking (NEW)
+  startSession(clientId);
+
   // Validate origin for security
   const origin = req.headers.origin;
   if (origin && !ALLOWED_ORIGINS.includes(origin)) {
     console.warn(`[${clientId}] Rejected unauthorized origin: ${origin}`);
     ws.close(1008, 'Unauthorized origin');
+    endSession(clientId); // Clean up session tracking
     return;
   }
 
@@ -126,6 +139,7 @@ wss.on('connection', async (ws, req) => {
   let conversationTranscripts = { user: [], assistant: [] };
   let conversationHistory = []; // Store for context injection
   let pendingRequest = null; // Store pending user request from text agent handoff
+  let currentTurn = 1; // Track conversation turns for loop detection (NEW)
 
   // Initialize state controller for session
   const state = createStateController({
@@ -409,6 +423,46 @@ wss.on('connection', async (ws, req) => {
           }
         }
 
+        // Check for loops before execution (NEW)
+        const loopCheck = loopDetector.detectLoop(
+          clientId,
+          currentTurn,
+          call.name,
+          call.args
+        );
+
+        if (loopCheck.detected) {
+          console.warn(`[${clientId}] Loop detected: ${loopCheck.message}`);
+
+          // Return feedback to agent instead of executing
+          const feedbackResult = {
+            ok: false,
+            error: {
+              type: 'LOOP_DETECTED',
+              message: loopCheck.message,
+              retryable: false,
+              details: {
+                loopType: loopCheck.type,
+                count: loopCheck.count
+              }
+            },
+            intents: [],
+            meta: {
+              toolId: call.name,
+              duration: 0,
+              responseSchemaVersion: '1.0.0'
+            }
+          };
+
+          await transport.sendToolResult({
+            id: call.id,
+            name: call.name,
+            result: feedbackResult
+          });
+
+          continue; // Skip execution
+        }
+
         // Build execution context
         const executionContext = {
           clientId,
@@ -435,6 +489,17 @@ wss.on('connection', async (ws, req) => {
           }
         );
         const duration = Date.now() - startTime;
+
+        // Record response metrics (NEW)
+        if (result.ok && result.data) {
+          recordResponseMetrics(call.name, result.data);
+        }
+
+        // Record session tool call (NEW)
+        recordSessionToolCall(clientId, call.name, call.args, duration, result.ok);
+
+        // Record call for loop detection (NEW)
+        loopDetector.recordCall(clientId, currentTurn, call.name, call.args, result);
 
         // Structured audit logging
         console.log(JSON.stringify({
@@ -576,7 +641,12 @@ wss.on('connection', async (ws, req) => {
         const turnCompleteReason = content.turnCompleteReason;
         const audioChunksThisTurn = state.get('audioChunkCounter');
         console.log(`[${clientId}] Turn complete (sent ${audioChunksThisTurn} audio chunks this turn)${turnCompleteReason ? `, reason: ${turnCompleteReason}` : ''}`);
-        
+
+        // Start new turn for loop detection and metrics (NEW)
+        currentTurn++;
+        startNewTurn(clientId);
+        console.log(`[${clientId}] Started turn ${currentTurn}`);
+
         // Handle malformed function calls - this happens when the model tries to call a tool but the call is invalid
         if (turnCompleteReason === 'MALFORMED_FUNCTION_CALL') {
           console.error(`[${clientId}] ⚠️ MALFORMED_FUNCTION_CALL detected! Model tried to call a function but the call was invalid.`);
@@ -750,10 +820,13 @@ wss.on('connection', async (ws, req) => {
           }
 
           try {
+            // Build system instruction with tool documentation from registry
+            const systemInstruction = buildSystemInstruction(toolRegistry);
+
             // Prepare session config with audio input/output enabled
             const config = {
               responseModalities: [Modality.AUDIO],
-              systemInstruction: FRAM_SYSTEM_PROMPT,
+              systemInstruction: systemInstruction,
               speechConfig: {
                 voiceConfig: {
                   prebuiltVoiceConfig: {
@@ -770,8 +843,28 @@ wss.on('connection', async (ws, req) => {
               tools: [{ functionDeclarations: geminiToolSchemas }]
             };
             
-            console.log(`[${clientId}] System prompt injected (${FRAM_SYSTEM_PROMPT.length} chars)`);
+            console.log(`[${clientId}] System instruction injected (${systemInstruction.length} chars, includes tool docs from registry)`);
             console.log(`[${clientId}] Session config:`, JSON.stringify(config, null, 2));
+
+            // Estimate context window usage (NEW)
+            const estimateTokens = (text) => Math.ceil((text || '').length / 4);
+            const systemPromptTokens = estimateTokens(systemInstruction);
+
+            // Calculate tool declaration tokens
+            let toolDeclTokens = 0;
+            for (const tool of toolRegistry.tools.values()) {
+              const toolDecl = JSON.stringify(tool.providerSchemas.geminiNative);
+              const toolDoc = tool.documentation || '';
+              toolDeclTokens += estimateTokens(toolDecl + toolDoc);
+            }
+
+            const sessionInitTokens = systemPromptTokens + toolDeclTokens;
+            setContextInitTokens(sessionInitTokens);
+
+            console.log(`[Context] Session init: ~${sessionInitTokens} tokens`);
+            console.log(`  - System prompt: ~${systemPromptTokens} tokens`);
+            console.log(`  - Tool declarations (${toolRegistry.tools.size} tools): ~${toolDeclTokens} tokens`);
+            console.log(`  - Gemini context limit: 1,000,000 tokens`);
 
             geminiSession = await ai.live.connect({
               model: 'gemini-live-2.5-flash-native-audio',
@@ -1004,7 +1097,11 @@ wss.on('connection', async (ws, req) => {
   // Handle client disconnect
   ws.on('close', async (code) => {
     console.log(`[${clientId}] Client disconnected. Code: ${code}`);
-    
+
+    // Clean up session tracking (NEW)
+    endSession(clientId);
+    loopDetector.clearSession(clientId);
+
     if (geminiSession) {
       try {
         geminiSession.close();

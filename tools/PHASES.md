@@ -51,7 +51,7 @@
    - ✅ `tools/_build/tool-builder.js`
      - Tool directory scanning (ignores _core, _build)
      - Schema.json validation with Ajv
-     - Documentation validation (doc_summary.md ≤250 chars, doc.md with 7 required sections)
+     - Documentation validation (guide.md with summary ≤250 chars)
      - Provider schema generation via adapters
      - Content-based versioning (SHA256 hash)
      - Git commit tracking
@@ -275,8 +275,7 @@ Output: tools/tool_registry.json (gitignored)
 
 1. **ignore_user Tool** - `tools/ignore-user/` ✅
    - ✅ schema.json (duration_seconds: 30-86400, farewell_message: 10-500 chars)
-   - ✅ doc_summary.md (under 250 chars)
-   - ✅ doc.md (all 7 required sections)
+   - ✅ guide.md (simplified format)
    - ✅ handler.js (complete implementation)
    - ✅ Category: action
    - ✅ Modes: voice, text
@@ -286,8 +285,7 @@ Output: tools/tool_registry.json (gitignored)
 
 2. **end_voice_session Tool** - `tools/end-voice-session/` ✅
    - ✅ schema.json (reason enum, optional final_message)
-   - ✅ doc_summary.md (under 250 chars)
-   - ✅ doc.md (all 7 required sections)
+   - ✅ guide.md (simplified format)
    - ✅ handler.js (complete implementation)
    - ✅ Category: action
    - ✅ Modes: voice only
@@ -297,8 +295,7 @@ Output: tools/tool_registry.json (gitignored)
 
 3. **start_voice_session Tool** - `tools/start-voice-session/` ✅
    - ✅ schema.json (optional pending_request)
-   - ✅ doc_summary.md (under 250 chars)
-   - ✅ doc.md (all 7 required sections)
+   - ✅ guide.md (simplified format)
    - ✅ handler.js (complete implementation)
    - ✅ Category: action
    - ✅ Modes: text only
@@ -307,8 +304,7 @@ Output: tools/tool_registry.json (gitignored)
 
 4. **kb_search Tool** - `tools/kb-search/` ✅
    - ✅ schema.json (query, filters, top_k)
-   - ✅ doc_summary.md (under 250 chars)
-   - ✅ doc.md (all 7 required sections)
+   - ✅ guide.md (simplified format)
    - ✅ handler.js (complete implementation with vector search)
    - ✅ Category: retrieval
    - ✅ Modes: voice, text
@@ -317,8 +313,7 @@ Output: tools/tool_registry.json (gitignored)
 
 5. **kb_get Tool** - `tools/kb-get/` ✅
    - ✅ schema.json (entity_id, entity_type)
-   - ✅ doc_summary.md (under 250 chars)
-   - ✅ doc.md (all 7 required sections)
+   - ✅ guide.md (simplified format)
    - ✅ handler.js (complete implementation)
    - ✅ Category: retrieval
    - ✅ Modes: voice, text

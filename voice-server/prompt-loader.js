@@ -27,15 +27,15 @@ function readPromptFile(filename) {
 
 /**
  * Loads the text mode system prompt
- * Composition: core + tools/ignore_user
+ * Composition: core only
+ * NOTE: Tool documentation is now loaded from registry, not prompts/
  * @returns {string}
  */
 export function loadTextPrompt() {
   try {
     const core = readPromptFile('core.md');
-    const ignoreUserTool = readPromptFile('tools/ignore_user.md');
 
-    return `${core}\n\n${ignoreUserTool}`;
+    return core;
   } catch (error) {
     console.error('Error loading text prompt:', error);
     throw new Error(`Failed to load text mode prompt files from ${PROMPTS_DIR}`);
@@ -44,17 +44,16 @@ export function loadTextPrompt() {
 
 /**
  * Loads the voice mode system prompt
- * Composition: core + voice-behavior + tools/ignore_user + tools/end_voice_session
+ * Composition: core + voice-behavior
+ * NOTE: Tool documentation is now loaded from registry, not prompts/
  * @returns {string}
  */
 export function loadVoicePrompt() {
   try {
     const core = readPromptFile('core.md');
     const voiceBehavior = readPromptFile('voice-behavior.md');
-    const ignoreUserTool = readPromptFile('tools/ignore_user.md');
-    const endVoiceSessionTool = readPromptFile('tools/end_voice_session.md');
 
-    return `${core}\n\n${voiceBehavior}\n\n${ignoreUserTool}\n\n${endVoiceSessionTool}`;
+    return `${core}\n\n${voiceBehavior}`;
   } catch (error) {
     console.error('Error loading voice prompt:', error);
     throw new Error(`Failed to load voice mode prompt files from ${PROMPTS_DIR}`);

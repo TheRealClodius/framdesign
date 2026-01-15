@@ -1,1 +1,0 @@
-Gracefully terminates voice session while allowing conversation to continue in text mode. Voice mode only.
