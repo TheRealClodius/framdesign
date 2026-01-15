@@ -1,7 +1,7 @@
 {
-  "buildCommand": "npm run build:tools && test -f tools/tool_registry.json && npm run build && mkdir -p .next/server/tools && cp tools/tool_registry.json .next/server/tools/",
+  "buildCommand": "npm run build",
   "outputDirectory": ".next",
   "framework": "nextjs",
   "installCommand": "npm install && rm -rf node_modules/@lancedb",
-  "_comment": "buildCommand generates tools/tool_registry.json before Next.js build, then copies it to .next/server/tools/ to ensure it's included in serverless function bundles"
+  "_comment": "buildCommand runs 'npm run build' which triggers prebuild hook that runs build:tools, then Next.js build, then postbuild hook that copies tool_registry.json"
 }

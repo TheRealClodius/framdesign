@@ -3,6 +3,9 @@ import { resolve, join } from "path";
 import { existsSync } from "fs";
 
 const nextConfig: NextConfig = {
+  // Set the root directory for file tracing to prevent workspace detection issues
+  // This ensures Vercel correctly identifies the project root when parent directories have package.json files
+  outputFileTracingRoot: resolve(__dirname),
   async headers() {
     return [
       {
