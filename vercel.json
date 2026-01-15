@@ -1,5 +1,5 @@
 {
-  "buildCommand": "npm run build:tools && test -f tools/tool_registry.json && npm run build",
+  "buildCommand": "npm run build:tools && test -f tools/tool_registry.json && npm run build && mkdir -p .next/server/tools && cp tools/tool_registry.json .next/server/tools/",
   "outputDirectory": ".next",
   "framework": "nextjs",
   "installCommand": "npm install && rm -rf node_modules/@lancedb",
