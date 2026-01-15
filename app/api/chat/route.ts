@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI } from "@google/genai";
 import { FRAM_SYSTEM_PROMPT } from "@/lib/config";
 import { createHash } from "crypto";
 import { handleServerError, isRetryableError } from "@/lib/errors";
@@ -10,19 +10,38 @@ import {
   STREAM_CONFIG,
 } from "@/lib/constants";
 import { toolRegistry } from '@/tools/_core/registry';
-import { ErrorType, ToolError } from '@/tools/_core/error-types';
 import { createStateController } from '@/tools/_core/state-controller';
 import { retryWithBackoff as retryToolExecution } from '@/tools/_core/retry-handler';
-// Explicitly reference tool_registry.json path to help Next.js file tracing
-// This ensures the file is included in serverless function bundles
-import { join } from 'path';
-const TOOL_REGISTRY_PATH = join(process.cwd(), 'tools', 'tool_registry.json');
+
+// Type definitions for schema conversion
+type JsonSchema = {
+  type?: string;
+  properties?: Record<string, JsonSchema>;
+  items?: JsonSchema;
+  [key: string]: unknown;
+};
+
+// Type definitions for state controller
+type StateController = {
+  get: (key: string) => unknown;
+  set: (key: string, value: unknown) => void;
+  getSnapshot: () => Record<string, unknown>;
+  applyIntent: (intent: { type: string; [key: string]: unknown }) => void;
+};
+
+// Type definitions for tool metadata
+type ToolMetadata = {
+  toolId: string;
+  version?: string;
+  category?: string;
+  [key: string]: unknown;
+};
 
 // Convert geminiNative schema (with uppercase string types like "OBJECT", "STRING") 
 // to JSON Schema format (lowercase: "object", "string") for parametersJsonSchema
-function convertGeminiSchemaToJsonSchema(schema: any): any {
+function convertGeminiSchemaToJsonSchema(schema: unknown): JsonSchema {
   if (!schema || typeof schema !== 'object' || Array.isArray(schema)) {
-    return schema;
+    return schema as JsonSchema;
   }
   
   const TYPE_MAP: Record<string, string> = {
@@ -34,28 +53,30 @@ function convertGeminiSchemaToJsonSchema(schema: any): any {
     'ARRAY': 'array'
   };
   
+  const schemaObj = schema as JsonSchema;
+  
   // Create a copy to avoid mutating the original
-  const converted: any = { ...schema };
+  const converted: JsonSchema = { ...schemaObj };
   
   // Convert uppercase type to lowercase JSON Schema type
-  if (schema.type && typeof schema.type === 'string') {
-    const upperType = schema.type.toUpperCase();
+  if (schemaObj.type && typeof schemaObj.type === 'string') {
+    const upperType = schemaObj.type.toUpperCase();
     if (TYPE_MAP[upperType]) {
       converted.type = TYPE_MAP[upperType];
     }
   }
   
   // Recursively convert properties
-  if (schema.properties && typeof schema.properties === 'object') {
+  if (schemaObj.properties && typeof schemaObj.properties === 'object' && !Array.isArray(schemaObj.properties)) {
     converted.properties = {};
-    for (const [key, prop] of Object.entries(schema.properties)) {
+    for (const [key, prop] of Object.entries(schemaObj.properties)) {
       converted.properties[key] = convertGeminiSchemaToJsonSchema(prop);
     }
   }
   
   // Recursively convert items for arrays
-  if (schema.items) {
-    converted.items = convertGeminiSchemaToJsonSchema(schema.items);
+  if (schemaObj.items) {
+    converted.items = convertGeminiSchemaToJsonSchema(schemaObj.items);
   }
   
   // Preserve other fields (enum, description, required, etc.)
@@ -231,7 +252,7 @@ function enforceTokenBudget(
  * Creates or retrieves the system prompt cache
  * Automatically invalidates and recreates cache if system prompt changes
  */
-async function getSystemPromptCache(ai: GoogleGenAI, providerSchemas: any[]): Promise<string | null> {
+async function getSystemPromptCache(ai: GoogleGenAI, providerSchemas: Array<Record<string, unknown>>): Promise<string | null> {
   // Calculate current system prompt hash
   const currentPromptHash = hashSystemPrompt(FRAM_SYSTEM_PROMPT);
   
@@ -323,7 +344,7 @@ async function getConversationCache(
   summary: string | null,
   recentMessages: Array<{ role: string; parts: Array<{ text: string }> }>,
   summaryUpToIndex: number,
-  providerSchemas: any[]
+  providerSchemas: Array<Record<string, unknown>>
 ): Promise<{ 
   cacheName: string | null; 
   summaryCacheName: string | null;
@@ -759,7 +780,7 @@ export async function POST(request: Request) {
       // When using cached content, tools must be included in the cache, not in the request
       // So we conditionally include tools based on whether we're using cached content
       const config: {
-        tools?: Array<{ functionDeclarations: any[] }>;
+        tools?: Array<{ functionDeclarations: Array<Record<string, unknown>> }>;
         cachedContent?: string;
         systemInstruction?: string;
       } = {};
@@ -828,10 +849,17 @@ export async function POST(request: Request) {
         const state = createStateController({
           mode: 'text',
           isActive: true
-        }) as any;
+        }) as StateController;
 
         // Get tool metadata
-        const toolMetadata = toolRegistry.getToolMetadata('ignore_user') as any;
+        const toolMetadata = toolRegistry.getToolMetadata('ignore_user') as ToolMetadata | null;
+
+        if (!toolMetadata) {
+          console.error('ignore_user tool metadata not found');
+          return NextResponse.json({
+            error: 'Tool metadata not found'
+          }, { status: 500 });
+        }
 
         // Build execution context
         const executionContext = {
@@ -895,9 +923,16 @@ export async function POST(request: Request) {
         const state = createStateController({
           mode: 'text',
           isActive: true
-        }) as any;
+        }) as StateController;
 
-        const toolMetadata = toolRegistry.getToolMetadata('start_voice_session') as any;
+        const toolMetadata = toolRegistry.getToolMetadata('start_voice_session') as ToolMetadata | null;
+
+        if (!toolMetadata) {
+          console.error('start_voice_session tool metadata not found');
+          return NextResponse.json({
+            error: 'Tool metadata not found'
+          }, { status: 500 });
+        }
 
         const executionContext = {
           clientId: `text-${Date.now()}`,
@@ -918,7 +953,7 @@ export async function POST(request: Request) {
             mode: 'text',
             maxRetries: 3,
             toolId: 'start_voice_session',
-            toolMetadata: toolMetadata,
+            toolMetadata: toolMetadata as Record<string, unknown>,
             clientId: `text-${Date.now()}`
           }
         );
@@ -976,10 +1011,10 @@ export async function POST(request: Request) {
         const state = createStateController({
           mode: 'text',
           isActive: true
-        }) as any;
+        }) as StateController;
 
         // Get tool metadata
-        const toolMetadata = toolRegistry.getToolMetadata(toolName) as any;
+        const toolMetadata = toolRegistry.getToolMetadata(toolName) as ToolMetadata | null;
         
         if (!toolMetadata) {
           console.error(`Unknown tool: ${toolName}`);
@@ -1010,7 +1045,7 @@ export async function POST(request: Request) {
             mode: 'text',
             maxRetries: 3,
             toolId: toolName,
-            toolMetadata: toolMetadata,
+            toolMetadata: toolMetadata as Record<string, unknown>,
             clientId: `text-${Date.now()}`
           }
         );
@@ -1019,11 +1054,11 @@ export async function POST(request: Request) {
         console.log(JSON.stringify({
           event: 'tool_execution',
           toolId: toolName,
-          toolVersion: toolMetadata?.version || 'unknown',
+          toolVersion: toolMetadata.version || 'unknown',
           registryVersion: toolRegistry.getVersion(),
           duration,
           ok: result.ok,
-          category: toolMetadata?.category || 'unknown',
+          category: toolMetadata.category || 'unknown',
           mode: 'text'
         }));
 
@@ -1067,7 +1102,7 @@ export async function POST(request: Request) {
         // Make a new API call with the tool result
         const followUpStream = await retryWithBackoff(async () => {
           const config: {
-            tools?: Array<{ functionDeclarations: any[] }>;
+            tools?: Array<{ functionDeclarations: Array<Record<string, unknown>> }>;
             cachedContent?: string;
             systemInstruction?: string;
           } = {};
@@ -1090,13 +1125,20 @@ export async function POST(request: Request) {
         // Stream the follow-up response
         return new Response(
           new ReadableStream({
-            async start(controller) {
+            async start(controller: ReadableStreamDefaultController<Uint8Array>) {
               const encoder = new TextEncoder();
               let chunksProcessed = 0;
               let bytesSent = 0;
 
               const enqueueTextFromChunk = (chunk: unknown) => {
-                const typed = chunk as any;
+                const typed = chunk as {
+                  candidates?: Array<{
+                    content?: {
+                      parts?: Array<{ text?: string }>;
+                    };
+                  }>;
+                  text?: string | (() => string);
+                };
                 const candidates = typed?.candidates?.[0]?.content?.parts || [];
 
                 // Try direct text property first
@@ -1168,7 +1210,7 @@ export async function POST(request: Request) {
       // Otherwise, stream buffered chunks and then the rest as they arrive
       return new Response(
         new ReadableStream({
-          async start(controller) {
+          async start(controller: ReadableStreamDefaultController<Uint8Array>) {
             const encoder = new TextEncoder();
             let chunksProcessed = 0;
             let bytesSent = 0;

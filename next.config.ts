@@ -165,9 +165,8 @@ const nextConfig: NextConfig = {
         moduleIds: 'deterministic',
       };
 
-      // Copy tool_registry.json using CopyPlugin as a backup
-      // Primary method is outputFileTracingIncludes, but CopyPlugin ensures
-      // the file is available during build and copied to output directory
+      // Copy tool_registry.json to serverless function output
+      // Use relative path from context to ensure proper copying
       const registryPath = join(process.cwd(), 'tools', 'tool_registry.json');
       if (existsSync(registryPath)) {
         const CopyPlugin = require('copy-webpack-plugin');
@@ -176,8 +175,8 @@ const nextConfig: NextConfig = {
           new CopyPlugin({
             patterns: [
               {
-                from: registryPath,
-                to: 'tools/tool_registry.json', // Relative to output
+                from: 'tools/tool_registry.json',
+                to: 'tools/tool_registry.json',
                 context: process.cwd(),
                 noErrorOnMissing: false,
               },
