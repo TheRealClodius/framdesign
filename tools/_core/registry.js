@@ -25,25 +25,13 @@ import { validateToolResponse, TOOL_RESPONSE_SCHEMA_VERSION } from './tool-respo
 import { recordToolExecution, recordError, recordBudgetViolation, recordRegistryLoadTime } from './metrics.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-// Path to tool_registry.json - try multiple locations for maximum compatibility
-// Import the path helper to ensure webpack traces the file dependency
-import { getRegistryPath, REGISTRY_FILE_PATH } from './registry-path.js';
-
-// In Vercel serverless functions, the file structure is different
-// Try multiple locations in order of likelihood
-const projectRoot = process.cwd() || resolve(__dirname, '..', '..');
-const possiblePaths = [
-  // 1. .next/server/tools/ (copied during build)
-  join(projectRoot, '.next', 'server', 'tools', 'tool_registry.json'),
-  // 2. Project root tools/ (for file tracing)
-  join(projectRoot, 'tools', 'tool_registry.json'),
-  // 3. Relative to this file
-  join(__dirname, '..', 'tool_registry.json'),
-  // 4. Try parent directories (for different Vercel path structures)
-  resolve(__dirname, '..', '..', 'tools', 'tool_registry.json'),
-];
-
-const REGISTRY_PATH = possiblePaths.find(path => existsSync(path)) || possiblePaths[1];
+// Path to tool_registry.json relative to this file
+// Since the file is generated at build time and included via outputFileTracingIncludes,
+// it will be available at this relative path in both local and Vercel environments
+// Use process.cwd() for Vercel's serverless environment, fallback to relative path
+const REGISTRY_PATH = process.cwd() 
+  ? join(process.cwd(), 'tools', 'tool_registry.json')
+  : join(__dirname, '..', 'tool_registry.json');
 // Create require function for resolving modules  
 const require = createRequire(import.meta.url);
 // Project root is two levels up from _core
@@ -88,22 +76,12 @@ class ToolRegistry {
     console.log('Loading tool registry...');
     console.log(`Registry path: ${REGISTRY_PATH}`);
     console.log(`__dirname: ${__dirname}`);
-    console.log(`process.cwd(): ${process.cwd()}`);
-    console.log(`projectRoot: ${projectRoot}`);
-    
-    // Log all paths we're checking
-    console.log('Checking paths:');
-    possiblePaths.forEach((path, i) => {
-      console.log(`  ${i + 1}. ${path} - ${existsSync(path) ? 'EXISTS ✓' : 'NOT FOUND ✗'}`);
-    });
-    
     const loadStartTime = Date.now();
 
     // Check if registry file exists
     if (!existsSync(REGISTRY_PATH)) {
       const errorMsg = `Tool registry file not found at ${REGISTRY_PATH}. Please run 'npm run build:tools' to generate it.`;
       console.error(errorMsg);
-      console.error('Checked paths:', pathsToCheck);
       throw new Error(errorMsg);
     }
 
