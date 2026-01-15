@@ -3,9 +3,9 @@
  * Tests full tool execution flow with WebSocket transport
  */
 
-import { toolRegistry } from '../../../tools/_core/registry.js';
-import { createStateController } from '../../../tools/_core/state-controller.js';
-import { ErrorType } from '../../../tools/_core/error-types.js';
+import { toolRegistry } from '../../tools/_core/registry.js';
+import { createStateController } from '../../tools/_core/state-controller.js';
+import { ErrorType } from '../../tools/_core/error-types.js';
 
 describe('E2E: Tool Execution in Voice Mode', () => {
   beforeAll(async () => {

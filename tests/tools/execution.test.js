@@ -3,9 +3,9 @@
  * Tests successful execution, failure scenarios, and error handling
  */
 
-import { toolRegistry } from '../../../tools/_core/registry.js';
-import { ErrorType, ToolError } from '../../../tools/_core/error-types.js';
-import { IntentType } from '../../../tools/_core/error-types.js';
+import { toolRegistry } from '../../tools/_core/registry.js';
+import { ErrorType, ToolError } from '../../tools/_core/error-types.js';
+import { IntentType } from '../../tools/_core/error-types.js';
 
 describe('Tool Execution', () => {
   beforeAll(async () => {

@@ -2,8 +2,8 @@
  * Unit tests for state-controller.js
  */
 
-import { createStateController } from '../../../../tools/_core/state-controller.js';
-import { IntentType } from '../../../../tools/_core/error-types.js';
+import { createStateController } from '../../../tools/_core/state-controller.js';
+import { IntentType } from '../../../tools/_core/error-types.js';
 
 describe('createStateController', () => {
   test('should create controller with initial state', () => {

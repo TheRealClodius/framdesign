@@ -496,5 +496,8 @@ function createResponse(toolId, ok, dataOrError, startTime, intents = []) {
   return response;
 }
 
+// Export class for testing
+export { ToolRegistry };
+
 // Singleton instance
 export const toolRegistry = new ToolRegistry();

@@ -14,7 +14,7 @@ import {
   getSessionMetrics,
   setContextInitTokens,
   resetMetrics
-} from '../../../../tools/_core/metrics.js';
+} from '../../../tools/_core/metrics.js';
 
 describe('Metrics', () => {
   beforeEach(() => {

@@ -438,6 +438,15 @@ export function getMetricsSummary(options) {
 }
 
 /**
+ * Get raw metrics object (for testing)
+ *
+ * @returns {object} - Raw metrics data
+ */
+export function getMetrics() {
+  return metrics.getSummary();
+}
+
+/**
  * Reset metrics
  */
 export function resetMetrics() {

@@ -3,7 +3,7 @@
  * Tests loop detection for repeated tool calls and empty results
  */
 
-import { LoopDetector } from '../../../../tools/_core/loop-detector.js';
+import { LoopDetector } from '../../../tools/_core/loop-detector.js';
 
 describe('LoopDetector', () => {
   let detector;

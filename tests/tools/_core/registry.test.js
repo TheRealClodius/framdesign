@@ -5,9 +5,9 @@
 import { readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { ToolRegistry } from '../../../../tools/_core/registry.js';
-import { ErrorType, ToolError } from '../../../../tools/_core/error-types.js';
-import { validateToolResponse } from '../../../../tools/_core/tool-response.js';
+import { ToolRegistry } from '../../../tools/_core/registry.js';
+import { ErrorType, ToolError } from '../../../tools/_core/error-types.js';
+import { validateToolResponse } from '../../../tools/_core/tool-response.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 

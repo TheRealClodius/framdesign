@@ -3,9 +3,9 @@
  * Tests loop detection in realistic voice server scenarios
  */
 
-import { toolRegistry } from '../../../tools/_core/registry.js';
-import { loopDetector } from '../../../tools/_core/loop-detector.js';
-import { createStateController } from '../../../tools/_core/state-controller.js';
+import { toolRegistry } from '../../tools/_core/registry.js';
+import { loopDetector } from '../../tools/_core/loop-detector.js';
+import { createStateController } from '../../tools/_core/state-controller.js';
 
 describe('E2E: Loop Detection Integration', () => {
   beforeAll(async () => {
