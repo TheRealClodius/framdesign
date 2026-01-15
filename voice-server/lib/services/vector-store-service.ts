@@ -225,39 +225,73 @@ export async function searchSimilar(
     if (!queryText) {
       throw new Error('[vector-store] API mode requires queryText parameter');
     }
-    
-    const response = await fetch(`${VECTOR_SEARCH_API_URL}/search`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        query: queryText,
-        top_k: topK,
-        filters: filters || {},
-      }),
-    });
 
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => 'Unknown error');
-      throw new Error(`[vector-store] API search failed: ${response.status} ${errorText}`);
+    try {
+      const response = await fetch(`${VECTOR_SEARCH_API_URL}/search`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          query: queryText,
+          top_k: topK,
+          filters: filters || {},
+        }),
+        signal: AbortSignal.timeout(30000), // 30 second timeout
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => 'Unknown error');
+
+        // Provide helpful error messages based on status code
+        if (response.status === 404) {
+          throw new Error(
+            `[vector-store] API search failed: 404 Not Found. ` +
+            `The vector-search-api service may not be deployed or VECTOR_SEARCH_API_URL (${VECTOR_SEARCH_API_URL}) is incorrect. ` +
+            `Please verify the service is running and the URL is correct.`
+          );
+        } else if (response.status === 503) {
+          throw new Error(
+            `[vector-store] API search failed: 503 Service Unavailable. ` +
+            `The vector store is not initialized. Please run indexing: npm run index-kb`
+          );
+        } else {
+          throw new Error(`[vector-store] API search failed: ${response.status} ${errorText}`);
+        }
+      }
+
+      const data = await response.json();
+      if (!data.ok || !data.data?.results) {
+        throw new Error(`[vector-store] API returned invalid response: ${JSON.stringify(data)}`);
+      }
+
+      // API returns grouped documents, convert to chunk format
+      return data.data.results.flatMap((doc: any) =>
+        doc.chunks.map((chunk: any, idx: number) => ({
+          id: `${doc.id}_chunk_${idx}`,
+          text: chunk.text,
+          metadata: doc.metadata,
+          distance: 1 - chunk.score,
+          score: chunk.score,
+        }))
+      );
+    } catch (error: any) {
+      // Handle network errors (timeouts, connection failures)
+      if (error.name === 'AbortError' || error.message.includes('timeout')) {
+        throw new Error(
+          `[vector-store] API request timeout. ` +
+          `The vector-search-api service at ${VECTOR_SEARCH_API_URL} is not responding. ` +
+          `Please check if the service is running and accessible.`
+        );
+      } else if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+        throw new Error(
+          `[vector-store] Network error connecting to vector-search-api. ` +
+          `Please check VECTOR_SEARCH_API_URL (${VECTOR_SEARCH_API_URL}) is correct and the service is accessible.`
+        );
+      }
+      // Re-throw error if already formatted
+      throw error;
     }
-    
-    const data = await response.json();
-    if (!data.ok || !data.data?.results) {
-      throw new Error(`[vector-store] API returned invalid response: ${JSON.stringify(data)}`);
-    }
-    
-    // API returns grouped documents, convert to chunk format
-    return data.data.results.flatMap((doc: any) => 
-      doc.chunks.map((chunk: any, idx: number) => ({
-        id: `${doc.id}_chunk_${idx}`,
-        text: chunk.text,
-        metadata: doc.metadata,
-        distance: 1 - chunk.score,
-        score: chunk.score,
-      }))
-    );
   }
 
   // Local mode: Direct LanceDB access
