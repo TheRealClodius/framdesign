@@ -13,6 +13,10 @@ import { toolRegistry } from '@/tools/_core/registry';
 import { ErrorType, ToolError } from '@/tools/_core/error-types';
 import { createStateController } from '@/tools/_core/state-controller';
 import { retryWithBackoff as retryToolExecution } from '@/tools/_core/retry-handler';
+// Explicitly reference tool_registry.json path to help Next.js file tracing
+// This ensures the file is included in serverless function bundles
+import { join } from 'path';
+const TOOL_REGISTRY_PATH = join(process.cwd(), 'tools', 'tool_registry.json');
 
 // Convert geminiNative schema (with uppercase string types like "OBJECT", "STRING") 
 // to JSON Schema format (lowercase: "object", "string") for parametersJsonSchema
