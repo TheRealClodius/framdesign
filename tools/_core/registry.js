@@ -26,15 +26,15 @@ import { recordToolExecution, recordError, recordBudgetViolation, recordRegistry
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 // Path to tool_registry.json - try multiple locations for maximum compatibility
-// 1. Try public/tools/ (copied during prebuild for Vercel deployments)
-// 2. Try tools/ (project root, for local development and file tracing)
-// 3. Fallback to relative path from this file
+// Import the path helper to ensure webpack traces the file dependency
+import { getRegistryPath, REGISTRY_FILE_PATH } from './registry-path.js';
+
 const projectRoot = process.cwd() || resolve(__dirname, '..', '..');
+// Try multiple paths, with explicit string reference to help static analysis
 const REGISTRY_PATH = [
-  join(projectRoot, 'public', 'tools', 'tool_registry.json'),
-  join(projectRoot, 'tools', 'tool_registry.json'),
-  join(__dirname, '..', 'tool_registry.json'),
-].find(path => existsSync(path)) || join(projectRoot, 'tools', 'tool_registry.json');
+  join(projectRoot, 'tools', 'tool_registry.json'), // Explicit path for tracing
+  join(__dirname, '..', 'tool_registry.json'), // Relative fallback
+].find(path => existsSync(path)) || getRegistryPath();
 // Create require function for resolving modules  
 const require = createRequire(import.meta.url);
 // Project root is two levels up from _core
