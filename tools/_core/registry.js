@@ -25,13 +25,16 @@ import { validateToolResponse, TOOL_RESPONSE_SCHEMA_VERSION } from './tool-respo
 import { recordToolExecution, recordError, recordBudgetViolation, recordRegistryLoadTime } from './metrics.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-// Path to tool_registry.json relative to this file
-// Since the file is generated at build time and included via outputFileTracingIncludes,
-// it will be available at this relative path in both local and Vercel environments
-// Use process.cwd() for Vercel's serverless environment, fallback to relative path
-const REGISTRY_PATH = process.cwd() 
-  ? join(process.cwd(), 'tools', 'tool_registry.json')
-  : join(__dirname, '..', 'tool_registry.json');
+// Path to tool_registry.json - try multiple locations
+// 1. Project root tools/ (where outputFileTracingIncludes should include it)
+// 2. Relative to this file (for local development)
+// The file is generated at build time by 'npm run build:tools' and should be
+// included in serverless functions via outputFileTracingIncludes in next.config.ts
+const projectRoot = process.cwd() || resolve(__dirname, '..', '..');
+const REGISTRY_PATH = [
+  join(projectRoot, 'tools', 'tool_registry.json'), // Primary path for Vercel
+  join(__dirname, '..', 'tool_registry.json'), // Fallback for local dev
+].find(path => existsSync(path)) || join(projectRoot, 'tools', 'tool_registry.json');
 // Create require function for resolving modules  
 const require = createRequire(import.meta.url);
 // Project root is two levels up from _core
