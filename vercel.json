@@ -2,5 +2,6 @@
   "buildCommand": "npm run build:tools && npm run build",
   "outputDirectory": ".next",
   "framework": "nextjs",
-  "installCommand": "npm install && rm -rf node_modules/@lancedb"
+  "installCommand": "npm install && rm -rf node_modules/@lancedb",
+  "_comment": "buildCommand generates tools/tool_registry.json before Next.js build so it can be traced and included in the deployment via outputFileTracingIncludes in next.config.ts"
 }
