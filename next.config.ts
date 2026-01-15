@@ -28,11 +28,11 @@ const nextConfig: NextConfig = {
   //      https://nextjs.org/docs/app/api-reference/config/next-config-js/output
   outputFileTracingIncludes: {
     // Include tool_registry.json in all API routes
-    // Patterns are relative to project root
-    '/api/chat': ['tools/tool_registry.json'],
-    '/api/**': ['tools/tool_registry.json'],
+    // Patterns are relative to project root - use explicit paths
+    '/api/chat': ['./tools/tool_registry.json'],
+    '/api/**': ['./tools/tool_registry.json'],
     // Fallback for all routes
-    '/*': ['tools/tool_registry.json'],
+    '/*': ['./tools/tool_registry.json'],
   } as Record<string, string[]>,
   experimental: {
     scrollRestoration: false,
