@@ -79,8 +79,9 @@ class ToolRegistry {
     console.log(`__dirname: ${__dirname}`);
     const loadStartTime = Date.now();
 
-    // Check if registry file exists
-    if (!existsSync(REGISTRY_PATH)) {
+    // Try to find the registry file in multiple locations
+    let registryPath = REGISTRY_PATH;
+    if (!existsSync(registryPath)) {
       // Try alternative locations as fallback
       const altPaths = [
         join(__dirname, '..', 'tool_registry.json'),
@@ -90,19 +91,12 @@ class ToolRegistry {
       const foundPath = altPaths.find(p => existsSync(p));
       if (foundPath) {
         console.log(`Found registry at alternative path: ${foundPath}`);
-        // Update REGISTRY_PATH for this load
-        const registryJson = readFileSync(foundPath, 'utf-8');
-        const registry = JSON.parse(registryJson);
-        this.version = registry.version;
-        this.gitCommit = registry.gitCommit;
-        // Continue with rest of load logic...
+        registryPath = foundPath;
       } else {
         const errorMsg = `Tool registry file not found at ${REGISTRY_PATH}. Checked paths: ${[REGISTRY_PATH, ...altPaths].join(', ')}. Please run 'npm run build:tools' to generate it.`;
         console.error(errorMsg);
         throw new Error(errorMsg);
       }
-      // Use the found path for reading
-      registryPath = foundPath;
     }
 
     // Read registry file
