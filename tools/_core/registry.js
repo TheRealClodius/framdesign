@@ -101,15 +101,12 @@ class ToolRegistry {
         console.error(errorMsg);
         throw new Error(errorMsg);
       }
-      return; // Early return if we used alternative path
+      // Use the found path for reading
+      registryPath = foundPath;
     }
 
-    // Normal path - file exists at REGISTRY_PATH
-    const registryJson = readFileSync(REGISTRY_PATH, 'utf-8');
-    const registry = JSON.parse(registryJson);
-
     // Read registry file
-    const registryJson = readFileSync(REGISTRY_PATH, 'utf-8');
+    const registryJson = readFileSync(registryPath, 'utf-8');
     const registry = JSON.parse(registryJson);
 
     this.version = registry.version;
