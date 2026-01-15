@@ -156,16 +156,23 @@ const nextConfig: NextConfig = {
       };
       
       // Ensure tool_registry.json is included in the build
-      // Add a plugin to copy it to the output directory
+      // Copy it to the server output so it's available at runtime
       const CopyWebpackPlugin = require('copy-webpack-plugin');
       config.plugins = config.plugins || [];
       if (existsSync(registryPath)) {
+        const outputPath = config.output?.path || join(process.cwd(), '.next');
         config.plugins.push(
           new CopyWebpackPlugin({
             patterns: [
               {
                 from: registryPath,
-                to: join(config.output?.path || '.next', 'server', 'tools', 'tool_registry.json'),
+                to: join(outputPath, 'server', 'tools', 'tool_registry.json'),
+                noErrorOnMissing: false,
+              },
+              // Also copy to root of server output as fallback
+              {
+                from: registryPath,
+                to: join(outputPath, 'server', 'tool_registry.json'),
                 noErrorOnMissing: false,
               },
             ],
