@@ -2,7 +2,7 @@
   "$schema": "https://railway.app/railway.schema.json",
   "build": {
     "builder": "NIXPACKS",
-    "buildCommand": "npm install"
+    "buildCommand": "npm ci"
   },
   "deploy": {
     "numReplicas": 1,
@@ -12,7 +12,7 @@
     "startCommand": "npm start"
   },
   "healthcheckPath": "/health",
-  "healthcheckTimeout": 100,
+  "healthcheckTimeout": 300,
   "rewrite": false,
   "redirects": []
 }

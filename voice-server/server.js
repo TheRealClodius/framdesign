@@ -66,10 +66,21 @@ const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'http://localhost:3000')
 // Check for either AI Studio or Vertex AI credentials
 const USE_VERTEX_AI = !!VERTEXAI_PROJECT;
 
+// Log environment status for debugging
+console.log('[ENV] Environment variables check:');
+console.log(`[ENV]   GEMINI_API_KEY: ${GEMINI_API_KEY ? 'SET' : 'NOT SET'}`);
+console.log(`[ENV]   VERTEXAI_PROJECT: ${VERTEXAI_PROJECT || 'NOT SET'}`);
+console.log(`[ENV]   VERTEXAI_LOCATION: ${VERTEXAI_LOCATION}`);
+console.log(`[ENV]   GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS ? 'SET' : 'NOT SET'}`);
+console.log(`[ENV]   PORT: ${PORT}`);
+console.log(`[ENV]   ALLOWED_ORIGINS: ${ALLOWED_ORIGINS.join(', ')}`);
+
 if (!USE_VERTEX_AI && !GEMINI_API_KEY) {
-  console.error('ERROR: Either GEMINI_API_KEY or VERTEXAI_PROJECT is required');
-  console.error('For Live API: Set VERTEXAI_PROJECT and authenticate with gcloud CLI or set GOOGLE_APPLICATION_CREDENTIALS');
-  console.error('For standard API: Set GEMINI_API_KEY from AI Studio');
+  console.error('[ERROR] Missing required credentials!');
+  console.error('[ERROR] Either GEMINI_API_KEY or VERTEXAI_PROJECT is required');
+  console.error('[ERROR] For Live API: Set VERTEXAI_PROJECT and authenticate with gcloud CLI or set GOOGLE_APPLICATION_CREDENTIALS');
+  console.error('[ERROR] For standard API: Set GEMINI_API_KEY from AI Studio');
+  console.error('[ERROR] Server will exit. Please set environment variables in Railway dashboard.');
   process.exit(1);
 }
 
@@ -1228,10 +1239,20 @@ wss.on('connection', async (ws, req) => {
 });
 
 // Start server
+console.log('[STARTUP] Starting HTTP server...');
 httpServer.listen(PORT, () => {
-  console.log(`✓ Voice Server listening on port ${PORT}`);
-  console.log(`  WebSocket: ws://localhost:${PORT}`);
-  console.log(`  Health check: http://localhost:${PORT}/health`);
+  console.log(`[STARTUP] ✓ Voice Server listening on port ${PORT}`);
+  console.log(`[STARTUP]   WebSocket: ws://localhost:${PORT}`);
+  console.log(`[STARTUP]   Health check: http://localhost:${PORT}/health`);
+  console.log(`[STARTUP]   Server ready and accepting connections`);
+});
+
+// Handle server errors
+httpServer.on('error', (error) => {
+  console.error('[ERROR] HTTP server error:', error);
+  if (error.code === 'EADDRINUSE') {
+    console.error(`[ERROR] Port ${PORT} is already in use`);
+  }
 });
 
 // Graceful shutdown
