@@ -17,11 +17,8 @@ const FRAM_BASE_PROMPT = loadVoicePrompt();
  * @returns {string} - Complete system instruction
  */
 export function buildSystemInstruction(toolRegistry) {
-  // Get tool documentation from registry
   const toolDocs = Array.from(toolRegistry.tools.values())
-    .map(tool => {
-      return `## ${tool.toolId}\n${tool.documentation}`;
-    })
+    .map(tool => `## ${tool.toolId}\n${tool.documentation}`)
     .join('\n\n');
 
   return `${FRAM_BASE_PROMPT}\n\n# Available Tools\n\n${toolDocs}`;

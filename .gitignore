@@ -44,8 +44,8 @@ next-env.d.ts
 tools/tool_registry.json
 .env*.local
 
-# vector-search-api dependencies (should never be committed)
-vector-search-api/node_modules/
+# test reports
+tests/e2e/kb-tools-agent-report.json
 
-# LanceDB database files (binary, should be regenerated)
-.lancedb/
+# vector-search-api dependencies (deprecated - no longer used)
+vector-search-api/node_modules/

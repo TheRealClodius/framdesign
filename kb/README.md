@@ -89,12 +89,12 @@
 
 ## Embedding
 
-KB documents are embedded into a LanceDB vector store for semantic search. The embedding process:
+KB documents are embedded into Qdrant Cloud vector database for semantic search. The embedding process:
 
 1. **Reads all markdown files** from `kb/` directory (excluding `README.md`)
 2. **Splits documents into chunks** (1000 chars with 200 char overlap)
 3. **Generates embeddings** using Gemini's `text-embedding-004` model (768 dimensions)
-4. **Stores in LanceDB** with unique chunk IDs and metadata
+4. **Stores in Qdrant Cloud** with unique chunk IDs and metadata
 
 ### Running Embedding
 
@@ -104,7 +104,8 @@ npx tsx scripts/Embed/embed-kb.ts
 
 **Requirements:**
 - `GEMINI_API_KEY` must be set in `.env.local`
-- Node.js environment (LanceDB uses native modules)
+- `QDRANT_CLUSTER_ENDPOINT` must be set in `.env.local`
+- `QDRANT_API_KEY` must be set in `.env.local`
 
 ### Document ID Format
 

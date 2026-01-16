@@ -6,7 +6,7 @@
    ```bash
    npm run build:tools
    ```
-   ✅ Should output: "Tool registry built successfully! Tools: 5"
+  ✅ Should output: "Tool registry built successfully! Tools: 8"
 
 ## Step 8: Test Voice Server
 
@@ -26,7 +26,7 @@ curl http://localhost:8080/health
 ```
 
 **✅ Success indicators:**
-- Console shows: `✓ Tool registry loaded: v1.0.xxx, 5 tools`
+- Console shows: `✓ Tool registry loaded: v1.0.xxx, 8 tools`
 - Console shows: `✓ Voice Server listening on port 8080`
 - Health endpoint returns: `{"status":"ok",...}`
 - **NO crashes or "undefined" errors**

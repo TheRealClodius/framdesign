@@ -252,7 +252,7 @@ npm test            # Run all tests
 ### What's NOT tested
 - Actual Gemini API calls (mocked)
 - WebSocket transport layer (mocked)
-- LanceDB vector search (mocked)
+- Qdrant vector search (mocked)
 - File system operations (mocked)
 - Network errors (partially mocked)
 

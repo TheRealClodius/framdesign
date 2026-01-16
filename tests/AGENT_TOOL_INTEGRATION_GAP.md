@@ -76,7 +76,7 @@ Gemini API → functionCall in response → app/api/chat/route.ts → toolRegist
 **Purpose:** Test complete voice agent tool calling flow
 
 **Test Cases:**
-- ✅ Voice server provides all 5 tools to Gemini Live API
+- ✅ Voice server provides correct tool schemas based on `USE_META_TOOLS`
 - ✅ Voice server receives tool call from Gemini and executes it
 - ✅ Voice server sends tool result back to Gemini
 - ✅ Policy enforcement (budget limits) works in voice mode
@@ -92,7 +92,7 @@ Gemini API → functionCall in response → app/api/chat/route.ts → toolRegist
 **Purpose:** Test complete text agent tool calling flow
 
 **Test Cases:**
-- ✅ Text API provides all 5 tools to Gemini API
+- ✅ Text API provides correct tool schemas based on `USE_META_TOOLS`
 - ✅ Text API detects function call in Gemini response
 - ✅ Text API executes tool via registry
 - ✅ Text API returns correct response format
@@ -138,7 +138,7 @@ Gemini API → functionCall in response → app/api/chat/route.ts → toolRegist
 - ✅ Complete integration flow
 
 **Key Test Scenarios:**
-1. Verifies all 5 tools are provided to Gemini Live API
+1. Verifies tool exposure matches `USE_META_TOOLS` (meta-tools only or all concrete tools)
 2. Tests `transport.receiveToolCalls()` parsing
 3. Tests `transport.sendToolResult()` formatting
 4. Tests full cycle: receive → execute → respond

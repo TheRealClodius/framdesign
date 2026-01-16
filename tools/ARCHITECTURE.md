@@ -8,30 +8,27 @@
 4. **Explicit Contracts** - ToolResponse envelope is formal and versioned
 5. **Intent-Based State** - Tools return intents, orchestrators apply them to session state
 
-## Tool Discovery Model
+## Tool Exposure
 
-**Full Declarations with Prompt Caching**
+**Direct Tool Calling**
 
-All tools are declared to the Gemini Live session at initialization with complete documentation:
-- Tool schemas (parameters, validation rules)
-- Tool guides (when/how to use, examples, common pitfalls)
+All tools are directly exposed to both agents:
+- Text agent: Tools declared in API request via `parametersJsonSchema`
+- Voice agent: Tools declared in session config via Gemini Native schemas
+- No discovery step - models call tools directly
 
-This approach relies on Gemini's prompt caching to avoid context window bloat:
-- Initial session setup sends ~12-15k tokens (system prompt + tool declarations)
-- Gemini caches this context across multiple turns
-- Subsequent turns only add conversation history, not full tool docs
-
-**Why Not Dynamic Discovery?**
-- Gemini Live API requires all tool declarations at session start (API constraint)
-- Prompt caching makes full upfront declarations efficient
-- Simpler than meta-tools (no `list_tools()` or `get_tool_docs()` complexity)
-- Agent has complete tool context from turn 1
+**Available Tools (5):**
+1. `kb_search` - Semantic search over knowledge base
+2. `kb_get` - Direct retrieval by entity ID
+3. `ignore_user` - Block disrespectful users (action tool)
+4. `start_voice_session` - Transition to voice mode (text-only)
+5. `end_voice_session` - End voice session gracefully (voice-only)
 
 **Context Window Monitoring**
 - Session init token estimates logged at startup
 - Per-tool response token averages tracked
 - Peak context usage monitored via `/metrics` endpoint
-- Alerts if approaching Gemini's 1M token limit
+- At 5 tools, context usage is minimal (~10-15k tokens for all tool declarations)
 
 ## Directory Structure
 
@@ -89,7 +86,7 @@ import { GeminiLiveTransport } from './providers/gemini-live-transport.js';
 - Max 800ms per retrieval tool (soft limit, logs warning)
 - Loop detection: Same tool+args 3x or empty results 2x → feedback to agent
 
-**Available Tools:** All 5 tools (ignore_user, start_voice_session, end_voice_session, kb_search, kb_get)
+**Available Tools:** 5 tools, all directly callable.
 
 ### Text Agent (`app/api/chat/route.ts`)
 
@@ -117,7 +114,7 @@ import { ErrorType, ToolError } from '@/tools/_core/error-types';
 - Max 2s per retrieval tool (soft limit)
 - Can use fuller tool context when needed
 
-**Available Tools:** All 5 tools (ignore_user, start_voice_session, end_voice_session, kb_search, kb_get)
+**Available Tools:** 5 tools, all directly callable.
 
 **Next.js Configuration:**
 - Webpack configured to handle markdown files
@@ -295,9 +292,7 @@ const transport = new OpenAITransport(client, conversationId);
 - Runtime validation consistency
 
 ### Why Single-Source Documentation?
-- All tool docs in `/tools/{tool-name}/guide.md` (single source of truth)
-- Complete documentation included in system instruction at session start
-- Gemini's prompt caching handles token efficiency
+- All concrete tool docs live in `/tools/{tool-name}/guide.md` (single source of truth)
 - No duplication between voice-server prompts and tool directories
 - Simpler maintenance: one place to edit per tool
 
@@ -399,24 +394,24 @@ Example response:
 
 **Tracked at Session Init:**
 - System prompt token count
-- Tool declaration token count (all schemas + guides)
+- Tool declaration token count (5 tools, direct exposure)
 - Total session init context
 
 **Logged Example:**
 ```
-[Context] Session init: ~12,847 tokens
-  - System prompt: ~3,215 tokens
-  - Tool declarations: ~9,632 tokens
+[Context] Session init: ~X tokens
+  - System prompt: ~Y tokens
+  - Tool declarations (5 tools): ~Z tokens
 ```
 
 **Monitoring Strategy:**
-1. Track session init baseline (~12-15k tokens)
+1. Track session init baseline (~10-15k tokens for 5 tools)
 2. Monitor per-tool response averages (typically 80-500 tokens)
 3. Alert if peak usage trends toward 900k+ tokens
-4. Rely on Gemini's prompt caching to keep context efficient
+4. Monitor tool count growth (add complexity only when needed)
 
 **Context Budget Assumptions:**
-- Session init: ~15k tokens (cached)
+- Session init: depends on tool exposure mode
 - Average conversation: 10-20 turns × 200-500 tokens/turn = 2-10k tokens
 - Tool responses: 5-10 calls × 100-500 tokens = 0.5-5k tokens
 - **Total typical usage:** ~20-30k tokens (well under 1M limit)
@@ -488,7 +483,7 @@ endSession(sessionId);
 ### ✅ Completed Phases
 - **Phase 0-3:** Core infrastructure, runtime registry, transport layer ✅
 - **Phase 4:** Orchestrator integration (voice + text agents) ✅
-- **Phase 5:** Tool migrations (all 5 tools) ✅
+- **Phase 5:** Tool migrations (all 5 concrete tools) ✅
 
 ### Current Tools (5 total)
 1. `ignore_user` - Block disrespectful users (text + voice)
@@ -498,12 +493,13 @@ endSession(sessionId);
 5. `kb_get` - Get knowledge base entity (text + voice)
 
 ### Integration Status
-- ✅ Voice server: Fully integrated, all tools available
-- ✅ Text agent: Fully integrated, all tools available
+- ✅ Voice server: Fully integrated, all 5 tools directly exposed
+- ✅ Text agent: Fully integrated, all 5 tools directly exposed
 - ✅ Registry: Loads successfully in both environments
 - ✅ Handler loading: Works for Node.js and Next.js
 - ✅ State management: Centralized via state controller
 - ✅ Policy enforcement: Budgets and mode restrictions operational
+- ✅ Simplified: Meta-tool discovery removed, direct calling only
 
 ## Future Evolution
 

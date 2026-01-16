@@ -26,15 +26,14 @@ export async function execute(context) {
     // Use path alias for Next.js compatibility, fallback to relative for Node.js
     let generateQueryEmbedding, searchSimilar;
     
-    // Check if we're in API mode (vector search service handles embeddings)
-    const isAPIMode = !!process.env.VECTOR_SEARCH_API_URL;
-    
     try {
       // Try Next.js path alias first (works in Next.js webpack)
       const embeddingModule = await import('@/lib/services/embedding-service');
       const vectorModule = await import('@/lib/services/vector-store-service');
-      generateQueryEmbedding = embeddingModule.generateQueryEmbedding;
-      searchSimilar = vectorModule.searchSimilar;
+      generateQueryEmbedding = embeddingModule.generateQueryEmbedding
+        || embeddingModule.default?.generateQueryEmbedding;
+      searchSimilar = vectorModule.searchSimilar
+        || vectorModule.default?.searchSimilar;
     } catch {
       // Fallback for Node.js runtime (voice server)
       // Use relative paths WITHOUT extension - avoids webpack static analysis
@@ -43,26 +42,27 @@ export async function execute(context) {
       const vectorPath = '../../lib/services/vector-store-service';
       const embeddingModule = await import(embeddingPath);
       const vectorModule = await import(vectorPath);
-      generateQueryEmbedding = embeddingModule.generateQueryEmbedding;
-      searchSimilar = vectorModule.searchSimilar;
+      generateQueryEmbedding = embeddingModule.generateQueryEmbedding
+        || embeddingModule.default?.generateQueryEmbedding;
+      searchSimilar = vectorModule.searchSimilar
+        || vectorModule.default?.searchSimilar;
     }
 
-    // Generate a generic embedding (only needed in local mode - API mode handles embeddings)
-    let dummyEmbedding = [];
-    if (!isAPIMode) {
-      dummyEmbedding = await generateQueryEmbedding('document');
-    }
+    // Generate a generic embedding (Qdrant accepts vectors directly)
+    const dummyEmbedding = await generateQueryEmbedding('document');
 
-    // Get many results (up to 100) to ensure we get all chunks
-    const allResults = await searchSimilar(dummyEmbedding, 100, {}, 'document');
+    // Get all chunks for this entity (filtered by entity_id in search)
+    const allResults = await searchSimilar(
+      dummyEmbedding,
+      100,
+      { entity_id: entityId } // Filter by entity_id directly in Qdrant
+    );
 
-    // Filter for matching entity_id
-    const matchingChunks = allResults
-      .filter((result) => result.metadata?.entity_id === entityId)
-      .map((result) => ({
-        text: result.text,
-        metadata: result.metadata
-      }));
+    // Map results to chunks (already filtered by entity_id)
+    const matchingChunks = allResults.map((result) => ({
+      text: result.text,
+      metadata: result.metadata
+    }));
 
     if (matchingChunks.length === 0) {
       // Entity not found

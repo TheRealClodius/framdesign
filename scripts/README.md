@@ -61,6 +61,6 @@ npx tsx scripts/Testing/kb/test-search.ts "your query"
 
 ## Related Files
 
-- `lib/services/vector-store-service.ts` - LanceDB operations
+- `lib/services/vector-store-service.ts` - Qdrant operations
 - `lib/services/embedding-service.ts` - Embedding generation
 - `docs/KB_EMBEDDING.md` - Comprehensive KB embedding guide

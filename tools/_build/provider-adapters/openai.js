@@ -32,3 +32,13 @@ export function toOpenAI(toolDefinition) {
     }
   };
 }
+
+/**
+ * Convert all tools to OpenAI format
+ *
+ * @param {Array} tools - Array of tool definitions
+ * @returns {Array} - OpenAI function schemas
+ */
+export function convertAllTools(tools) {
+  return tools.map(tool => toOpenAI(tool));
+}

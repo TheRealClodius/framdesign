@@ -14,49 +14,7 @@ import { ErrorType, ToolError } from '@/tools/_core/error-types';
 import { createStateController } from '@/tools/_core/state-controller';
 import { retryWithBackoff as retryToolExecution } from '@/tools/_core/retry-handler';
 
-// Convert geminiNative schema (with uppercase string types like "OBJECT", "STRING") 
-// to JSON Schema format (lowercase: "object", "string") for parametersJsonSchema
-function convertGeminiSchemaToJsonSchema(schema: any): any {
-  if (!schema || typeof schema !== 'object' || Array.isArray(schema)) {
-    return schema;
-  }
-  
-  const TYPE_MAP: Record<string, string> = {
-    'STRING': 'string',
-    'NUMBER': 'number',
-    'INTEGER': 'integer',
-    'BOOLEAN': 'boolean',
-    'OBJECT': 'object',
-    'ARRAY': 'array'
-  };
-  
-  // Create a copy to avoid mutating the original
-  const converted: any = { ...schema };
-  
-  // Convert uppercase type to lowercase JSON Schema type
-  if (schema.type && typeof schema.type === 'string') {
-    const upperType = schema.type.toUpperCase();
-    if (TYPE_MAP[upperType]) {
-      converted.type = TYPE_MAP[upperType];
-    }
-  }
-  
-  // Recursively convert properties
-  if (schema.properties && typeof schema.properties === 'object') {
-    converted.properties = {};
-    for (const [key, prop] of Object.entries(schema.properties)) {
-      converted.properties[key] = convertGeminiSchemaToJsonSchema(prop);
-    }
-  }
-  
-  // Recursively convert items for arrays
-  if (schema.items) {
-    converted.items = convertGeminiSchemaToJsonSchema(schema.items);
-  }
-  
-  // Preserve other fields (enum, description, required, etc.)
-  return converted;
-}
+// Schema conversion removed - using canonical JSON Schema directly from registry
 
 // In-memory cache store for conversation caches
 // Key: conversation hash, Value: { cacheName: string, cachedMessageCount: number, summary: string | null, summaryUpToIndex: number, createdAt: number }
@@ -518,24 +476,30 @@ export async function POST(request: Request) {
 
     // Load registry if not already loaded
     if (!toolRegistry.getVersion()) {
-      await toolRegistry.load();
-      toolRegistry.lock();
-      console.log(`✓ Tool registry loaded: v${toolRegistry.getVersion()}`);
+      try {
+        await toolRegistry.load();
+        toolRegistry.lock();
+        console.log(`✓ Tool registry loaded: v${toolRegistry.getVersion()}`);
+      } catch (error) {
+        console.error('Failed to load tool registry:', error);
+        return NextResponse.json(
+          {
+            error: 'Tool registry initialization failed',
+            message: error instanceof Error ? error.message : 'Unknown error',
+            details: 'The tool registry file is missing or invalid. This should be generated during build.'
+          },
+          { status: 500 }
+        );
+      }
     }
 
     // Get provider schemas for Gemini 3
-    // Convert geminiNative format (uppercase types) to JSON Schema format (lowercase types)
-    // Use parametersJsonSchema instead of parameters to avoid Type.* enum conversion
-    const geminiNativeSchemas = toolRegistry.getProviderSchemas('geminiNative');
-    const providerSchemas = geminiNativeSchemas.map(schema => {
-      // Convert to JSON Schema format and use parametersJsonSchema
-      const jsonSchema = convertGeminiSchemaToJsonSchema(schema.parameters);
-      return {
-        name: schema.name,
-        description: schema.description,
-        parametersJsonSchema: jsonSchema  // Use JSON Schema format instead of Type.* enums
-      };
-    });
+    // Use canonical JSON Schema directly from registry (no conversion needed)
+    const providerSchemas = Array.from(toolRegistry.tools.values()).map(tool => ({
+      name: tool.toolId,
+      description: tool.description,
+      parametersJsonSchema: tool.jsonSchema  // Canonical JSON Schema from registry
+    }));
 
     // Enable caching
     const ENABLE_CACHING = true;
@@ -963,9 +927,9 @@ export async function POST(request: Request) {
         }
       }
 
-      // Handle other function calls (e.g., kb_search, kb_get)
+      // Handle all other function calls (kb_search, kb_get, end_voice_session, etc.)
       if (functionCall && functionCall.name) {
-        const toolName = functionCall.name; // Store in const for type narrowing
+        const toolName = functionCall.name;
         console.log(`Handling function call: ${toolName}`);
         
         // Initialize state controller
@@ -1060,6 +1024,11 @@ export async function POST(request: Request) {
           }
         ];
 
+        console.log("=== Function call conversation ===");
+        console.log("Function called:", toolName);
+        console.log("Function result:", JSON.stringify(result.data, null, 2));
+        console.log("Updated contents length:", updatedContents.length);
+
         // Make a new API call with the tool result
         const followUpStream = await retryWithBackoff(async () => {
           const config: {
@@ -1076,6 +1045,13 @@ export async function POST(request: Request) {
             config.systemInstruction = FRAM_SYSTEM_PROMPT;
           }
 
+          console.log("=== Follow-up API call after tool execution ===");
+          console.log(`Tool: ${toolName}`);
+          console.log(`Contents length: ${updatedContents.length}`);
+          console.log(`Using cached content: ${!!config.cachedContent}`);
+          console.log(`Tools in config: ${!!config.tools}`);
+          console.log(`Last 2 messages:`, JSON.stringify(updatedContents.slice(-2), null, 2));
+
           return await ai.models.generateContentStream({
             model: "gemini-3-flash-preview",
             contents: updatedContents,
@@ -1083,56 +1059,184 @@ export async function POST(request: Request) {
           });
         });
 
-        // Stream the follow-up response
+        // Support chained function calls (up to 5 in a row)
+        const MAX_CHAIN_LENGTH = 5;
+        let chainCount = 0;
+        let currentContents = updatedContents;
+        let currentStream = followUpStream;
+
+        // Stream the follow-up response (with chained function call support)
         return new Response(
           new ReadableStream({
             async start(controller) {
               const encoder = new TextEncoder();
-              let chunksProcessed = 0;
-              let bytesSent = 0;
-
-              const enqueueTextFromChunk = (chunk: unknown) => {
-                const typed = chunk as any;
-                const candidates = typed?.candidates?.[0]?.content?.parts || [];
-
-                // Try direct text property first
-                let text: string | undefined;
-                if (typeof typed?.text === "function") {
-                  text = typed.text();
-                } else if (typed?.text) {
-                  text = typed.text;
-                } else {
-                  // Iterate through all parts to find text parts
-                  // When there are function calls, parts can contain both text and functionCall parts
-                  const textParts: string[] = [];
-                  for (const part of candidates) {
-                    if (part.text) {
-                      textParts.push(part.text);
-                    }
-                  }
-                  if (textParts.length > 0) {
-                    text = textParts.join('');
-                  }
-                }
-
-                if (text) {
-                  const encoded = encoder.encode(text);
-                  bytesSent += encoded.length;
-                  controller.enqueue(encoded);
-                  chunksProcessed++;
-                }
-              };
+              let totalBytesSent = 0;
 
               try {
-                const iterator = followUpStream[Symbol.asyncIterator]();
-                while (true) {
-                  const { value, done } = await iterator.next();
-                  if (done) break;
-                  enqueueTextFromChunk(value);
+                // Loop to handle chained function calls
+                while (chainCount < MAX_CHAIN_LENGTH) {
+                  // Collect all chunks from current stream
+                  const collectedChunks: any[] = [];
+                  const iterator = currentStream[Symbol.asyncIterator]();
+                  while (true) {
+                    const { value, done } = await iterator.next();
+                    if (done) break;
+                    collectedChunks.push(value);
+                  }
+
+                  // Extract function calls and text from collected chunks
+                  let nextFunctionCall: any = null;
+                  let nextFunctionCallPart: any = null;
+                  let responseText = "";
+
+                  for (const chunk of collectedChunks) {
+                    const typed = chunk as any;
+                    const candidates = typed?.candidates?.[0]?.content?.parts || [];
+
+                    // Look for function calls
+                    for (const part of candidates) {
+                      if (part.functionCall && !nextFunctionCall) {
+                        nextFunctionCall = part.functionCall;
+                        nextFunctionCallPart = part; // Preserve with thoughtSignature
+                      }
+                      if (part.text) {
+                        responseText += part.text;
+                      }
+                    }
+
+                    // Also try direct text property
+                    if (typeof typed?.text === "function") {
+                      responseText += typed.text();
+                    } else if (typed?.text) {
+                      responseText += typed.text;
+                    }
+                  }
+
+                  // If there's a function call, execute it and loop
+                  if (nextFunctionCall && nextFunctionCall.name) {
+                    chainCount++;
+                    const chainedToolName = nextFunctionCall.name;
+                    console.log(`[Chain ${chainCount}/${MAX_CHAIN_LENGTH}] Executing chained function: ${chainedToolName}`);
+
+                    // Execute the chained tool
+                    const chainedToolMetadata = toolRegistry.getToolMetadata(chainedToolName) as any;
+                    if (!chainedToolMetadata) {
+                      console.error(`Unknown chained tool: ${chainedToolName}`);
+                      const errorMsg = `Error: Unknown tool "${chainedToolName}"`;
+                      controller.enqueue(encoder.encode(errorMsg));
+                      break;
+                    }
+
+                    const chainedExecutionContext = {
+                      clientId: `text-${Date.now()}`,
+                      ws: null,
+                      geminiSession: null,
+                      args: nextFunctionCall.args || {},
+                      capabilities: { voice: false },
+                      session: {
+                        isActive: state.get('isActive'),
+                        toolsVersion: toolRegistry.getVersion(),
+                        state: state.getSnapshot()
+                      }
+                    };
+
+                    const chainedStartTime = Date.now();
+                    const chainedResult = await retryToolExecution(
+                      () => toolRegistry.executeTool(chainedToolName, chainedExecutionContext),
+                      {
+                        mode: 'text',
+                        maxRetries: 3,
+                        toolId: chainedToolName,
+                        toolMetadata: chainedToolMetadata,
+                        clientId: `text-${Date.now()}`
+                      }
+                    );
+                    const chainedDuration = Date.now() - chainedStartTime;
+
+                    console.log(JSON.stringify({
+                      event: 'chained_tool_execution',
+                      toolId: chainedToolName,
+                      chainPosition: chainCount,
+                      toolVersion: chainedToolMetadata?.version || 'unknown',
+                      registryVersion: toolRegistry.getVersion(),
+                      duration: chainedDuration,
+                      ok: chainedResult.ok,
+                      category: chainedToolMetadata?.category || 'unknown',
+                      mode: 'text'
+                    }));
+
+                    if (!chainedResult.ok) {
+                      console.error(`Chained tool ${chainedToolName} failed:`, chainedResult.error);
+                      const errorMsg = `Error executing ${chainedToolName}: ${chainedResult.error.message}`;
+                      controller.enqueue(encoder.encode(errorMsg));
+                      break;
+                    }
+
+                    // Update contents with this function call and result
+                    currentContents = [
+                      ...currentContents,
+                      {
+                        role: "model" as const,
+                        parts: [nextFunctionCallPart || { functionCall: nextFunctionCall }]
+                      },
+                      {
+                        role: "user" as const,
+                        parts: [{
+                          functionResponse: {
+                            name: chainedToolName,
+                            response: chainedResult.data
+                          }
+                        }]
+                      }
+                    ];
+
+                    console.log(`[Chain ${chainCount}] Tool result received, continuing conversation`);
+
+                    // Make another API call with the new tool result
+                    currentStream = await retryWithBackoff(async () => {
+                      const config: {
+                        tools?: Array<{ functionDeclarations: any[] }>;
+                        cachedContent?: string;
+                        systemInstruction?: string;
+                      } = {};
+
+                      if (cachedContent && cachedContent.trim()) {
+                        config.cachedContent = cachedContent;
+                      } else {
+                        config.tools = [{ functionDeclarations: providerSchemas }];
+                        config.systemInstruction = FRAM_SYSTEM_PROMPT;
+                      }
+
+                      return await ai.models.generateContentStream({
+                        model: "gemini-3-flash-preview",
+                        contents: currentContents,
+                        config
+                      });
+                    });
+
+                    // Loop back to process the new stream
+                    continue;
+                  }
+
+                  // No more function calls, stream the text response
+                  if (responseText) {
+                    const encoded = encoder.encode(responseText);
+                    totalBytesSent += encoded.length;
+                    controller.enqueue(encoded);
+                    console.log(`Final response streamed: ${encoded.length} bytes (after ${chainCount} chained calls)`);
+                  } else {
+                    console.warn(`No text in final response after ${chainCount} chained calls`);
+                  }
+
+                  break; // Exit loop
                 }
 
-                console.log(`Tool response stream completed: ${chunksProcessed} chunks, ${bytesSent} bytes`);
-                
+                if (chainCount >= MAX_CHAIN_LENGTH) {
+                  console.warn(`Reached maximum chain length (${MAX_CHAIN_LENGTH}), stopping`);
+                  const warningMsg = "\n\n(Reached maximum tool chain depth)";
+                  controller.enqueue(encoder.encode(warningMsg));
+                }
+
                 // Background: Update cache with new summary if it was generated
                 if (summaryPromise) {
                   summaryPromise.then((newSummary) => {
@@ -1146,7 +1250,7 @@ export async function POST(request: Request) {
                 
                 controller.close();
               } catch (error) {
-                console.error("Error streaming tool response:", error);
+                console.error("Error in chained tool execution:", error);
                 controller.error(error);
               }
             }

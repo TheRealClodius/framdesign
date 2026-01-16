@@ -23,8 +23,8 @@ import { ErrorType } from './error-types.js';
  */
 const DEFAULT_CONFIG = {
   maxRetries: 3,
-  initialDelayMs: 100,
-  maxDelayMs: 2000,
+  initialDelayMs: 300,  // Increased from 100ms to account for Qdrant indexing delays
+  maxDelayMs: 3000,      // Increased from 2000ms
   backoffMultiplier: 2
 };
 

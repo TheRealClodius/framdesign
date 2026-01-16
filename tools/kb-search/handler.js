@@ -33,15 +33,14 @@ export async function execute(context) {
     // Use path alias for Next.js compatibility, fallback to relative for Node.js
     let generateQueryEmbedding, searchSimilar;
     
-    // Check if we're in API mode (vector search service handles embeddings)
-    const isAPIMode = !!process.env.VECTOR_SEARCH_API_URL;
-    
     try {
       // Try Next.js path alias first (works in Next.js webpack)
       const embeddingModule = await import('@/lib/services/embedding-service');
       const vectorModule = await import('@/lib/services/vector-store-service');
-      generateQueryEmbedding = embeddingModule.generateQueryEmbedding;
-      searchSimilar = vectorModule.searchSimilar;
+      generateQueryEmbedding = embeddingModule.generateQueryEmbedding
+        || embeddingModule.default?.generateQueryEmbedding;
+      searchSimilar = vectorModule.searchSimilar
+        || vectorModule.default?.searchSimilar;
     } catch {
       // Fallback for Node.js runtime (voice server)
       // Use relative paths WITHOUT extension - avoids webpack static analysis
@@ -50,30 +49,30 @@ export async function execute(context) {
       const vectorPath = '../../lib/services/vector-store-service';
       const embeddingModule = await import(embeddingPath);
       const vectorModule = await import(vectorPath);
-      generateQueryEmbedding = embeddingModule.generateQueryEmbedding;
-      searchSimilar = vectorModule.searchSimilar;
+      generateQueryEmbedding = embeddingModule.generateQueryEmbedding
+        || embeddingModule.default?.generateQueryEmbedding;
+      searchSimilar = vectorModule.searchSimilar
+        || vectorModule.default?.searchSimilar;
     }
 
-    // Generate query embedding (only needed in local mode - API mode handles embeddings)
+    // Generate query embedding (Qdrant accepts vectors directly)
     let queryEmbedding = [];
-    if (!isAPIMode) {
-      try {
-        queryEmbedding = await generateQueryEmbedding(args.query);
-      } catch (error) {
-        // Classify embedding errors
-        if (error.message?.includes('API key') || error.message?.includes('Invalid')) {
-          throw new ToolError(ErrorType.AUTH, error.message, { retryable: false });
-        }
-        if (error.message?.includes('rate limit') || error.message?.includes('quota')) {
-          throw new ToolError(ErrorType.RATE_LIMIT, error.message, { retryable: true });
-        }
-        if (error.message?.includes('timeout')) {
-          throw new ToolError(ErrorType.TRANSIENT, error.message, { retryable: true });
-        }
-        throw new ToolError(ErrorType.TRANSIENT, `Embedding generation failed: ${error.message}`, {
-          retryable: true
-        });
+    try {
+      queryEmbedding = await generateQueryEmbedding(args.query);
+    } catch (error) {
+      // Classify embedding errors
+      if (error.message?.includes('API key') || error.message?.includes('Invalid')) {
+        throw new ToolError(ErrorType.AUTH, error.message, { retryable: false });
       }
+      if (error.message?.includes('rate limit') || error.message?.includes('quota')) {
+        throw new ToolError(ErrorType.RATE_LIMIT, error.message, { retryable: true });
+      }
+      if (error.message?.includes('timeout')) {
+        throw new ToolError(ErrorType.TRANSIENT, error.message, { retryable: true });
+      }
+      throw new ToolError(ErrorType.TRANSIENT, `Embedding generation failed: ${error.message}`, {
+        retryable: true
+      });
     }
 
     // Execute vector search
@@ -82,8 +81,7 @@ export async function execute(context) {
       rawResults = await searchSimilar(
         queryEmbedding,
         topK,
-        args.filters || {},
-        args.query // Pass query text for API mode
+        args.filters || {}
       );
     } catch (error) {
       throw new ToolError(ErrorType.TRANSIENT, `Vector search failed: ${error.message}`, {

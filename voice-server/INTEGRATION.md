@@ -7,7 +7,7 @@ The voice server (WebSocket-based Gemini Live API) integrates with the shared to
 **Status:** ✅ **FULLY INTEGRATED**
 
 - Registry loads at startup
-- All 5 tools available
+- All 5 tools directly exposed to Gemini as function declarations
 - State controller manages session state
 - Transport layer handles tool protocol
 - Policy enforcement operational

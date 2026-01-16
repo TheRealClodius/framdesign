@@ -36,8 +36,7 @@ tools/
 │
 ├── {tool-name}/                 # Individual tools
 │   ├── schema.json             # JSON Schema + metadata
-│   ├── doc_summary.md          # 250 char summary
-│   ├── doc.md                  # Full structured docs
+│   ├── guide.md                # Documentation (summary is first non-heading line)
 │   └── handler.js              # Execution logic
 │
 └── tool_registry.json           # GENERATED BUILD ARTIFACT
@@ -51,7 +50,7 @@ npm run build:tools
 **What it does:**
 1. Scans `tools/*/` directories (ignores `_core`, `_build`)
 2. Validates JSON Schema (draft 2020-12) with Ajv
-3. Validates documentation structure (7 required sections)
+3. Validates guide.md exists and extracts summary (first non-heading line)
 4. Generates provider-specific schemas (OpenAI + Gemini)
 5. Content-based versioning (SHA256 hash)
 6. Outputs `tools/tool_registry.json`
@@ -89,8 +88,7 @@ npm run build:tools
 #### Tool: `ignore_user`
 **Files:**
 - `tools/ignore-user/schema.json` (30 lines)
-- `tools/ignore-user/doc_summary.md` (1 line)
-- `tools/ignore-user/doc.md` (150 lines)
+- `tools/ignore-user/guide.md`
 - `tools/ignore-user/handler.js` (91 lines)
 
 **Purpose:** Punitive timeout for disrespectful users
@@ -133,8 +131,7 @@ export async function execute({ duration_seconds, farewell_message }, context) {
 #### Tool: `end_voice_session`
 **Files:**
 - `tools/end-voice-session/schema.json` (29 lines)
-- `tools/end-voice-session/doc_summary.md` (1 line)
-- `tools/end-voice-session/doc.md` (128 lines)
+- `tools/end-voice-session/guide.md`
 - `tools/end-voice-session/handler.js` (55 lines)
 
 **Purpose:** Graceful voice session termination
@@ -732,13 +729,13 @@ This was a **massive architectural refactor** that introduced:
 1. ✅ ES module issues resolved
 2. ✅ Complete integration (registry used in both agents)
 3. ✅ Tested in development environment
-4. ✅ All 5 tools available and functional
+4. ✅ All tools (5 concrete + 3 meta) available and functional
 5. ✅ State management via state controller
 6. ✅ Structured audit logging implemented
 
 **Architecture Status:**
-- ✅ Voice server: Fully integrated, all tools available
-- ✅ Text agent: Fully integrated, all tools available
+- ✅ Voice server: Fully integrated, tool exposure controlled by `USE_META_TOOLS`
+- ✅ Text agent: Fully integrated, tool exposure controlled by `USE_META_TOOLS`
 - ✅ Registry: Loads successfully in both environments
 - ✅ Handler loading: Works for both Node.js and Next.js
 - ✅ Schema formats: Compatible with Gemini 3 API

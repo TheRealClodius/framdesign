@@ -99,18 +99,18 @@ Centralized embedding generation service used by both KB tools:
 ### Vector Store Service
 **File**: [`lib/services/vector-store-service.ts`](lib/services/vector-store-service.ts)
 
-Manages KB document embeddings in LanceDB:
-- **Local mode**: Direct LanceDB access (default, stores in `.lancedb/`)
-- **API mode**: HTTP API calls (when `VECTOR_SEARCH_API_URL` set, for Vercel)
+Manages KB document embeddings in Qdrant Cloud:
+- Uses Qdrant HTTP API (works in local, Vercel, Railway)
+- Lazily creates collection and payload indexes
 
 **Key Features**:
-- Table dropped/recreated on each embedding run (ensures clean schema)
+- Collection created if missing; upserts are idempotent
 - Metadata 'id' field excluded to prevent overwriting document IDs
 - Frontmatter 'id' stored as 'entity_id' in metadata
 - Each chunk has unique ID: `{entity_id}_chunk_{index}`
 
 **Functions**:
-- `upsertDocuments(documents)`: Store/update embeddings (drops table first)
+- `upsertDocuments(documents)`: Store/update embeddings (idempotent upsert)
 - `searchSimilar(queryEmbedding, topK, filters, queryText)`: Vector search
 - `getAllDocumentIds()`: Get all chunk IDs
 - `hasDocuments()`: Check if KB is initialized
@@ -122,7 +122,7 @@ Processes KB markdown files and generates embeddings:
 - Scans `kb/` directory (excludes `README.md`)
 - Splits files into chunks (1000 chars, 200 overlap)
 - Generates embeddings via Gemini API
-- Stores in LanceDB with unique chunk IDs
+- Stores in Qdrant Cloud with unique chunk IDs
 
 **Usage**: `npx tsx scripts/Embed/embed-kb.ts`
 
@@ -137,6 +137,9 @@ All tools successfully registered in [`tools/tool_registry.json`](tools/tool_reg
 
 | Tool ID | Category | Latency | Modes | Side Effects |
 |---------|----------|---------|-------|--------------|
+| list_tools | utility | 100ms | voice, text | read_only |
+| describe_tool | utility | 100ms | voice, text | read_only |
+| run_tool | utility | 5000ms | voice, text | reads_writes |
 | kb_search | retrieval | 800ms | voice, text | read_only |
 | kb_get | retrieval | 500ms | voice, text | read_only |
 | start_voice_session | action | 500ms | text | writes |
@@ -145,10 +148,10 @@ All tools successfully registered in [`tools/tool_registry.json`](tools/tool_reg
 
 ### Build Command
 ```bash
-node tools/_build/tool-builder.js
+npm run build:tools
 ```
 
-**Output**: Registry version `1.0.249a595d` with 5 tools
+**Output**: Registry version with 8 tools (5 concrete + 3 meta-tools)
 
 ---
 
@@ -159,23 +162,20 @@ node tools/_build/tool-builder.js
 **Embedding Service** (1):
 - `lib/services/embedding-service.ts`
 
-**kb_search** (4):
+**kb_search** (3):
 - `tools/kb-search/schema.json`
 - `tools/kb-search/handler.js`
-- `tools/kb-search/doc.md`
-- `tools/kb-search/doc_summary.md`
+- `tools/kb-search/guide.md`
 
-**kb_get** (4):
+**kb_get** (3):
 - `tools/kb-get/schema.json`
 - `tools/kb-get/handler.js`
-- `tools/kb-get/doc.md`
-- `tools/kb-get/doc_summary.md`
+- `tools/kb-get/guide.md`
 
-**start_voice_session** (4):
+**start_voice_session** (3):
 - `tools/start-voice-session/schema.json`
 - `tools/start-voice-session/handler.js`
-- `tools/start-voice-session/doc.md`
-- `tools/start-voice-session/doc_summary.md`
+- `tools/start-voice-session/guide.md`
 
 **Testing** (2):
 - `scripts/Testing/kb/test-kb-tools.ts` - Comprehensive test suite
@@ -220,28 +220,28 @@ npx tsx scripts/Testing/kb/test-kb-tools.ts
 ## Integration Points
 
 ### Current KB Data
-- **Documents**: 25 chunks from 5 markdown files
-- **Storage**: `.lancedb/kb_documents.lance`
+- **Documents**: Chunked markdown files from `kb/`
+- **Storage**: Qdrant Cloud collection `kb_documents`
 - **Entities**: People, labs, projects
-- **Embedding**: Already done via `scripts/Embed/embed-kb.ts`
+- **Embedding**: Run via `scripts/Embed/embed-kb.ts`
 
 ### Vector Store Service
 Used by both KB tools via [`lib/services/vector-store-service.ts`](lib/services/vector-store-service.ts):
 - `searchSimilar()` - Semantic search with filters
 - `getAllDocumentIds()` - List all document IDs
-- Supports both local (LanceDB) and API modes
+- Uses Qdrant HTTP API in all environments
 
-### Text Agent Integration (Future)
-Tools ready for integration in [`app/api/chat/route.ts`](app/api/chat/route.ts):
-- Add tool definitions for kb_search, kb_get
-- Call `toolRegistry.executeTool()` on function calls
-- Return formatted responses to Gemini
+### Text Agent Integration (Current)
+Tools are integrated in [`app/api/chat/route.ts`](app/api/chat/route.ts):
+- Tool exposure controlled by `USE_META_TOOLS`
+- Tool execution via `toolRegistry.executeTool()`
+- Results returned via Gemini function call responses
 
-### Voice Agent Integration (Future)
-Tools ready for voice-server orchestrator:
+### Voice Agent Integration (Current)
+Tools are integrated in [`voice-server/server.js`](voice-server/server.js):
+- Tool exposure controlled by `USE_META_TOOLS`
 - Mode gating enforced by registry
 - Latency budgets defined
-- Voice mode optimizations implemented
 
 ---
 
@@ -268,7 +268,7 @@ All tools match the established architecture:
 
 ### kb_search Performance
 - **Embedding generation**: ~200-300ms (Gemini API)
-- **Vector search**: ~100-200ms (LanceDB)
+- **Vector search**: ~100-200ms (Qdrant)
 - **Result transformation**: ~10-20ms
 - **Total**: ~780ms (within 800ms budget)
 
@@ -282,7 +282,7 @@ All tools match the established architecture:
 1. **kb_get**: Direct metadata filtering (avoid dummy search)
 2. **Embedding cache**: LRU cache for frequent queries
 3. **Batch operations**: Parallel chunk retrieval
-4. **API mode**: Use vector-search-api for Vercel deployment
+4. **Indexes**: Ensure payload indexes are in place (entity_id, entity_type, file_path)
 
 ---
 
@@ -331,7 +331,7 @@ All deliverables met:
 ### Documentation
 - [KB Embedding Guide](KB_VECTOR_EMBEDDING_GUIDE.md) - How embeddings were created
 - [Implementation Plan](.claude/plans/serialized-cooking-petal.md) - Detailed design doc
-- Tool docs: `tools/kb-search/doc.md`, `tools/kb-get/doc.md`, `tools/start-voice-session/doc.md`
+- Tool docs: `tools/kb-search/guide.md`, `tools/kb-get/guide.md`, `tools/start-voice-session/guide.md`
 
 ### Key Files
 - [`lib/services/embedding-service.ts`](lib/services/embedding-service.ts) - Embedding generation
@@ -342,7 +342,7 @@ All deliverables met:
 ### Related Work
 - Existing KB: `kb/` directory with 5 markdown files
 - Embed script: `scripts/Embed/embed-kb.ts` (already run)
-- Vector DB: `.lancedb/kb_documents.lance` (25 chunks)
+- Vector DB: Qdrant Cloud collection `kb_documents`
 
 ---
 

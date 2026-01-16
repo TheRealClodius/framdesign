@@ -4,6 +4,8 @@ overview: |
   Build production-grade tool registry with retrieval-first architecture. System evolves from "2 moderation tools" to growing ecosystem of retrieval + action + utility tools. Registry provides metadata; orchestrator enforces policies (latency budgets, mode restrictions, confirmation requirements) without modifying prompts. Tools defined in JSON Schema + markdown docs; compiled into a build artifact, validated with Ajv, versioned per session.
 
   Key architectural shift: Agent's job becomes "get more context, then act" - registry supports this with 1) retrieval tools (agent's eyes), 2) action tools (agent's hands), 3) orchestrator policies that keep voice fast and text flexible.
+
+  NOTE: This plan predates the `guide.md` documentation format and the meta-tool system. References to `doc_summary.md`/`doc.md` and older tool exposure patterns are deprecated. Current docs live in `tools/README.md` and `tools/ARCHITECTURE.md`.
 todos:
   - id: create-provider-infrastructure
     content: Create provider adapters (openai.js, gemini-native.js) and transports (transport.js, openai-transport.js, gemini-live-transport.js)

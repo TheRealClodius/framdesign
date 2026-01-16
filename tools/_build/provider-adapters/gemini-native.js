@@ -30,6 +30,16 @@ export function toGeminiNative(toolDefinition) {
 }
 
 /**
+ * Convert all tools to Gemini Native format
+ *
+ * @param {Array} tools - Array of tool definitions
+ * @returns {Array} - Gemini native tool schemas
+ */
+export function convertAllTools(tools) {
+  return tools.map(tool => toGeminiNative(tool));
+}
+
+/**
  * Recursively convert JSON Schema to Gemini SDK format
  *
  * @param {object} jsonSchema - JSON Schema object

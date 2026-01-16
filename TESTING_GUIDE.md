@@ -35,7 +35,7 @@ chmod +x scripts/Testing/integration/test-integration.sh
 2. **Expected console output:**
    ```
    Loading tool registry...
-   ✓ Tool registry loaded: v1.0.abc123de, 5 tools, git commit: ed2dc22
+  ✓ Tool registry loaded: v1.0.abc123de, 8 tools, git commit: ed2dc22
    Voice Server starting on port 8080
    ✓ Voice Server listening on port 8080
      WebSocket: ws://localhost:8080
@@ -44,7 +44,7 @@ chmod +x scripts/Testing/integration/test-integration.sh
 
 3. **Verify registry loaded:**
    - ✅ Look for "Tool registry loaded" message
-   - ✅ Check tool count is 5 (ignore_user, start_voice_session, end_voice_session, kb_search, kb_get)
+  - ✅ Check tool count is 5 (all directly callable)
    - ✅ No errors about missing tools or undefined variables
 
 4. **Test health endpoint:**
@@ -63,7 +63,7 @@ chmod +x scripts/Testing/integration/test-integration.sh
 
 **Issue: "Tool registry loaded" but no tools**
 - **Fix:** Run `npm run build:tools` first
-- **Check:** `tools/tool_registry.json` exists and has 5 tools
+- **Check:** `tools/tool_registry.json` exists and has 8 tools
 
 **Issue: "Cannot find module '@/tools/_core/registry'**
 - **Fix:** Check `tsconfig.json` has path alias: `"@/tools/*": ["./tools/*"]`
@@ -145,7 +145,7 @@ The test script covers this too:
 ### Voice Server ✅
 - [ ] Server starts without crashes
 - [ ] Registry loads: "Tool registry loaded: v..."
-- [ ] 5 tools loaded (check log)
+- [ ] 8 tools loaded in registry (check log)
 - [ ] Health endpoint responds
 - [ ] No undefined variable errors
 - [ ] Line 731 uses `geminiToolSchemas` (not hardcoded tools)
@@ -172,18 +172,18 @@ The test script covers this too:
 2. Check logs for "tool_execution" structured logs
 3. Verify tools are called via registry (not hardcoded)
 
-### Test All 5 Tools Available
+### Test Tool Exposure
 
-Check that Gemini receives all 5 tools:
+Check that all 5 tools are exposed directly to Gemini:
 - `ignore_user`
 - `start_voice_session`
 - `end_voice_session`
 - `kb_search`
 - `kb_get`
 
-**Voice Server:** Check `geminiToolSchemas` length (should be 5)
+**Voice Server:** Check `geminiToolSchemas` length in logs (should be 5)
 
-**Text Agent:** Check `providerSchemas.length` (should be 5)
+**Text Agent:** Check `providerSchemas.length` in logs (should be 5)
 
 ## Troubleshooting
 
@@ -225,8 +225,8 @@ If you see "state.get is not a function":
 
 ✅ **Step 8 Complete When:**
 - Voice server starts without crashes
-- Registry loads successfully
-- All 5 tools available
+- Registry loads successfully with 5 tools
+- All 5 tools are directly exposed to Gemini
 - Health endpoint works
 - No undefined variable errors
 

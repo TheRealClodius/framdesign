@@ -62,6 +62,6 @@ npx tsx scripts/Testing/kb/verify-kb-tools.ts
 ## Related Documentation
 
 - [KB Embedding](../../Embed/README.md)
-- [KB Tools Documentation](../../../tools/kb-search/doc.md)
-- [KB Tools Documentation](../../../tools/kb-get/doc.md)
+- [KB Tools Documentation](../../../tools/kb-search/guide.md)
+- [KB Tools Documentation](../../../tools/kb-get/guide.md)
 - [Vector Store Service](../../../lib/services/vector-store-service.ts)

@@ -2,13 +2,13 @@
  * KB Embedding Script
  *
  * Reads all markdown files from kb/ directory, generates embeddings using Gemini,
- * and stores them in LanceDB vector database.
+ * and stores them in Qdrant Cloud vector database.
  *
  * Process:
  * 1. Scans kb/ directory for .md files (excludes README.md)
  * 2. Splits each file into chunks (1000 chars, 200 char overlap)
  * 3. Generates embeddings via Gemini text-embedding-004 model
- * 4. Stores in LanceDB with unique chunk IDs: {entity_id}_chunk_{index}
+ * 4. Stores in Qdrant Cloud with unique chunk IDs: {entity_id}_chunk_{index}
  *
  * ⚠️ CRITICAL RULES FOR MODIFICATIONS:
  * 
@@ -24,12 +24,12 @@
  * 
  * 3. Metadata ID Exclusion:
  *    - vector-store-service.ts MUST skip 'id' when merging metadata
- *    - See vector-store-service.ts line 122
+ *    - See vector-store-service.ts payload building
  *    - This prevents overwriting document IDs
  * 
- * 4. Table Recreation:
- *    - Table is dropped/recreated on each run (clean schema)
- *    - See vector-store-service.ts line 138
+ * 4. Idempotent Upserts:
+ *    - Qdrant upsert() is idempotent - re-running script updates existing points
+ *    - No need to drop/recreate collection
  * 
  * See README.md and EMBEDDING_CHECKLIST.md in this directory for details.
  *
@@ -37,19 +37,23 @@
  *
  * Requirements:
  * - GEMINI_API_KEY in .env.local
- * - @lancedb/lancedb installed
- * - Node.js environment (native modules)
+ * - QDRANT_CLUSTER_ENDPOINT in .env.local
+ * - QDRANT_API_KEY in .env.local
+ * - @qdrant/js-client-rest installed
  */
+
+// Load environment variables from .env.local BEFORE any other imports
+// This ensures env vars are available when vector-store-service is imported
+import { config } from 'dotenv';
+import path from 'path';
+// Use override: true to ensure env vars override any existing values
+config({ path: path.join(process.cwd(), '.env.local'), override: true });
 
 import { GoogleGenAI } from '@google/genai';
 import fs from 'fs/promises';
-import path from 'path';
 import matter from 'gray-matter';
-import { config } from 'dotenv';
-import { upsertDocuments } from '../../lib/services/vector-store-service';
-
-// Load environment variables from .env.local
-config({ path: path.join(process.cwd(), '.env.local') });
+// Dynamic import to ensure env vars are loaded before vector-store-service reads them
+let upsertDocuments: typeof import('../../lib/services/vector-store-service').upsertDocuments;
 
 // Configuration
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
@@ -87,16 +91,62 @@ async function findMarkdownFiles(dir: string): Promise<string[]> {
 }
 
 /**
- * Split text into overlapping chunks
+ * Split text into overlapping chunks with word boundary awareness
+ * Ensures chunks don't break in the middle of words
  */
 function chunkText(text: string, chunkSize: number, overlap: number): string[] {
   const chunks: string[] = [];
   let start = 0;
+  let lastEnd = 0; // Track last end position to ensure progress
 
   while (start < text.length) {
-    const end = Math.min(start + chunkSize, text.length);
-    chunks.push(text.slice(start, end));
-    start += chunkSize - overlap;
+    let end = Math.min(start + chunkSize, text.length);
+    
+    // If not at the end of text, try to find a word boundary
+    if (end < text.length) {
+      // Look for the last space, newline, or punctuation within a reasonable range
+      const searchStart = Math.max(start, end - 100); // Search back up to 100 chars
+      const snippet = text.slice(searchStart, Math.min(end + 50, text.length)); // Look ahead 50 chars too
+      
+      // Try to find good break points (in order of preference)
+      const breakPoints = [
+        snippet.lastIndexOf('\n\n'), // Paragraph break
+        snippet.lastIndexOf('\n'),   // Line break
+        snippet.lastIndexOf('. '),   // Sentence end
+        snippet.lastIndexOf('! '),
+        snippet.lastIndexOf('? '),
+        snippet.lastIndexOf(', '),   // Clause break
+        snippet.lastIndexOf(' '),    // Word break
+      ];
+      
+      for (const breakPoint of breakPoints) {
+        if (breakPoint > 0 && breakPoint < snippet.length - 10) { // Ensure not too close to edges
+          end = searchStart + breakPoint + 1; // +1 to include the break character
+          break;
+        }
+      }
+    }
+    
+    const chunk = text.slice(start, end).trim();
+    if (chunk.length > 0) {
+      chunks.push(chunk);
+    }
+    
+    // Ensure we're making progress (prevent infinite loop)
+    if (end <= lastEnd) {
+      // Force progress if we didn't advance
+      end = lastEnd + Math.max(100, chunkSize / 2);
+    }
+    lastEnd = end;
+    
+    // Move start position, accounting for overlap
+    // But ensure we always move forward
+    start = Math.max(end - overlap, start + Math.floor(chunkSize / 2));
+    
+    // If we've reached the end, break
+    if (start >= text.length) {
+      break;
+    }
   }
 
   return chunks;
@@ -284,7 +334,12 @@ async function embedKB() {
 
   // Upsert all documents to vector store
   if (allDocuments.length > 0) {
-    console.log('\n💾 Storing embeddings in LanceDB...');
+    console.log('\n💾 Storing embeddings in Qdrant Cloud...');
+    // Dynamic import ensures env vars are loaded before module reads them
+    if (!upsertDocuments) {
+      const vectorStore = await import('../../lib/services/vector-store-service');
+      upsertDocuments = vectorStore.upsertDocuments;
+    }
     await upsertDocuments(allDocuments);
     console.log('✅ Successfully stored all embeddings!');
   }

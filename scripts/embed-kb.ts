@@ -52,16 +52,62 @@ async function findMarkdownFiles(dir: string): Promise<string[]> {
 }
 
 /**
- * Split text into overlapping chunks
+ * Split text into overlapping chunks with word boundary awareness
+ * Ensures chunks don't break in the middle of words
  */
 function chunkText(text: string, chunkSize: number, overlap: number): string[] {
   const chunks: string[] = [];
   let start = 0;
+  let lastEnd = 0; // Track last end position to ensure progress
 
   while (start < text.length) {
-    const end = Math.min(start + chunkSize, text.length);
-    chunks.push(text.slice(start, end));
-    start += chunkSize - overlap;
+    let end = Math.min(start + chunkSize, text.length);
+    
+    // If not at the end of text, try to find a word boundary
+    if (end < text.length) {
+      // Look for the last space, newline, or punctuation within a reasonable range
+      const searchStart = Math.max(start, end - 100); // Search back up to 100 chars
+      const snippet = text.slice(searchStart, Math.min(end + 50, text.length)); // Look ahead 50 chars too
+      
+      // Try to find good break points (in order of preference)
+      const breakPoints = [
+        snippet.lastIndexOf('\n\n'), // Paragraph break
+        snippet.lastIndexOf('\n'),   // Line break
+        snippet.lastIndexOf('. '),   // Sentence end
+        snippet.lastIndexOf('! '),
+        snippet.lastIndexOf('? '),
+        snippet.lastIndexOf(', '),   // Clause break
+        snippet.lastIndexOf(' '),    // Word break
+      ];
+      
+      for (const breakPoint of breakPoints) {
+        if (breakPoint > 0 && breakPoint < snippet.length - 10) { // Ensure not too close to edges
+          end = searchStart + breakPoint + 1; // +1 to include the break character
+          break;
+        }
+      }
+    }
+    
+    const chunk = text.slice(start, end).trim();
+    if (chunk.length > 0) {
+      chunks.push(chunk);
+    }
+    
+    // Ensure we're making progress (prevent infinite loop)
+    if (end <= lastEnd) {
+      // Force progress if we didn't advance
+      end = lastEnd + Math.max(100, chunkSize / 2);
+    }
+    lastEnd = end;
+    
+    // Move start position, accounting for overlap
+    // But ensure we always move forward
+    start = Math.max(end - overlap, start + Math.floor(chunkSize / 2));
+    
+    // If we've reached the end, break
+    if (start >= text.length) {
+      break;
+    }
   }
 
   return chunks;

@@ -1,104 +1,123 @@
 /**
- * Vector store service using LanceDB (local file-based) or API
+ * Vector store service using Qdrant Cloud
  * Manages KB document embeddings and similarity search
  * 
- * Supports two modes:
- * 1. Local mode: Direct LanceDB access (when VECTOR_SEARCH_API_URL not set)
- *    - Requires @lancedb/lancedb package (installed as optionalDependency)
- *    - NOT available in serverless environments (Vercel)
- * 2. API mode: HTTP API calls to vector-search-api service (when VECTOR_SEARCH_API_URL is set)
- *    - Required for Vercel (serverless, no persistent storage)
- *    - Does NOT require LanceDB to be installed
+ * Uses Qdrant Cloud HTTP API - works in all environments (local, Vercel, Railway)
  */
 
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Local LanceDB path (stores data in project directory)
-const LANCE_DB_PATH = path.join(__dirname, '../../.lancedb');
-const TABLE_NAME = 'kb_documents';
-const VECTOR_SEARCH_API_URL = process.env.VECTOR_SEARCH_API_URL;
-
-// Check if we're in API mode (required for serverless/Vercel)
-const IS_API_MODE = !!VECTOR_SEARCH_API_URL;
-
-// Lazy-loaded LanceDB module (dynamic import to avoid bundling issues)
-// Only loaded when LOCAL mode is used (not API mode)
-let lancedbModule: any = null;
-let db: any = null;
-let table: any = null;
+import { QdrantClient } from '@qdrant/js-client-rest';
+import { createHash } from 'crypto';
 
 /**
- * Dynamically import LanceDB (only when needed for local mode)
- * This prevents Next.js from trying to bundle native modules during module evaluation
- * 
- * IMPORTANT: This function should ONLY be called when NOT in API mode.
- * In API mode (serverless), LanceDB is not installed and this will fail.
+ * Convert string ID to integer for Qdrant
+ * Qdrant requires point IDs to be unsigned integers or UUIDs
+ * We use a hash function to deterministically convert string IDs to integers
  */
-async function getLanceDB() {
-  // Prevent LanceDB usage in API mode (serverless environments)
-  if (IS_API_MODE) {
-    throw new Error(
-      'LanceDB is not available in API mode (serverless). ' +
-      'VECTOR_SEARCH_API_URL is set, use the API endpoints instead.'
-    );
-  }
-  
-  if (!lancedbModule) {
-    try {
-      // Dynamic import using a variable to prevent Webpack static analysis
-      // This ensures Webpack doesn't try to bundle LanceDB when in API mode
-      const modulePath = '@lancedb/lancedb';
-      lancedbModule = await import(/* webpackIgnore: true */ modulePath);
-    } catch (error: any) {
+function stringIdToInteger(id: string): number {
+  // Use SHA-256 hash and take first 8 bytes as a 64-bit unsigned integer
+  // This ensures deterministic conversion while avoiding collisions
+  const hash = createHash('sha256').update(id).digest();
+  // Read first 8 bytes as BigInt, then convert to Number
+  // Use bitwise AND with 0x7FFFFFFF to ensure positive 32-bit integer
+  const hashInt = hash.readBigUInt64BE(0);
+  // Convert to 32-bit unsigned integer (Qdrant accepts up to 64-bit, but JS Number is safe for 32-bit)
+  return Number(hashInt & BigInt(0xFFFFFFFF));
+}
+
+// Qdrant configuration
+const QDRANT_CLUSTER_ENDPOINT = process.env.QDRANT_CLUSTER_ENDPOINT;
+const QDRANT_API_KEY = process.env.QDRANT_API_KEY;
+const COLLECTION_NAME = 'kb_documents';
+const VECTOR_SIZE = 768; // text-embedding-004 dimension
+
+// Lazy-loaded Qdrant client
+let qdrantClient: QdrantClient | null = null;
+
+/**
+ * Get or create Qdrant client
+ */
+function getQdrantClient(): QdrantClient {
+  if (!qdrantClient) {
+    if (!QDRANT_CLUSTER_ENDPOINT) {
       throw new Error(
-        `Failed to load LanceDB. This is expected in serverless environments. ` +
-        `For Vercel deployment, set VECTOR_SEARCH_API_URL to use the API mode. ` +
-        `Original error: ${error.message}`
+        'QDRANT_CLUSTER_ENDPOINT environment variable is required. ' +
+        'Set it to your Qdrant Cloud cluster URL.'
       );
     }
+
+    if (!QDRANT_API_KEY) {
+      throw new Error(
+        'QDRANT_API_KEY environment variable is required. ' +
+        'Set it to your Qdrant Cloud API key.'
+      );
+    }
+
+    qdrantClient = new QdrantClient({
+      url: QDRANT_CLUSTER_ENDPOINT,
+      apiKey: QDRANT_API_KEY,
+    });
   }
-  return lancedbModule;
+
+  return qdrantClient;
 }
 
 /**
- * Get or create LanceDB connection
+ * Ensure collection exists with proper configuration
  */
-async function getDB() {
-  if (!db) {
-    const lancedb = await getLanceDB();
-    db = await lancedb.connect(LANCE_DB_PATH);
-  }
-  return db;
-}
+async function ensureCollection(): Promise<void> {
+  const client = getQdrantClient();
 
-/**
- * Get or create the KB table
- */
-async function getTable() {
-  if (!table) {
-    const database = await getDB();
-    
-    try {
-      // Try to open existing table
-      table = await database.openTable(TABLE_NAME);
-    } catch (error: any) {
-      // Table doesn't exist, will be created on first insert
-      // Return null for now, will create on upsert
-      table = null;
+  try {
+    // Check if collection exists
+    const collections = await client.getCollections();
+    const exists = collections.collections.some(
+      (col) => col.name === COLLECTION_NAME
+    );
+
+    if (!exists) {
+      // Create collection with proper configuration
+      await client.createCollection(COLLECTION_NAME, {
+        vectors: {
+          size: VECTOR_SIZE,
+          distance: 'Cosine',
+        },
+      });
+
+      console.log(`[vector-store] Created collection ${COLLECTION_NAME}`);
+
+      // Create payload indexes for efficient filtering
+      try {
+        await client.createPayloadIndex(COLLECTION_NAME, {
+          field_name: 'entity_id',
+          field_schema: 'keyword',
+        });
+        await client.createPayloadIndex(COLLECTION_NAME, {
+          field_name: 'entity_type',
+          field_schema: 'keyword',
+        });
+        await client.createPayloadIndex(COLLECTION_NAME, {
+          field_name: 'file_path',
+          field_schema: 'keyword',
+        });
+        console.log('[vector-store] Created payload indexes (entity_id, entity_type, file_path)');
+      } catch (indexError: any) {
+        // Indexes might already exist or creation might fail - log but don't fail
+        console.warn('[vector-store] Warning creating indexes:', indexError.message);
+      }
+    }
+  } catch (error: any) {
+    // If collection already exists, that's fine
+    if (!error.message?.includes('already exists')) {
+      throw error;
     }
   }
-  return table!;
 }
 
 /**
  * Upsert documents into vector store
  * 
- * Drops and recreates the table on each call to ensure clean schema.
- * This prevents schema conflicts when metadata structure changes.
+ * Idempotent: Qdrant's upsert() updates existing points by ID, so re-running
+ * the embedding script is safe and won't create duplicates.
  * 
  * Important: The 'id' field in metadata is excluded to prevent overwriting
  * the document ID. Frontmatter 'id' should be stored as 'entity_id' instead.
@@ -119,79 +138,63 @@ export async function upsertDocuments(
   }>
 ): Promise<void> {
   try {
-    const database = await getDB();
-    
     if (documents.length === 0) {
       console.warn('[vector-store] No documents to upsert');
       return;
     }
 
-    // Prepare data for LanceDB (array of objects)
-    // Ensure all metadata values are primitives (string, number, boolean)
-    const data = documents.map(doc => {
-      const row: any = {
-        id: String(doc.id), // Ensure ID is a string
-        vector: doc.embedding,
+    const client = getQdrantClient();
+
+    // Ensure collection exists
+    await ensureCollection();
+
+    // Prepare points for Qdrant
+    const points = documents.map((doc) => {
+      // Build payload from metadata, excluding 'id' field
+      const payload: Record<string, any> = {
         text: String(doc.text),
       };
-      
-      // Add metadata fields, ensuring all values are primitives
-      // 
-      // ⚠️ CRITICAL: Skip 'id' field in metadata to prevent overwriting document ID
-      // The document ID (e.g., "lab:fram_design_chunk_0") is set above (line 112)
-      // If metadata contains an 'id' field, it would overwrite this unique chunk ID
-      // This causes all chunks from the same file to have duplicate IDs
-      // Frontmatter 'id' is stored as 'entity_id' in metadata (see embed-kb.ts line 155)
-      // See embed-kb.ts line 162 for the corresponding exclusion when building metadata
+
       if (doc.metadata) {
         for (const [key, value] of Object.entries(doc.metadata)) {
           // Skip 'id' field - it would overwrite the document ID
           if (key === 'id') continue;
           // Skip if value is null or undefined
           if (value === null || value === undefined) continue;
-          
-          // Ensure value is a primitive type
-          if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-            row[key] = value;
-          } else {
-            // Convert objects/arrays to JSON strings
-            row[key] = JSON.stringify(value);
+
+          // Qdrant payload supports: string, number, boolean, arrays, objects
+          if (
+            typeof value === 'string' ||
+            typeof value === 'number' ||
+            typeof value === 'boolean'
+          ) {
+            payload[key] = value;
+          } else if (Array.isArray(value)) {
+            payload[key] = value;
+          } else if (typeof value === 'object') {
+            // Convert objects to JSON strings for consistency
+            payload[key] = JSON.stringify(value);
           }
         }
       }
-      
-      return row;
+
+      // Convert string ID to integer for Qdrant
+      // Store original string ID in payload for retrieval
+      const pointId = stringIdToInteger(doc.id);
+      payload.original_id = doc.id; // Store original string ID in payload
+
+      return {
+        id: pointId, // Point ID: integer hash of {entity_id}_chunk_{index}
+        vector: doc.embedding, // 768-dimensional vector
+        payload: payload,
+      };
     });
 
-    // Check if table exists
-    let currentTable: any = null;
-    try {
-      currentTable = await database.openTable(TABLE_NAME);
-    } catch {
-      // Table doesn't exist, create it
-    }
-
-    if (currentTable) {
-      // Table exists - drop and recreate to avoid schema conflicts
-      // 
-      // ⚠️ NOTE: We drop and recreate instead of using mergeInsert to ensure:
-      // 1. Clean schema matching current metadata structure
-      // 2. No conflicts from schema changes
-      // 3. Consistent data structure
-      // If you need to preserve existing data, modify to use mergeInsert instead
-      try {
-        await database.dropTable(TABLE_NAME);
-        console.log(`[vector-store] Dropped existing table ${TABLE_NAME} for schema refresh`);
-      } catch (error: any) {
-        // Ignore errors if table doesn't exist
-        if (!error.message?.includes('not found')) {
-          console.warn(`[vector-store] Warning dropping table:`, error.message);
-        }
-      }
-    }
-    
-    // Create new table with fresh schema
-    table = await database.createTable(TABLE_NAME, data);
+    // Upsert points (idempotent operation)
+    await client.upsert(COLLECTION_NAME, {
+      wait: true,
+      points: points,
+    });
 
     console.log(`[vector-store] Upserted ${documents.length} documents`);
   } catch (error) {
@@ -202,10 +205,10 @@ export async function upsertDocuments(
 
 /**
  * Search for similar documents
- * @param queryEmbedding - Query embedding vector (not used in API mode)
+ * @param queryEmbedding - Query embedding vector (768 dimensions)
  * @param topK - Number of results to return
- * @param filters - Optional metadata filters
- * @param queryText - Query text (required for API mode)
+ * @param filters - Optional metadata filters (e.g., { entity_id: "lab:fram_design" })
+ * @param queryText - Query text (not used, kept for API compatibility)
  * @returns Array of search results with id, text, metadata, distance, score
  */
 export async function searchSimilar(
@@ -220,171 +223,171 @@ export async function searchSimilar(
   distance: number;
   score: number;
 }>> {
-  // Use API mode if configured (required for Vercel/serverless)
-  if (IS_API_MODE) {
-    if (!queryText) {
-      throw new Error('[vector-store] API mode requires queryText parameter');
-    }
-    
-    const response = await fetch(`${VECTOR_SEARCH_API_URL}/search`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        query: queryText,
-        top_k: topK,
-        filters: filters || {},
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => 'Unknown error');
-      throw new Error(`[vector-store] API search failed: ${response.status} ${errorText}`);
-    }
-    
-    const data = await response.json();
-    if (!data.ok || !data.data?.results) {
-      throw new Error(`[vector-store] API returned invalid response: ${JSON.stringify(data)}`);
-    }
-    
-    // API returns grouped documents, convert to chunk format
-    return data.data.results.flatMap((doc: any) => 
-      doc.chunks.map((chunk: any, idx: number) => ({
-        id: `${doc.id}_chunk_${idx}`,
-        text: chunk.text,
-        metadata: doc.metadata,
-        distance: 1 - chunk.score,
-        score: chunk.score,
-      }))
-    );
-  }
-
-  // Local mode: Direct LanceDB access
   try {
-    const database = await getDB();
-    
-    let currentTable: any;
-    try {
-      currentTable = await database.openTable(TABLE_NAME);
-    } catch (error) {
-      // Table doesn't exist
-      return [];
+    const client = getQdrantClient();
+
+    // Build filter if provided
+    let queryFilter: any = undefined;
+    if (filters && Object.keys(filters).length > 0) {
+      const mustConditions = Object.entries(filters).map(([key, value]) => ({
+        key: key,
+        match: { value: value },
+      }));
+
+      queryFilter = {
+        must: mustConditions,
+      };
     }
 
     // Perform vector search
-    const results = await currentTable
-      .vectorSearch(queryEmbedding)
-      .limit(topK)
-      .toArray();
+    const results = await client.search(COLLECTION_NAME, {
+      vector: queryEmbedding,
+      limit: topK,
+      filter: queryFilter,
+      with_payload: true,
+    });
 
     // Transform results to match expected format
-    return results.map((result: any) => {
-      // Extract metadata (all fields except id, vector, text)
-      const { id, vector, text, ...metadata } = result;
-      
-      // Calculate score from distance (LanceDB returns distance, we want similarity)
-      // Distance is typically cosine distance (0 = identical, 2 = opposite)
-      // Convert to similarity score (1 = identical, 0 = opposite)
-      const distance = result._distance || 0;
-      const score = Math.max(0, 1 - distance / 2); // Normalize to 0-1 range
+    return results.map((result) => {
+      // Extract text from payload
+      const text = (result.payload?.text as string) || '';
+
+      // Extract metadata (all payload fields except 'text' and 'original_id')
+      const metadata: Record<string, any> = {};
+      if (result.payload) {
+        for (const [key, value] of Object.entries(result.payload)) {
+          if (key !== 'text' && key !== 'original_id') {
+            metadata[key] = value;
+          }
+        }
+      }
+
+      // Use original_id from payload if available, otherwise convert integer ID to string
+      const documentId = (result.payload?.original_id as string) || String(result.id);
+
+      // Qdrant returns score (similarity), convert to distance
+      // Cosine similarity: 1 = identical, 0 = orthogonal, -1 = opposite
+      // Distance: 0 = identical, 1 = orthogonal, 2 = opposite
+      const score = result.score || 0;
+      const distance = 1 - score; // Cosine distance
 
       return {
-        id: String(id),
-        text: String(text || ''),
-        metadata: metadata || {},
-        distance,
-        score,
+        id: documentId, // Return original string ID
+        text: text,
+        metadata: metadata,
+        distance: distance,
+        score: score,
       };
     });
-  } catch (error) {
+  } catch (error: any) {
+    // If collection doesn't exist, return empty results
+    if (error.message?.includes('doesn\'t exist') || error.message?.includes('not found')) {
+      return [];
+    }
+    // Log detailed error information from Qdrant
     console.error('[vector-store] Error searching:', error);
+    if (error.data) {
+      console.error('[vector-store] Qdrant error details:', JSON.stringify(error.data, null, 2));
+    }
     throw error;
   }
 }
 
 /**
  * Delete documents by IDs
- * @param ids - Array of document IDs to delete
+ * @param ids - Array of document string IDs to delete
  */
 export async function deleteDocuments(ids: string[]): Promise<void> {
   try {
-    const database = await getDB();
-    
-    let currentTable: any;
-    try {
-      currentTable = await database.openTable(TABLE_NAME);
-    } catch {
-      // Table doesn't exist, nothing to delete
+    if (ids.length === 0) {
       return;
     }
 
-    // Delete by filtering out IDs
-    // Note: LanceDB doesn't have direct delete by ID, so we need to filter
-    const allData = await currentTable.query().toArray();
-    const filteredData = allData.filter((row: any) => !ids.includes(String(row.id)));
-    
-    if (filteredData.length < allData.length) {
-      // Recreate table with filtered data
-      await database.dropTable(TABLE_NAME);
-      if (filteredData.length > 0) {
-        table = await database.createTable(TABLE_NAME, filteredData);
-      }
-    }
+    const client = getQdrantClient();
+
+    // Convert string IDs to integers for Qdrant
+    const pointIds = ids.map(stringIdToInteger);
+
+    // Delete points by IDs
+    await client.delete(COLLECTION_NAME, {
+      wait: true,
+      points: pointIds,
+    });
 
     console.log(`[vector-store] Deleted ${ids.length} documents`);
-  } catch (error) {
+  } catch (error: any) {
+    // If collection doesn't exist, nothing to delete
+    if (error.message?.includes('doesn\'t exist') || error.message?.includes('not found')) {
+      return;
+    }
     console.error('[vector-store] Error deleting documents:', error);
     throw error;
   }
 }
 
 /**
- * Get all document IDs in the table
+ * Get all document IDs in the collection
  */
 export async function getAllDocumentIds(): Promise<string[]> {
   try {
-    const database = await getDB();
-    
-    let currentTable: any;
-    try {
-      currentTable = await database.openTable(TABLE_NAME);
-    } catch {
-      return [];
+    const client = getQdrantClient();
+
+    // Scroll through all points to get IDs
+    const allIds: string[] = [];
+    let offset: string | number | Record<string, unknown> | undefined = undefined;
+
+    while (true) {
+      // Scroll with payload to get original_id
+      const result = await client.scroll(COLLECTION_NAME, {
+        limit: 100,
+        offset: offset,
+        with_payload: true,
+        with_vector: false,
+      });
+      
+      // Add IDs from this batch
+      for (const point of result.points) {
+        // Use original_id from payload if available, otherwise convert integer ID to string
+        const documentId = (point.payload?.original_id as string) || String(point.id);
+        allIds.push(documentId);
+      }
+      
+      // Check if there are more points
+      if (!result.next_page_offset) {
+        break;
+      }
+      offset = result.next_page_offset;
     }
 
-    const allData = await currentTable.query().toArray();
-    return allData.map((row: any) => String(row.id));
-  } catch (error) {
+    return allIds;
+  } catch (error: any) {
+    // If collection doesn't exist, return empty array
+    if (error.message?.includes('doesn\'t exist') || error.message?.includes('not found')) {
+      return [];
+    }
     console.error('[vector-store] Error getting document IDs:', error);
     return [];
   }
 }
 
 /**
- * Check if table exists and has documents
+ * Check if collection exists and has documents
  */
 export async function hasDocuments(): Promise<boolean> {
-  // API mode (required for serverless/Vercel)
-  if (IS_API_MODE) {
-    try {
-      const response = await fetch(`${VECTOR_SEARCH_API_URL}/status`);
-      if (response.ok) {
-        const data = await response.json();
-        return data.initialized && data.document_count > 0;
-      }
-      return false;
-    } catch (error) {
-      console.warn('[vector-store] API status check failed:', error);
+  try {
+    const client = getQdrantClient();
+
+    // Get collection info
+    const collectionInfo = await client.getCollection(COLLECTION_NAME);
+
+    // Check if collection has points
+    return (collectionInfo.points_count || 0) > 0;
+  } catch (error: any) {
+    // If collection doesn't exist, return false
+    if (error.message?.includes('doesn\'t exist') || error.message?.includes('not found')) {
       return false;
     }
-  }
-
-  // Local mode check (not available in serverless)
-  try {
-    const ids = await getAllDocumentIds();
-    return ids.length > 0;
-  } catch (error) {
+    console.warn('[vector-store] Error checking documents:', error);
     return false;
   }
 }

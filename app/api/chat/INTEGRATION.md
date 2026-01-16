@@ -2,7 +2,7 @@
 
 ## Overview
 
-The text agent (Next.js API route at `app/api/chat/route.ts`) integrates with the shared tool registry to provide text chat capabilities with any LLM provider (OpenAI, Anthropic, etc.).
+The text agent (Next.js API route at `app/api/chat/route.ts`) integrates with the shared tool registry to provide text chat capabilities with any LLM provider (OpenAI, Anthropic, etc.). Tool exposure is controlled by `USE_META_TOOLS`.
 
 ## Import Paths
 
@@ -44,7 +44,7 @@ export async function POST(request: Request) {
     console.log(`✓ Tool registry loaded: v${toolRegistry.getVersion()}`);
   }
 
-  // Get provider schemas for Gemini 3
+  // Get provider schemas for Gemini 3 (filtered by USE_META_TOOLS)
   const geminiNativeSchemas = toolRegistry.getProviderSchemas('geminiNative');
   const providerSchemas = geminiNativeSchemas.map(schema => {
     // Convert to JSON Schema format for Gemini 3
@@ -87,7 +87,7 @@ function convertGeminiSchemaToJsonSchema(schema: any): any {
 ```typescript
 // Use in Gemini generateContentStream
 const config = {
-  tools: [{ functionDeclarations: providerSchemas }],
+  tools: [{ functionDeclarations: providerSchemas }], // Meta-tools only if USE_META_TOOLS=true
   systemInstruction: FRAM_SYSTEM_PROMPT
 };
 

@@ -23,8 +23,9 @@ npx tsx scripts/Embed/verify-kb-embedding.ts
 ## Requirements
 
 - `GEMINI_API_KEY` in `.env.local`
-- `@lancedb/lancedb` installed
-- Node.js environment (LanceDB uses native modules)
+- `QDRANT_CLUSTER_ENDPOINT` in `.env.local`
+- `QDRANT_API_KEY` in `.env.local`
+- `@qdrant/js-client-rest` installed
 
 ## ⚠️ CRITICAL NOTES FOR FUTURE MODIFICATIONS
 
@@ -42,8 +43,8 @@ When modifying the embedding script or vector store service, **MUST** follow the
 - See line 185 in `embed-kb.ts`: `if (key === 'id') continue;`
 
 ### 3. Metadata ID Exclusion
-- **ALWAYS** skip `id` field when merging metadata into LanceDB rows
-- See `lib/services/vector-store-service.ts` line 122: `if (key === 'id') continue;`
+- **ALWAYS** skip `id` field when merging metadata into Qdrant payloads
+- See `lib/services/vector-store-service.ts` for metadata merge logic
 - This is critical - failing to do this causes duplicate chunk IDs
 
 ### 4. Table Recreation
@@ -107,7 +108,7 @@ This will catch:
 
 ## Related Files
 
-- `lib/services/vector-store-service.ts` - LanceDB operations
+- `lib/services/vector-store-service.ts` - Qdrant operations
 - `lib/services/embedding-service.ts` - Embedding generation
 - `docs/KB_EMBEDDING.md` - Comprehensive guide
 - `kb/README.md` - KB structure and schema
@@ -117,7 +118,7 @@ This will catch:
 1. **Scans** `kb/` directory for `.md` files (excludes `README.md`)
 2. **Splits** each file into chunks (1000 chars, 200 char overlap)
 3. **Generates** embeddings via Gemini `text-embedding-004` model (768 dimensions)
-4. **Stores** in LanceDB with unique chunk IDs: `{entity_id}_chunk_{index}`
+4. **Stores** in Qdrant Cloud with unique chunk IDs: `{entity_id}_chunk_{index}`
 
 ## See Also
 

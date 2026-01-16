@@ -335,7 +335,7 @@ const [result1, result2, result3] = await Promise.all([
 
 **Current State:**
 - Registry load time tracked in metrics
-- Typically < 1 second for 5 tools
+- Typically < 1 second for 8 tools (meta-tool mode reduces schema payloads)
 
 **Optimization Tips:**
 1. Lazy load handlers (already implemented)

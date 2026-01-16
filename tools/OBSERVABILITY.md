@@ -260,9 +260,9 @@ if (metrics.context.sessionInitTokens > 20000) {
 
 **At session initialization:**
 ```
-[Context] Session init: ~12,847 tokens
-  - System prompt: ~3,215 tokens
-  - Tool declarations: ~9,632 tokens
+[Context] Session init: ~X tokens
+  - System prompt: ~Y tokens
+  - Tool declarations: ~Z tokens (depends on USE_META_TOOLS)
 ```
 
 **Components:**
@@ -274,7 +274,7 @@ if (metrics.context.sessionInitTokens > 20000) {
 2. **Tool declarations** (all tools combined)
    - Schema definitions
    - Full guide.md documentation
-   - Typically 8-10k tokens for 5 tools (~1.6-2k per tool)
+   - Token cost depends on exposure mode (meta-tools only vs full concrete tools)
 
 3. **Conversation history** (grows over session)
    - User messages + agent responses
@@ -640,7 +640,7 @@ grep "ToolError" voice-server.log | tail -50
 **Solutions:**
 1. Check error types (VALIDATION, INTERNAL, etc.)
 2. Review tool handler error handling
-3. Verify external dependencies (LanceDB, APIs)
+3. Verify external dependencies (Qdrant, APIs)
 4. Check schema validation rules
 
 ## Best Practices
@@ -666,8 +666,8 @@ grep "ToolError" voice-server.log | tail -50
 - Track which tools trigger loops most often
 
 ### 5. Plan for Scale
-- Current system handles 5 tools comfortably
-- At 20+ tools, may need to optimize tool declaration sizes
+- Current system handles 8 tools comfortably
+- At 20+ tools, consider keeping `USE_META_TOOLS=true` to reduce tool declaration size
 - Consider lazy loading or tool categories for very large tool sets
 
 ## Future Enhancements

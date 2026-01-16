@@ -4,7 +4,7 @@ This guide explains how the Knowledge Base (KB) embedding system works and how t
 
 ## Overview
 
-The KB embedding system converts markdown files in the `kb/` directory into vector embeddings stored in LanceDB. This enables semantic search across KB entities (people, labs, projects) using natural language queries.
+The KB embedding system converts markdown files in the `kb/` directory into vector embeddings stored in Qdrant Cloud. This enables semantic search across KB entities (people, labs, projects) using natural language queries.
 
 ## Architecture
 
@@ -13,11 +13,11 @@ The KB embedding system converts markdown files in the `kb/` directory into vect
 1. **Embedding Script** (`scripts/Embed/embed-kb.ts`)
    - Processes KB markdown files
    - Generates embeddings using Gemini API
-   - Stores in LanceDB
+   - Stores in Qdrant Cloud
 
 2. **Vector Store Service** (`lib/services/vector-store-service.ts`)
-   - Manages LanceDB operations
-   - Supports local and API modes
+   - Manages Qdrant Cloud operations
+   - Works in all environments (local, Vercel, Railway)
    - Handles search and retrieval
 
 3. **Embedding Service** (`lib/services/embedding-service.ts`)
@@ -48,8 +48,8 @@ The KB embedding system converts markdown files in the `kb/` directory into vect
 
 4. **Storage**
    - Creates unique ID for each chunk: `{entity_id}_chunk_{index}`
-   - Stores in LanceDB table `kb_documents`
-   - Table is dropped and recreated on each run (clean schema)
+   - Stores in Qdrant Cloud collection `kb_documents`
+   - Uses idempotent upsert (re-running script updates existing points)
 
 ### Document ID Format
 
@@ -98,12 +98,13 @@ npx tsx scripts/Embed/embed-kb.ts
 
 **Requirements**:
 - `GEMINI_API_KEY` must be set in `.env.local`
-- `@lancedb/lancedb` package installed
-- Node.js environment (LanceDB uses native modules)
+- `QDRANT_CLUSTER_ENDPOINT` must be set in `.env.local`
+- `QDRANT_API_KEY` must be set in `.env.local`
+- `@qdrant/js-client-rest` package installed
 
 **Output**:
 - Processes each file and shows chunk count
-- Stores embeddings in `.lancedb/kb_documents.lance/`
+- Stores embeddings in Qdrant Cloud collection `kb_documents`
 - Prints summary with total chunks and vector dimension
 
 ### Verifying Embedding
@@ -118,23 +119,16 @@ This script checks:
 - ✅ No orphaned chunks exist
 - ⚠️ Reports any missing files or issues
 
-## Vector Store Modes
+## Vector Store Architecture
 
-### Local Mode (Default)
+### Qdrant Cloud
 
-When `VECTOR_SEARCH_API_URL` is not set:
-- Direct LanceDB access
-- Data stored in `.lancedb/` directory
-- Suitable for local development
-- Requires Node.js environment
-
-### API Mode (Vercel)
-
-When `VECTOR_SEARCH_API_URL` is set:
-- HTTP API calls to vector-search-api service
-- Required for serverless environments (Vercel)
-- No local file system access needed
-- API handles LanceDB operations
+The system uses Qdrant Cloud for vector storage:
+- **HTTP API**: Works in all environments (local, Vercel, Railway)
+- **Managed Service**: No local file system or native modules required
+- **Free Tier**: 1GB free forever (perfect for small KBs)
+- **Idempotent Operations**: Safe to re-run embedding script
+- **Payload Indexes**: Efficient filtering by entity_id, entity_type, file_path
 
 ## Troubleshooting
 
@@ -148,22 +142,21 @@ When `VECTOR_SEARCH_API_URL` is set:
 - **Cause**: Frontmatter `id` overwriting document IDs
 - **Solution**: Fixed in current version - `id` is excluded from metadata
 
-**Issue**: "LanceDB not found" error
-- **Cause**: Native module not available (e.g., in browser)
-- **Solution**: Use API mode or run in Node.js environment
+**Issue**: "QDRANT_CLUSTER_ENDPOINT is required" error
+- **Cause**: Environment variable not set
+- **Solution**: Set `QDRANT_CLUSTER_ENDPOINT` and `QDRANT_API_KEY` in `.env.local`
 
 **Issue**: Embedding API rate limits
 - **Cause**: Too many requests to Gemini API
 - **Solution**: Script includes 100ms delay between chunks, increase if needed
 
-### Schema Conflicts
+### Idempotent Upserts
 
-The vector store service drops and recreates the table on each embedding run. This ensures:
-- Clean schema matching current metadata structure
-- No conflicts from schema changes
-- Consistent data structure
-
-If you need to preserve existing data, modify `upsertDocuments()` to use `mergeInsert()` instead of dropping the table.
+Qdrant's `upsert()` operation is idempotent by design:
+- Re-running the embedding script updates existing points by ID
+- No duplicates created
+- No need to drop/recreate collection
+- Safe to run multiple times
 
 ## Best Practices
 

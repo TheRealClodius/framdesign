@@ -504,25 +504,27 @@ Check `guide.md` first non-heading line exists and is under 250 characters
 Both agents are now using the unified tool registry system:
 
 - ✅ **Voice Server** (`voice-server/server.js`)
-  - Registry loads at startup
-  - All 5 tools available via `geminiToolSchemas`
+  - Registry loads at startup from main `/tools` directory
+  - All 5 tools directly exposed to Gemini Live API
   - State controller manages session state
   - Transport layer handles tool call/response protocol
   - Policy enforcement (budgets, mode restrictions) operational
 
 - ✅ **Text Agent** (`app/api/chat/route.ts`)
-  - Registry loads on first API request
-  - All 5 tools available via `providerSchemas` (JSON Schema format)
+  - Registry loads on first API request from main `/tools` directory
+  - All 5 tools directly exposed via `parametersJsonSchema`
   - State controller initialized per request
   - Tool execution via `toolRegistry.executeTool()`
-  - Next.js webpack configuration for handler loading
+  - Uses canonical JSON Schema (no conversion needed)
 
-**Available Tools:** 5 tools
+**Available Tools:** 5 tools, all directly callable
 1. `ignore_user` - Block disrespectful users (text + voice)
 2. `start_voice_session` - Initiate voice mode (text only)
 3. `end_voice_session` - End voice session gracefully (voice only)
 4. `kb_search` - Search knowledge base (text + voice)
 5. `kb_get` - Get knowledge base entity (text + voice)
+
+**Tool Calling:** Direct mode only - models call tools directly, no discovery step needed
 
 ## Documentation Maintenance
 
@@ -549,7 +551,7 @@ To prevent documentation conflicts and drift:
 
 **5. Voice behavior: ONLY in `/voice-server/prompts/*.md`**
 - System personality, voice-specific behavior
-- NO tool documentation here (tools pull from registry)
+- No tool documentation here (tool docs come from registry)
 
 ### Before Adding Documentation
 

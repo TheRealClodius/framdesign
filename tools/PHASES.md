@@ -207,7 +207,7 @@ Output: tools/tool_registry.json (gitignored)
 
 **Testing Results:**
 - ✅ Registry loads successfully at startup
-- ✅ All 5 tools available in Gemini session config
+- ✅ Tool exposure controlled by `USE_META_TOOLS` (meta-tools only or all concrete tools)
 - ✅ Health endpoint responds correctly
 - ✅ No crashes or undefined variable errors
 - ✅ State controller manages all session state
@@ -243,7 +243,7 @@ Output: tools/tool_registry.json (gitignored)
 
 **Testing Results:**
 - ✅ Registry loads successfully on first API request
-- ✅ All 5 tools available in Gemini API calls
+- ✅ Tool exposure controlled by `USE_META_TOOLS` (meta-tools only or all concrete tools)
 - ✅ API responds correctly
 - ✅ No "undefined" or "not found" errors
 - ✅ Schema format compatible with Gemini 3
@@ -261,7 +261,7 @@ Output: tools/tool_registry.json (gitignored)
 - ✅ Voice agent fully integrated with registry
 - ✅ Text agent integrated with registry
 - ✅ Policy enforcement operational
-- ✅ All 5 tools available in both agents
+- ✅ All concrete tools available in both agents; meta-tools available when enabled
 - ✅ State management via state controller
 - ✅ Structured audit logging
 
@@ -321,7 +321,7 @@ Output: tools/tool_registry.json (gitignored)
    - ✅ **Available in both agents**
 
 **Build Status:**
-- ✅ All 5 tools build successfully
+- ✅ All concrete tools + meta-tools build successfully
 - ✅ Registry version: 1.0.249a595d (current)
 - ✅ All validations passing
 
@@ -335,7 +335,7 @@ Output: tools/tool_registry.json (gitignored)
 - ✅ Tools build and validate correctly
 - ✅ Tools work via registry in both agents
 - ✅ Old hardcoded tools removed cleanly
-- ✅ All 5 tools available and functional
+- ✅ All concrete tools + meta-tools available and functional
 
 ---
 
@@ -455,7 +455,7 @@ Output: tools/tool_registry.json (gitignored)
 **Integration Status:** ✅ **COMPLETE**
 - ✅ Voice server fully integrated with registry
 - ✅ Text agent fully integrated with registry
-- ✅ All 5 tools available and functional
+- ✅ All concrete tools + meta-tools available and functional
 - ✅ State management via state controller
 - ✅ Policy enforcement operational
 - ✅ Structured audit logging implemented
@@ -464,13 +464,14 @@ Output: tools/tool_registry.json (gitignored)
 - ✅ Core infrastructure (error types, registry, state controller)
 - ✅ Build system (tool builder, provider adapters)
 - ✅ Transport layer (Gemini Live transport)
-- ✅ All 5 tools (ignore_user, start_voice_session, end_voice_session, kb_search, kb_get)
+- ✅ Concrete tools: ignore_user, start_voice_session, end_voice_session, kb_search, kb_get
+- ✅ Meta-tools: list_tools, describe_tool, run_tool
 - ✅ Registry artifact (tool_registry.json generated)
 - ✅ voice-server/server.js (fully integrated with registry)
 - ✅ app/api/chat/route.ts (fully integrated with registry)
 - ✅ next.config.ts (webpack configuration for tool handlers)
 
-**Current Tool Count:** 5 tools
+**Current Tool Count:** 8 tools (5 concrete + 3 meta-tools)
 1. `ignore_user` - Action tool (text + voice)
 2. `start_voice_session` - Action tool (text only)
 3. `end_voice_session` - Action tool (voice only)

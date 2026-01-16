@@ -14,7 +14,7 @@
  * - NO provider SDK imports (Type.* enums, etc.)
  */
 
-import { readFileSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
 import { join, dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
@@ -22,7 +22,13 @@ import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
 import { ErrorType, ToolError } from './error-types.js';
 import { validateToolResponse, TOOL_RESPONSE_SCHEMA_VERSION } from './tool-response.js';
-import { recordToolExecution, recordError, recordBudgetViolation, recordRegistryLoadTime } from './metrics.js';
+import {
+  recordToolExecution,
+  recordError,
+  recordBudgetViolation,
+  recordRegistryLoadTime,
+  recordResponseMetrics
+} from './metrics.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REGISTRY_PATH = join(__dirname, '..', 'tool_registry.json');
@@ -68,11 +74,41 @@ class ToolRegistry {
     }
 
     console.log('Loading tool registry...');
+    console.log(`[Registry] Resolved registry path: ${REGISTRY_PATH}`);
+    console.log(`[Registry] __dirname: ${__dirname}`);
     const loadStartTime = Date.now();
 
+    // Check if registry file exists
+    if (!existsSync(REGISTRY_PATH)) {
+      const errorMessage = `Tool registry file not found at ${REGISTRY_PATH}. ` +
+        `This file should be generated during build by running 'npm run build:tools'. ` +
+        `In production, ensure the build command includes 'npm run build:tools' before 'npm run build'.`;
+      console.error(`[Registry] ${errorMessage}`);
+      console.error(`[Registry] Current working directory: ${process.cwd()}`);
+      console.error(`[Registry] File system check failed - file does not exist`);
+      throw new Error(errorMessage);
+    }
+
     // Read registry file
-    const registryJson = readFileSync(REGISTRY_PATH, 'utf-8');
-    const registry = JSON.parse(registryJson);
+    let registryJson;
+    try {
+      registryJson = readFileSync(REGISTRY_PATH, 'utf-8');
+    } catch (error) {
+      const errorMessage = `Failed to read tool registry file at ${REGISTRY_PATH}: ${error.message}. ` +
+        `Ensure the file exists and is readable.`;
+      console.error(`[Registry] ${errorMessage}`);
+      throw new Error(errorMessage);
+    }
+
+    let registry;
+    try {
+      registry = JSON.parse(registryJson);
+    } catch (error) {
+      const errorMessage = `Failed to parse tool registry JSON at ${REGISTRY_PATH}: ${error.message}. ` +
+        `The file may be corrupted or invalid.`;
+      console.error(`[Registry] ${errorMessage}`);
+      throw new Error(errorMessage);
+    }
 
     this.version = registry.version;
     this.gitCommit = registry.gitCommit;
@@ -329,7 +365,12 @@ class ToolRegistry {
       result.meta.responseSchemaVersion = TOOL_RESPONSE_SCHEMA_VERSION;
 
       // Record metrics
-      recordToolExecution(toolId, result.meta.duration, true);
+      const success = result.ok === true;
+      recordToolExecution(toolId, result.meta.duration, success);
+      if (!success) {
+        recordError(toolId, result.error?.type || ErrorType.INTERNAL);
+      }
+      recordResponseMetrics(toolId, success ? result.data : result.error);
       
       // Check for budget violation
       if (result.meta.duration > tool.latencyBudgetMs) {
