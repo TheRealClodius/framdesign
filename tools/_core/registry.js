@@ -78,36 +78,52 @@ class ToolRegistry {
     console.log(`[Registry] __dirname: ${__dirname}`);
     const loadStartTime = Date.now();
 
-    // Check if registry file exists
-    if (!existsSync(REGISTRY_PATH)) {
-      const errorMessage = `Tool registry file not found at ${REGISTRY_PATH}. ` +
-        `This file should be generated during build by running 'npm run build:tools'. ` +
-        `In production, ensure the build command includes 'npm run build:tools' before 'npm run build'.`;
-      console.error(`[Registry] ${errorMessage}`);
-      console.error(`[Registry] Current working directory: ${process.cwd()}`);
-      console.error(`[Registry] File system check failed - file does not exist`);
-      throw new Error(errorMessage);
-    }
-
-    // Read registry file
-    let registryJson;
-    try {
-      registryJson = readFileSync(REGISTRY_PATH, 'utf-8');
-    } catch (error) {
-      const errorMessage = `Failed to read tool registry file at ${REGISTRY_PATH}: ${error.message}. ` +
-        `Ensure the file exists and is readable.`;
-      console.error(`[Registry] ${errorMessage}`);
-      throw new Error(errorMessage);
-    }
-
+    // Try multiple approaches to load the registry:
+    // 1. Dynamic import (works with Webpack bundlers like Next.js)
+    // 2. File system read (works in Node.js like voice-server)
     let registry;
+    
+    // Approach 1: Try dynamic import (works in bundled environments)
     try {
-      registry = JSON.parse(registryJson);
-    } catch (error) {
-      const errorMessage = `Failed to parse tool registry JSON at ${REGISTRY_PATH}: ${error.message}. ` +
-        `The file may be corrupted or invalid.`;
-      console.error(`[Registry] ${errorMessage}`);
-      throw new Error(errorMessage);
+      console.log('[Registry] Attempting dynamic import...');
+      // Use dynamic import with JSON assertion - Webpack will bundle this
+      const registryModule = await import('../tool_registry.json', { with: { type: 'json' } });
+      registry = registryModule.default;
+      console.log('[Registry] ✓ Loaded via dynamic import');
+    } catch (importError) {
+      console.log(`[Registry] Dynamic import failed: ${importError.message}`);
+      console.log('[Registry] Falling back to file system read...');
+      
+      // Approach 2: File system read (works in Node.js)
+      if (!existsSync(REGISTRY_PATH)) {
+        const errorMessage = `Tool registry file not found at ${REGISTRY_PATH}. ` +
+          `This file should be generated during build by running 'npm run build:tools'. ` +
+          `In production, ensure the build command includes 'npm run build:tools' before 'npm run build'.`;
+        console.error(`[Registry] ${errorMessage}`);
+        console.error(`[Registry] Current working directory: ${process.cwd()}`);
+        console.error(`[Registry] File system check failed - file does not exist`);
+        throw new Error(errorMessage);
+      }
+
+      let registryJson;
+      try {
+        registryJson = readFileSync(REGISTRY_PATH, 'utf-8');
+      } catch (error) {
+        const errorMessage = `Failed to read tool registry file at ${REGISTRY_PATH}: ${error.message}. ` +
+          `Ensure the file exists and is readable.`;
+        console.error(`[Registry] ${errorMessage}`);
+        throw new Error(errorMessage);
+      }
+
+      try {
+        registry = JSON.parse(registryJson);
+        console.log('[Registry] ✓ Loaded via file system');
+      } catch (error) {
+        const errorMessage = `Failed to parse tool registry JSON at ${REGISTRY_PATH}: ${error.message}. ` +
+          `The file may be corrupted or invalid.`;
+        console.error(`[Registry] ${errorMessage}`);
+        throw new Error(errorMessage);
+      }
     }
 
     this.version = registry.version;
