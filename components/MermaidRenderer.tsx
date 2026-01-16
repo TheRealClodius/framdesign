@@ -5,7 +5,7 @@ import DiagramModal from "./DiagramModal";
 
 // Configuration constants
 const MAX_MERMAID_LENGTH = 10000; // Maximum characters per Mermaid block
-const RENDER_TIMEOUT_MS = 5000; // Maximum time to wait for rendering
+const RENDER_TIMEOUT_MS = 8000; // Maximum time to wait for rendering (increased from 5s)
 
 // Cache version - increment this when sanitization logic changes to invalidate old caches
 const CACHE_VERSION = 4;
@@ -38,32 +38,83 @@ function svgToDataUrl(svg: string): string {
 function sanitizeMermaidSource(source: string): string {
   let sanitized = source.trim();
   
-  // Remove any markdown code block markers that might have leaked in
-  sanitized = sanitized.replace(/^```\s*mermaid\s*\n?/i, '');
+  // Remove any markdown code block markers that might have leaked in (more aggressive)
+  sanitized = sanitized.replace(/^```\s*mermaid\s*\n?/gi, '');
   sanitized = sanitized.replace(/\n?```\s*$/g, '');
+  sanitized = sanitized.replace(/```\s*mermaid\s*/gi, ''); // Remove anywhere in the string
+  sanitized = sanitized.replace(/```/g, ''); // Remove any remaining backticks
+  
+  // Remove corrupted text patterns that might have leaked into diagram code
+  // Pattern: "mermaidtimelinetitle" or similar concatenated text (but be careful not to remove valid content)
+  // Only remove if it's clearly corrupted (no spaces, no valid syntax)
+  sanitized = sanitized.replace(/mermaid\w+(?![:\s])/gi, () => {
+    // Only remove if it's not followed by valid syntax
+    return '';
+  });
+  
+  // Fix corrupted timeline patterns more carefully
+  sanitized = sanitized.replace(/timeline\w+(?![:\s])/gi, 'timeline');
+  
+  // Remove lines that contain literal markdown markers (these shouldn't be in the diagram)
+  let lines = sanitized.split('\n');
+  sanitized = lines
+    .filter(line => {
+      const trimmed = line.trim();
+      // Remove lines that are just markdown markers or contain them incorrectly
+      if (trimmed === '```' || trimmed === '```mermaid' || trimmed.startsWith('```')) {
+        return false;
+      }
+      return true;
+    })
+    .join('\n');
   
   // Detect and fix duplicated/corrupted content
-  // Look for patterns like "graph TD A[...] graph TD A[...]" (duplicated start)
-  // IMPORTANT: Use word boundary \b to avoid matching "graph" inside "subgraph"
-  const graphStartPattern = /\b(graph|flowchart)\s+(TD|TB|BT|RL|LR)\b/gi;
-  const matches = [...sanitized.matchAll(graphStartPattern)];
+  // Look for patterns where the SAME diagram type appears twice at the START of lines
+  // IMPORTANT: Only match at line start to avoid false matches like "Career Journey" matching "journey"
+  const diagramTypes = ['graph', 'flowchart', 'timeline', 'sequencediagram', 'classdiagram', 'statediagram', 'erdiagram', 'journey', 'gantt', 'pie', 'gitgraph'];
+  const diagramLines = sanitized.split('\n');
   
-  // If we find multiple graph/flowchart declarations, keep only the first one
-  if (matches.length > 1) {
-    // Find the position of the second declaration
-    const secondMatch = matches[1];
-    // Keep everything before the second declaration
-    sanitized = sanitized.substring(0, secondMatch.index).trim();
+  let firstDiagramType: string | null = null;
+  let duplicateDiagramLineIndex = -1;
+  
+  for (let i = 0; i < diagramLines.length; i++) {
+    const trimmedLine = diagramLines[i].trim().toLowerCase();
+    
+    // Check if this line STARTS with a diagram type declaration
+    for (const dtype of diagramTypes) {
+      // Line must be exactly the diagram type OR diagram type followed by space/direction
+      // e.g., "timeline", "graph TD", "flowchart LR"
+      if (trimmedLine === dtype || 
+          trimmedLine.startsWith(dtype + ' ') || 
+          trimmedLine.startsWith(dtype + '\t') ||
+          (trimmedLine.startsWith(dtype) && trimmedLine.length === dtype.length)) {
+        if (firstDiagramType === null) {
+          firstDiagramType = dtype;
+        } else if (dtype === firstDiagramType) {
+          // Found a duplicate of the SAME diagram type - this is corruption
+          duplicateDiagramLineIndex = i;
+        }
+        break;
+      }
+    }
+    
+    if (duplicateDiagramLineIndex >= 0) break;
+  }
+  
+  // If we found a duplicate declaration of the same type, keep only the first block
+  if (duplicateDiagramLineIndex >= 0) {
+    diagramLines.splice(duplicateDiagramLineIndex);
+    sanitized = diagramLines.join('\n').trim();
   }
   
   // Split into lines for minimal processing
   // IMPORTANT: Do NOT aggressively filter lines - complex diagrams have many similar-looking lines
-  const lines = sanitized.split('\n');
+  lines = sanitized.split('\n');
   const processedLines: string[] = [];
   
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    const trimmedLine = line.trim();
+    let trimmedLine = line.trim();
     
     // Skip completely empty lines (but keep single empty lines for readability)
     if (!trimmedLine) {
@@ -73,9 +124,28 @@ function sanitizeMermaidSource(source: string): string {
       continue;
     }
     
+    // Remove lines that contain markdown markers (should have been removed already, but double-check)
+    if (trimmedLine.includes('```') || trimmedLine === '```mermaid') {
+      continue;
+    }
+    
     // Remove standalone separator lines (just dashes, equals, or arrows - NOT valid Mermaid)
     if (/^[-=]{5,}$/.test(trimmedLine)) {
       continue;
+    }
+    
+    // DON'T remove standalone words - they might be valid node labels!
+    // Only remove lines that are clearly corrupted (contain invalid characters or patterns)
+    // Pattern: lines that look like corrupted concatenated text (no spaces, all lowercase/uppercase mix)
+    if (/^[a-z]+[A-Z][a-z]+[A-Z]/.test(trimmedLine) && !trimmedLine.match(/[\[\]{}()]/) && !trimmedLine.match(/-->/)) {
+      // This looks like corrupted concatenated text (e.g., "mermaidtimelinetitle")
+      continue;
+    }
+    
+    // Clean up timeline-specific syntax issues
+    // Fix malformed timeline title syntax
+    if (trimmedLine.match(/^timeline\s+title/i) && !trimmedLine.match(/^timeline\s+title\s+:/i)) {
+      trimmedLine = trimmedLine.replace(/^timeline\s+title\s*/i, 'title ');
     }
     
     // Keep ALL other lines - don't try to "fix" or filter them
@@ -242,6 +312,7 @@ export default function MermaidRenderer({ source, className = "", onFixDiagram }
   const [showSource, setShowSource] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
+  const [elapsedTime, setElapsedTime] = useState(0);
   const isMobile = useIsMobile();
   
   const mountedRef = useRef(true);
@@ -271,6 +342,7 @@ export default function MermaidRenderer({ source, className = "", onFixDiagram }
     }
 
     setState({ status: "loading" });
+    setElapsedTime(0); // Reset elapsed time when starting new render
 
     try {
       const mermaid = await getMermaid();
@@ -280,14 +352,43 @@ export default function MermaidRenderer({ source, className = "", onFixDiagram }
         return;
       }
 
+      // Quick validation: check if source looks valid before attempting render
+      // This helps catch obviously malformed diagrams early
+      const hasValidStart = /^(timeline|graph|flowchart|sequenceDiagram|classDiagram|stateDiagram|erDiagram|journey|gantt|pie|gitgraph)/i.test(sanitizedSource.trim());
+      if (!hasValidStart && sanitizedSource.trim().length > 0) {
+        throw new Error(`Invalid diagram syntax: diagram must start with a valid diagram type declaration`);
+      }
+
       // Create a unique ID for this render
       const elementId = `mermaid-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
       // Use Promise.race to implement timeout (use sanitized source)
-      const renderPromise = mermaid.render(elementId, sanitizedSource);
-      const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error("Render timeout")), RENDER_TIMEOUT_MS)
-      );
+      // Wrap mermaid.render in a promise that can be cancelled
+      let renderCancelled = false;
+      const renderPromise = (async () => {
+        try {
+          const result = await mermaid.render(elementId, sanitizedSource);
+          if (renderCancelled) {
+            throw new Error("Render cancelled");
+          }
+          return result;
+        } catch (error) {
+          if (renderCancelled) {
+            throw new Error("Render cancelled");
+          }
+          throw error;
+        }
+      })();
+      
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        const timeoutId = setTimeout(() => {
+          renderCancelled = true;
+          reject(new Error(`Render timeout after ${RENDER_TIMEOUT_MS}ms. The diagram may be too complex or contain invalid syntax.`));
+        }, RENDER_TIMEOUT_MS);
+        
+        // Clean up timeout if render completes
+        renderPromise.finally(() => clearTimeout(timeoutId));
+      });
 
       let { svg } = await Promise.race([renderPromise, timeoutPromise]);
 
@@ -372,7 +473,25 @@ export default function MermaidRenderer({ source, className = "", onFixDiagram }
         return;
       }
 
-      const message = error instanceof Error ? error.message : "Failed to render diagram";
+      let message = error instanceof Error ? error.message : "Failed to render diagram";
+      
+      // Provide more helpful error messages
+      if (message.includes("timeout")) {
+        message = `Render timeout: The diagram took too long to render (${RENDER_TIMEOUT_MS}ms). This usually means the diagram syntax is invalid or too complex.`;
+      } else if (message.includes("Parse error") || message.includes("parse")) {
+        message = `Parse error: ${message}. The diagram syntax may be invalid.`;
+      } else if (message.includes("Invalid diagram syntax")) {
+        // Keep the validation error message as-is
+      } else {
+        message = `Render failed: ${message}`;
+      }
+      
+      // Log the error for debugging
+      if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+        console.error('[MermaidRenderer] Render error:', error);
+        console.error('[MermaidRenderer] Source preview:', sanitizedSource.substring(0, 500));
+      }
+      
       setState({ status: "error", message });
     }
   }, [source]);
@@ -396,6 +515,26 @@ export default function MermaidRenderer({ source, className = "", onFixDiagram }
       };
     }
   }, [renderDiagram]);
+
+  // Track elapsed time during loading
+  useEffect(() => {
+    if (state.status === "loading") {
+      const startTime = Date.now();
+      const interval = setInterval(() => {
+        const elapsed = Math.floor((Date.now() - startTime) / 1000);
+        setElapsedTime(elapsed);
+        
+        // If we've been loading for more than RENDER_TIMEOUT_MS, something is wrong
+        if (elapsed * 1000 > RENDER_TIMEOUT_MS) {
+          clearInterval(interval);
+        }
+      }, 1000);
+      
+      return () => clearInterval(interval);
+    } else {
+      setElapsedTime(0);
+    }
+  }, [state.status]);
 
   const handleExpand = useCallback(() => {
     console.log("Expand clicked, state:", state.status);
@@ -425,33 +564,40 @@ export default function MermaidRenderer({ source, className = "", onFixDiagram }
     }
   }, [source]);
 
-  // Loading state
+  // Loading state with timeout indicator
   if (state.status === "idle" || state.status === "loading") {
     return (
       <div className={`mermaid-loading ${className}`}>
         <div className="flex items-center justify-center py-8 px-4 bg-[#1a1a1a] rounded border border-[#333333]">
-          <div className="flex items-center space-x-2 text-gray-400 text-sm">
-            <svg
-              className="animate-spin h-4 w-4"
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-            >
-              <circle
-                className="opacity-25"
-                cx="12"
-                cy="12"
-                r="10"
-                stroke="currentColor"
-                strokeWidth="4"
-              />
-              <path
-                className="opacity-75"
-                fill="currentColor"
-                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-              />
-            </svg>
-            <span>Rendering diagram…</span>
+          <div className="flex flex-col items-center space-y-2">
+            <div className="flex items-center space-x-2 text-gray-400 text-sm">
+              <svg
+                className="animate-spin h-4 w-4"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+              >
+                <circle
+                  className="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                />
+                <path
+                  className="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                />
+              </svg>
+              <span>Rendering diagram…</span>
+            </div>
+            {elapsedTime > 3 && (
+              <p className="text-xs text-gray-500">
+                Taking longer than expected ({elapsedTime}s)...
+              </p>
+            )}
           </div>
         </div>
       </div>

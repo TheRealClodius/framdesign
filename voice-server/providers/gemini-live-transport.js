@@ -51,19 +51,36 @@ export class GeminiLiveTransport extends ToolTransport {
   /**
    * Parse tool calls from Gemini Live event
    *
-   * @param {object} modelEvent - Gemini serverContent event
+   * @param {object} modelEvent - Gemini serverContent event (or toolCall data directly)
    * @returns {Array<{id: string, name: string, args: object}>} - Normalized tool calls
    */
   receiveToolCalls(modelEvent) {
     const toolCalls = [];
 
-    // Check if event has tool calls
-    // Tool calls come at root level: message.toolCall.functionCalls
-    if (
-      modelEvent.toolCall?.functionCalls &&
-      Array.isArray(modelEvent.toolCall.functionCalls)
-    ) {
-      for (const call of modelEvent.toolCall.functionCalls) {
+    // Check multiple possible locations for tool calls (SDK version differences)
+    // Format 1: message.toolCall.functionCalls (singular)
+    // Format 2: message.toolCalls (plural, array of calls)
+    // Format 3: message.serverContent.toolCall.functionCalls
+    // Format 4: Direct array of function calls
+    
+    let functionCalls = null;
+    
+    if (modelEvent?.functionCalls && Array.isArray(modelEvent.functionCalls)) {
+      // Direct array passed in
+      functionCalls = modelEvent.functionCalls;
+    } else if (modelEvent?.toolCall?.functionCalls && Array.isArray(modelEvent.toolCall.functionCalls)) {
+      // Format 1: message.toolCall.functionCalls
+      functionCalls = modelEvent.toolCall.functionCalls;
+    } else if (Array.isArray(modelEvent?.toolCalls)) {
+      // Format 2: message.toolCalls is already an array
+      functionCalls = modelEvent.toolCalls;
+    } else if (modelEvent?.serverContent?.toolCall?.functionCalls) {
+      // Format 3: Nested in serverContent
+      functionCalls = modelEvent.serverContent.toolCall.functionCalls;
+    }
+    
+    if (functionCalls && Array.isArray(functionCalls)) {
+      for (const call of functionCalls) {
         toolCalls.push({
           id: call.id || call.name, // Gemini Live might not provide id, use name as fallback
           name: call.name,

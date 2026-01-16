@@ -35,24 +35,37 @@ export async function execute(context) {
     
     try {
       // Try Next.js path alias first (works in Next.js webpack)
+      // Use string literals to help webpack static analysis
       const embeddingModule = await import('@/lib/services/embedding-service');
       const vectorModule = await import('@/lib/services/vector-store-service');
       generateQueryEmbedding = embeddingModule.generateQueryEmbedding
         || embeddingModule.default?.generateQueryEmbedding;
       searchSimilar = vectorModule.searchSimilar
         || vectorModule.default?.searchSimilar;
-    } catch {
+    } catch (importError) {
       // Fallback for Node.js runtime (voice server)
-      // Use relative paths WITHOUT extension - avoids webpack static analysis
-      // Node.js ESM will resolve .ts files automatically at runtime
-      const embeddingPath = '../../lib/services/embedding-service';
-      const vectorPath = '../../lib/services/vector-store-service';
-      const embeddingModule = await import(embeddingPath);
-      const vectorModule = await import(vectorPath);
-      generateQueryEmbedding = embeddingModule.generateQueryEmbedding
-        || embeddingModule.default?.generateQueryEmbedding;
-      searchSimilar = vectorModule.searchSimilar
-        || vectorModule.default?.searchSimilar;
+      // Use dynamic import with template literal to avoid webpack static analysis warnings
+      // Webpack will see this as a dynamic expression and won't try to bundle it
+      try {
+        // Use a function to create the import path dynamically
+        const getImportPath = (base) => `../../lib/services/${base}`;
+        const embeddingPath = getImportPath('embedding-service');
+        const vectorPath = getImportPath('vector-store-service');
+        
+        // Use Promise.all to load both modules in parallel
+        const [embeddingModule, vectorModule] = await Promise.all([
+          import(/* webpackIgnore: true */ embeddingPath),
+          import(/* webpackIgnore: true */ vectorPath)
+        ]);
+        
+        generateQueryEmbedding = embeddingModule.generateQueryEmbedding
+          || embeddingModule.default?.generateQueryEmbedding;
+        searchSimilar = vectorModule.searchSimilar
+          || vectorModule.default?.searchSimilar;
+      } catch (fallbackError) {
+        // If both imports fail, throw the original error
+        throw importError;
+      }
     }
 
     // Generate query embedding (Qdrant accepts vectors directly)
@@ -76,12 +89,29 @@ export async function execute(context) {
     }
 
     // Execute vector search
+    // Search for more chunks than requested to account for deduplication
+    // If topK=5, we might need to search 10-15 chunks to get 5 unique entities
+    const searchLimit = Math.max(topK * 3, 15); // Search 3x more chunks, minimum 15
+    
+    // Map schema filter field names to Qdrant payload field names
+    // Schema uses 'type' but Qdrant index is on 'entity_type'
+    const qdrantFilters = {};
+    if (args.filters) {
+      for (const [key, value] of Object.entries(args.filters)) {
+        if (key === 'type') {
+          qdrantFilters['entity_type'] = value;
+        } else {
+          qdrantFilters[key] = value;
+        }
+      }
+    }
+    
     let rawResults;
     try {
       rawResults = await searchSimilar(
         queryEmbedding,
-        topK,
-        args.filters || {}
+        searchLimit,
+        qdrantFilters
       );
     } catch (error) {
       throw new ToolError(ErrorType.TRANSIENT, `Vector search failed: ${error.message}`, {
@@ -103,7 +133,7 @@ export async function execute(context) {
     }
 
     // Transform results to standard format
-    const results = rawResults.map((result) => {
+    const transformedResults = rawResults.map((result) => {
       const snippet = args.include_snippets !== false && result.text
         ? result.text.substring(0, 200) + (result.text.length > 200 ? '...' : '')
         : null;
@@ -120,14 +150,35 @@ export async function execute(context) {
       };
     });
 
+    // Deduplicate by entity_id: keep only the highest-scoring chunk per entity
+    // The id field is already set to entity_id from metadata (line 129)
+    // This ensures we group chunks from the same entity together
+    const entityMap = new Map();
+    for (const result of transformedResults) {
+      const entityId = result.id; // Already set to entity_id from metadata
+      const existing = entityMap.get(entityId);
+      
+      // Keep the result with the highest score for this entity
+      if (!existing || result.score > existing.score) {
+        entityMap.set(entityId, result);
+      }
+    }
+
+    // Convert map back to array and sort by score (descending)
+    const deduplicatedResults = Array.from(entityMap.values())
+      .sort((a, b) => b.score - a.score)
+      .slice(0, topK); // Limit to requested topK entities
+
     const latency = Date.now() - startTime;
-    console.log(`[kb_search] Found ${results.length} results in ${latency}ms`);
+    const chunksSearched = rawResults.length;
+    const uniqueEntities = deduplicatedResults.length;
+    console.log(`[kb_search] Found ${uniqueEntities} unique entities (from ${chunksSearched} chunks) in ${latency}ms`);
 
     return {
       ok: true,
       data: {
-        results,
-        total_found: results.length,
+        results: deduplicatedResults,
+        total_found: uniqueEntities,
         query: args.query,
         filters_applied: args.filters || null,
         clamped: topK !== originalTopK

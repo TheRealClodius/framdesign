@@ -177,7 +177,9 @@ class ToolRegistry {
           console.log(`[Registry] Loading ${tool.toolId} from: ${importPath}`);
           
           // Use dynamic import (works in both Next.js and Node.js)
-          handlerModule = await import(importPath);
+          // This fallback path should not be reached if HANDLER_IMPORTS is complete
+          // Webpack warning is expected here but harmless - all tools should use static imports above
+          handlerModule = await import(/* webpackMode: "lazy" */ importPath);
         }
         
         // Debug: Log what we got from the module
@@ -206,7 +208,8 @@ class ToolRegistry {
 
     const loadDuration = Date.now() - loadStartTime;
     recordRegistryLoadTime(loadDuration);
-    console.log(`✓ Tool registry loaded: v${this.version} (${this.tools.size} tools) in ${loadDuration}ms`);
+    const gitCommitInfo = this.gitCommit ? `, git commit: ${this.gitCommit}` : '';
+    console.log(`✓ Tool registry loaded: v${this.version} (${this.tools.size} tools)${gitCommitInfo} in ${loadDuration}ms`);
   }
 
   /**

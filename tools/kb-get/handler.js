@@ -28,24 +28,37 @@ export async function execute(context) {
     
     try {
       // Try Next.js path alias first (works in Next.js webpack)
+      // Use string literals to help webpack static analysis
       const embeddingModule = await import('@/lib/services/embedding-service');
       const vectorModule = await import('@/lib/services/vector-store-service');
       generateQueryEmbedding = embeddingModule.generateQueryEmbedding
         || embeddingModule.default?.generateQueryEmbedding;
       searchSimilar = vectorModule.searchSimilar
         || vectorModule.default?.searchSimilar;
-    } catch {
+    } catch (importError) {
       // Fallback for Node.js runtime (voice server)
-      // Use relative paths WITHOUT extension - avoids webpack static analysis
-      // Node.js ESM will resolve .ts files automatically at runtime
-      const embeddingPath = '../../lib/services/embedding-service';
-      const vectorPath = '../../lib/services/vector-store-service';
-      const embeddingModule = await import(embeddingPath);
-      const vectorModule = await import(vectorPath);
-      generateQueryEmbedding = embeddingModule.generateQueryEmbedding
-        || embeddingModule.default?.generateQueryEmbedding;
-      searchSimilar = vectorModule.searchSimilar
-        || vectorModule.default?.searchSimilar;
+      // Use dynamic import with template literal to avoid webpack static analysis warnings
+      // Webpack will see this as a dynamic expression and won't try to bundle it
+      try {
+        // Use a function to create the import path dynamically
+        const getImportPath = (base) => `../../lib/services/${base}`;
+        const embeddingPath = getImportPath('embedding-service');
+        const vectorPath = getImportPath('vector-store-service');
+        
+        // Use Promise.all to load both modules in parallel
+        const [embeddingModule, vectorModule] = await Promise.all([
+          import(/* webpackIgnore: true */ embeddingPath),
+          import(/* webpackIgnore: true */ vectorPath)
+        ]);
+        
+        generateQueryEmbedding = embeddingModule.generateQueryEmbedding
+          || embeddingModule.default?.generateQueryEmbedding;
+        searchSimilar = vectorModule.searchSimilar
+          || vectorModule.default?.searchSimilar;
+      } catch (fallbackError) {
+        // If both imports fail, throw the original error
+        throw importError;
+      }
     }
 
     // Generate a generic embedding (Qdrant accepts vectors directly)

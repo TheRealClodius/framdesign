@@ -41,13 +41,16 @@ import {
 config();
 
 // Load tool registry at startup
-console.log('Loading tool registry...');
 await toolRegistry.load();
 toolRegistry.lock(); // Lock registry in production
-console.log(`✓ Tool registry loaded: v${toolRegistry.getVersion()}, ${toolRegistry.tools.size} tools, git commit: ${toolRegistry.getGitCommit()}`);
 
 // Get Gemini Native provider schemas for session config (loaded from registry)
 const geminiToolSchemas = toolRegistry.getProviderSchemas('geminiNative');
+console.log(`[TOOLS] Loaded ${geminiToolSchemas.length} tool schemas for Gemini Live:`);
+geminiToolSchemas.forEach((schema, i) => {
+  console.log(`  [${i + 1}] ${schema.name}: ${schema.description?.slice(0, 60)}...`);
+});
+console.log(`[TOOLS] Full schemas:`, JSON.stringify(geminiToolSchemas, null, 2));
 
 // Load environment variables
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
@@ -325,8 +328,10 @@ wss.on('connection', async (ws, req) => {
     // CRITICAL: Process tool calls FIRST before serverContent
     // This ensures suppression flags are set before we process transcripts
     // (toolCall and serverContent can arrive in the same message)
-    if (message.toolCall && transport) {
-      console.log(`[${clientId}] Tool call requested:`, JSON.stringify(message.toolCall, null, 2));
+    // Check both toolCall (singular) and toolCalls (plural) for SDK compatibility
+    const toolCallData = message.toolCall || message.toolCalls || message.serverContent?.toolCall;
+    if (toolCallData && transport) {
+      console.log(`[${clientId}] Tool call requested:`, JSON.stringify(toolCallData, null, 2));
 
       // Parse tool calls via transport
       const toolCalls = transport.receiveToolCalls(message);
@@ -576,24 +581,22 @@ wss.on('connection', async (ws, req) => {
           result: result
         });
         
-        // CRITICAL: After sending the last tool result, signal Gemini to continue generating
-        // Gemini needs this signal to know it should process tool results and respond
+        // After sending the last tool result, notify the client for UI feedback
+        // NOTE: We do NOT send turnComplete here - sendToolResponse already signals Gemini to continue
+        // Sending turnComplete after tool results was causing duplicate responses
         const isLastTool = i === toolCalls.length - 1;
         if (isLastTool) {
-          console.log(`[${clientId}] All tool results sent (${toolCalls.length} tools) - signaling Gemini to continue`);
+          console.log(`[${clientId}] All tool results sent (${toolCalls.length} tools) - Gemini will auto-continue after sendToolResponse`);
           try {
             // Signal client that tool execution is complete (for UI feedback)
             if (ws && ws.readyState === WebSocket.OPEN) {
               ws.send(JSON.stringify({ type: 'tools_complete', toolCount: toolCalls.length }));
               console.log(`[${clientId}] ✓ Sent tools_complete signal to client`);
             }
-            
-            // Signal Gemini that tool results are complete and it should continue responding
-            // This tells Gemini to process the tool results and generate a voice response
-            geminiSession.sendClientContent({ turnComplete: true });
-            console.log(`[${clientId}] ✓ Sent turnComplete=true after tool results - Gemini will respond`);
+            // NOTE: Removed sendClientContent({ turnComplete: true }) - it was causing Gemini
+            // to think a new user turn ended and respond multiple times with similar content
           } catch (error) {
-            console.error(`[${clientId}] Error signaling continuation after tools:`, error);
+            console.error(`[${clientId}] Error sending tools_complete to client:`, error);
           }
         } else {
           console.log(`[${clientId}] Tool ${call.name} result sent (${i + 1}/${toolCalls.length})`);
@@ -912,6 +915,14 @@ wss.on('connection', async (ws, req) => {
             };
             
             console.log(`[${clientId}] System instruction injected (${systemInstruction.length} chars, includes tool docs from registry)`);
+            
+            // Log tool declarations explicitly
+            const toolDecls = config.tools?.[0]?.functionDeclarations || [];
+            console.log(`[${clientId}] TOOLS BEING SENT TO GEMINI: ${toolDecls.length} tools`);
+            toolDecls.forEach((tool, i) => {
+              console.log(`  [${i + 1}] ${tool.name}`);
+            });
+            
             console.log(`[${clientId}] Session config:`, JSON.stringify(config, null, 2));
 
             // Estimate context window usage (NEW)
@@ -942,6 +953,16 @@ wss.on('connection', async (ws, req) => {
                   console.log(`[${clientId}] WebSocket to Gemini opened`);
                 },
                 onmessage: async (message) => {
+                  // Debug: Log ALL top-level keys in the message
+                  const messageKeys = Object.keys(message);
+                  console.log(`[${clientId}] Gemini message keys: [${messageKeys.join(', ')}]`);
+                  
+                  // Check for tool calls in various possible locations
+                  if (message.toolCall) console.log(`[${clientId}] ✓ Found message.toolCall`);
+                  if (message.toolCalls) console.log(`[${clientId}] ✓ Found message.toolCalls (plural)`);
+                  if (message.serverContent?.toolCall) console.log(`[${clientId}] ✓ Found message.serverContent.toolCall`);
+                  if (message.bidiGenerateContentToolCall) console.log(`[${clientId}] ✓ Found message.bidiGenerateContentToolCall`);
+                  
                   console.log(`[${clientId}] Received message from Gemini:`, JSON.stringify(message, null, 2));
                   await handleGeminiMessage(clientId, message);
                   // Note: History injection and audio buffer flushing are handled in handleGeminiMessage

@@ -2,29 +2,28 @@
  * OpenAI Provider Adapter
  *
  * Converts canonical JSON Schema to OpenAI function calling format.
- *
- * OpenAI uses JSON Schema natively, so this is mostly pass-through.
+ * OpenAI uses standard JSON Schema with lowercase types.
  */
 
 /**
- * Convert tool definition to OpenAI function calling format
+ * Convert tool definition to OpenAI function format
  *
  * @param {object} toolDefinition - Tool from schema.json
- * @returns {object} - OpenAI function schema
+ * @returns {object} - OpenAI function format
  *
- * Expected output format:
+ * Output format:
  * {
- *   type: "function",
+ *   type: 'function',
  *   function: {
  *     name: toolDefinition.toolId,
  *     description: toolDefinition.description,
- *     parameters: toolDefinition.parameters  // Pass-through JSON Schema
+ *     parameters: toolDefinition.jsonSchema
  *   }
  * }
  */
 export function toOpenAI(toolDefinition) {
   return {
-    type: "function",
+    type: 'function',
     function: {
       name: toolDefinition.toolId,
       description: toolDefinition.description,
@@ -37,7 +36,7 @@ export function toOpenAI(toolDefinition) {
  * Convert all tools to OpenAI format
  *
  * @param {Array} tools - Array of tool definitions
- * @returns {Array} - OpenAI function schemas
+ * @returns {Array} - OpenAI tool schemas
  */
 export function convertAllTools(tools) {
   return tools.map(tool => toOpenAI(tool));

@@ -43,10 +43,45 @@ import { voiceService } from "@/lib/services/voice-service";
  * - Converts escaped newlines (\n) to actual newlines
  * - Ensures mermaid code blocks are properly formatted
  * - Fixes diagrams that are on a single line or poorly formatted
+ * - Removes duplicate text patterns
  */
 function normalizeTextResponse(text: string): string {
   // First, convert escaped newlines to actual newlines
   let normalized = text.replace(/\\n/g, '\n');
+  
+  // Remove duplicate text patterns (common in streaming responses)
+  // Pattern: "text text" or "sentence. sentence."
+  // Look for repeated phrases (at least 10 chars) that appear twice within 200 chars
+  const duplicatePattern = /(.{10,}?)(\s+\1){1,}/g;
+  normalized = normalized.replace(duplicatePattern, (match, phrase) => {
+    // Keep only the first occurrence
+    return phrase;
+  });
+  
+  // Remove duplicate sentences (more aggressive)
+  // Split by sentence boundaries and remove consecutive duplicates
+  const sentences = normalized.split(/([.!?]\s+)/);
+  const deduplicatedSentences: string[] = [];
+  for (let i = 0; i < sentences.length; i += 2) {
+    const sentence = sentences[i];
+    const punctuation = sentences[i + 1] || '';
+    const fullSentence = sentence + punctuation;
+    
+    // Skip if this sentence is identical to the previous one
+    if (deduplicatedSentences.length > 0 && 
+        deduplicatedSentences[deduplicatedSentences.length - 1] === fullSentence.trim()) {
+      continue;
+    }
+    
+    // Skip if sentence is too short (likely a fragment)
+    if (fullSentence.trim().length < 5) {
+      deduplicatedSentences.push(fullSentence);
+      continue;
+    }
+    
+    deduplicatedSentences.push(fullSentence);
+  }
+  normalized = deduplicatedSentences.join('');
   
   // Fix mermaid diagrams that might be malformed
   // Pattern: matches mermaid code blocks (with or without proper formatting)
@@ -55,6 +90,24 @@ function normalizeTextResponse(text: string): string {
   normalized = normalized.replace(mermaidBlockPattern, (match, diagramContent) => {
     // Clean up the diagram content
     let cleanContent = diagramContent.trim();
+    
+    // Remove corrupted text that might have leaked into diagram code
+    // Pattern: "mermaidtimelinetitle" or similar concatenated text
+    cleanContent = cleanContent.replace(/mermaid\w+/gi, '');
+    cleanContent = cleanContent.replace(/timeline\w+/gi, 'timeline');
+    
+    // Remove standalone words that aren't valid Mermaid syntax
+    // But preserve valid Mermaid keywords
+    const validMermaidKeywords = /^(title|section|period|event|accTitle|accDescr|graph|flowchart|timeline|sequenceDiagram|classDiagram|stateDiagram|erDiagram|journey|gantt|pie|gitgraph)/i;
+    cleanContent = cleanContent.split('\n').map((line: string) => {
+      const trimmed = line.trim();
+      // If line is just a word and not a valid keyword, remove it
+      if (/^[A-Z][a-z]+\s*$/.test(trimmed) && !validMermaidKeywords.test(trimmed) && 
+          !trimmed.match(/[\[\]{}()]/) && !trimmed.match(/-->/)) {
+        return '';
+      }
+      return line;
+    }).filter((line: string) => line.trim().length > 0).join('\n');
     
     // Normalize arrow styles (→ to -->, - to -->)
     cleanContent = cleanContent
@@ -100,8 +153,8 @@ function normalizeTextResponse(text: string): string {
     
     // Reconstruct with proper indentation (2 spaces for readability)
     cleanContent = lines.map((line: string) => {
-      // Don't indent the first line (flowchart/graph declaration)
-      if (line.match(/^(flowchart|graph|sequenceDiagram|classDiagram|stateDiagram|erDiagram|journey|gantt|pie|gitgraph)/i)) {
+      // Don't indent the first line (flowchart/graph/timeline declaration)
+      if (line.match(/^(flowchart|graph|timeline|sequenceDiagram|classDiagram|stateDiagram|erDiagram|journey|gantt|pie|gitgraph|title)/i)) {
         return line;
       }
       // Indent other lines
@@ -224,7 +277,7 @@ export default function ChatInterface() {
       // Group transcript chunks based on turns (respecting interruptions and session boundaries)
       setMessages((prev) => {
         const lastMessage = prev[prev.length - 1];
-        const lastMessagePreview = lastMessage ? `${lastMessage.role}: "${lastMessage.content.substring(0, 30)}..."` : 'none';
+        const lastMessagePreview = lastMessage ? `${lastMessage.role}: "${(lastMessage.content ?? '').substring(0, 30)}..."` : 'none';
         console.log(`Last message: ${lastMessagePreview}`);
         
         // Should we append to the last message or create a new one?
@@ -864,12 +917,34 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
     }
   };
 
-  const handleClearChat = () => {
+  const handleClearChat = async () => {
     if (window.confirm("Are you sure you want to clear all chat history? This cannot be undone.")) {
+      // Stop any active voice session first to clear server-side history
+      if (voiceService.isSessionActive()) {
+        try {
+          await voiceService.stop();
+        } catch (error) {
+          console.error('Error stopping voice session during clear:', error);
+          // Continue with clearing even if stop fails
+        }
+      }
+      
+      // Clear localStorage
       clearChatHistory();
+      
+      // Clear voice service's conversation history to prevent bleeding
+      voiceService.clearConversationHistory();
+      
+      // Reset component state to initial message
       setMessages([
         { id: "initial-assistant", role: "assistant", content: "HELLO. HOW CAN I HELP YOU TODAY?" }
       ]);
+      
+      // Reset voice-related state
+      setIsVoiceMode(false);
+      setIsVoiceLoading(false);
+      setVoiceError(null);
+      shouldStartNewTurn.current = true;
     }
   };
 

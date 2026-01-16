@@ -1100,6 +1100,14 @@ export class VoiceService extends EventTarget {
   isReconnecting(): boolean {
     return this.reconnectTimer !== null;
   }
+
+  /**
+   * Clear conversation history (useful when chat is cleared)
+   * This ensures no old history bleeds into new conversations
+   */
+  clearConversationHistory(): void {
+    this.conversationHistory = [];
+  }
 }
 
 // Export singleton instance

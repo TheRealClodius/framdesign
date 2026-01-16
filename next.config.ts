@@ -1,6 +1,9 @@
 import type { NextConfig } from "next";
+import path from "path";
 
 const nextConfig: NextConfig = {
+  // Explicitly set the workspace root to avoid Next.js detecting multiple lockfiles
+  outputFileTracingRoot: path.join(__dirname),
   async headers() {
     return [
       {
@@ -61,7 +64,7 @@ const nextConfig: NextConfig = {
       // Configure resolve aliases to match tsconfig.json
       config.resolve.alias = {
         ...config.resolve.alias,
-        '@': require('path').resolve(__dirname, './'),
+        '@': path.resolve(__dirname, './'),
       };
 
       // Allow resolving .js imports to .ts files (for dynamic imports in tools)
@@ -146,6 +149,17 @@ const nextConfig: NextConfig = {
         // Don't try to optimize dynamic imports that use computed paths
         moduleIds: 'deterministic',
       };
+      
+      // Suppress webpack warning for dynamic imports in tool registry
+      // All tools are statically imported via HANDLER_IMPORTS map,
+      // but webpack still analyzes the fallback path and warns
+      config.ignoreWarnings = [
+        ...(config.ignoreWarnings || []),
+        {
+          module: /tools\/_core\/registry\.js/,
+          message: /Critical dependency: the request of a dependency is an expression/,
+        },
+      ];
     }
 
     // Exclude server-only modules from client bundle
