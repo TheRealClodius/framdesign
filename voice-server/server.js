@@ -933,16 +933,18 @@ wss.on('connection', async (ws, req) => {
               outputAudioTranscription: {},
               // Configure Voice Activity Detection (VAD) to reduce false interruptions from background noise
               // Using LOW sensitivity settings to prevent background noise from cutting off agent speech
+              // ISSUE: Gemini was detecting phantom "user input" and interrupting agent mid-sentence
               realtimeInputConfig: {
                 automaticActivityDetection: {
                   // Less sensitive to detecting speech start (reduces false triggers from background noise)
                   startOfSpeechSensitivity: 'START_SENSITIVITY_LOW',
                   // Less likely to detect end of speech prematurely (KEY for preventing cutoffs)
                   endOfSpeechSensitivity: 'END_SENSITIVITY_LOW',
-                  // Require 1 second of silence before ending turn (default is ~500ms)
-                  silenceDurationMs: 1000,
-                  // Require 100ms of speech before committing to speech start (reduces false starts)
-                  prefixPaddingMs: 100
+                  // Require 1.5 seconds of silence before ending turn (default is ~500ms)
+                  silenceDurationMs: 1500,
+                  // Require 300ms of sustained speech before committing to speech start
+                  // This is KEY to prevent brief noise spikes from triggering interruptions
+                  prefixPaddingMs: 300
                 }
               },
               // Add tool support (all 5 tools from registry)
@@ -950,6 +952,7 @@ wss.on('connection', async (ws, req) => {
             };
             
             console.log(`[${clientId}] System instruction injected (${systemInstruction.length} chars, includes tool docs from registry)`);
+            console.log(`[${clientId}] VAD config: startSensitivity=LOW, endSensitivity=LOW, silenceDurationMs=1500, prefixPaddingMs=300`);
             
             // Log tool declarations explicitly
             const toolDecls = config.tools?.[0]?.functionDeclarations || [];
