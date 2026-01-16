@@ -4,6 +4,11 @@ import path from "path";
 const nextConfig: NextConfig = {
   // Explicitly set the workspace root to avoid Next.js detecting multiple lockfiles
   outputFileTracingRoot: path.join(__dirname),
+  // Include tool registry file in serverless function output
+  // This ensures tools/tool_registry.json is available at runtime in API routes
+  outputFileTracingIncludes: {
+    '/api/chat': ['./tools/tool_registry.json'],
+  },
   async headers() {
     return [
       {
