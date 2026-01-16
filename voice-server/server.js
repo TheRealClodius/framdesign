@@ -1117,29 +1117,38 @@ wss.on('connection', async (ws, req) => {
           // Session is ready, send audio directly
           if (geminiSession) {
             try {
-              // Detect user interruption - when user speaks while model is generating
-              // Only interrupt after sustained speech (3+ consecutive chunks = ~0.3-0.5 seconds)
+              // Block audio while model is generating to prevent Gemini's VAD from
+              // triggering on background noise and interrupting the response.
+              // Only allow audio through if it's a confirmed intentional interruption.
               if (state.get('isModelGenerating')) {
                 const currentCount = state.get('userAudioChunkCount') + 1;
                 state.set('userAudioChunkCount', currentCount);
                 
-                // Interrupt only if sustained speech and haven't already interrupted this turn
-                const INTERRUPTION_THRESHOLD = 3; // Require 3 consecutive chunks (~300-500ms)
+                // Require sustained speech before allowing interruption
+                const INTERRUPTION_THRESHOLD = 5; // Require 5 consecutive chunks (~500ms)
                 if (currentCount >= INTERRUPTION_THRESHOLD && !state.get('interruptionSent')) {
                   console.log(`[${clientId}] 🔴 USER INTERRUPTING - sustained speech detected (${currentCount} chunks)`);
                   state.set('interruptionSent', true);
                   
-                  // The Live API automatically handles interruption when new audio arrives
-                  // We just need to notify the client to stop playback
+                  // Notify client to stop playback, and send audio to trigger Gemini interruption
                   ws.send(JSON.stringify({
                     type: 'interrupted'
                   }));
+                  // Now send audio to Gemini to trigger the interruption
+                  console.log(`[${clientId}] Sending interruption audio (${base64Length} chars base64)`);
+                  sendAudioToGemini(data.data);
+                } else {
+                  // Block audio - don't send to Gemini, prevents VAD false triggers
+                  // Log occasionally for debugging
+                  if (currentCount === 1 || currentCount % 10 === 0) {
+                    console.log(`[${clientId}] Blocking audio while model generating (chunk ${currentCount}/${INTERRUPTION_THRESHOLD} for interruption)`);
+                  }
                 }
-              } else {
-                // Reset chunk counter when model is not generating
-                state.set('userAudioChunkCount', 0);
+                break; // Don't fall through to send audio
               }
               
+              // Model not generating - reset counter and send audio normally
+              state.set('userAudioChunkCount', 0);
               console.log(`[${clientId}] Sending audio (${base64Length} chars base64, ~${Math.round(base64Length * 3 / 4)} bytes)`);
               sendAudioToGemini(data.data);
             } catch (error) {
