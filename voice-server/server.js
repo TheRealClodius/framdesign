@@ -297,6 +297,13 @@ wss.on('connection', async (ws, req) => {
               console.log(`[${clientId}] 📌 Appended pending request to history: "${pendingRequest}"`);
             }
             
+            // If Gemini will respond, pre-emptively block audio to prevent interruptions
+            if (shouldRespond) {
+              state.set('isModelGenerating', true);
+              state.set('userAudioChunkCount', 0);
+              console.log(`[${clientId}] Pre-emptively blocking audio (history injection with response)`);
+            }
+            
             geminiSession.sendClientContent({ 
               turns: historyTurns,
               turnComplete: shouldRespond 
@@ -309,6 +316,11 @@ wss.on('connection', async (ws, req) => {
         } else if (pendingRequest) {
           // No history but there's a pending request - send it as a user message
           try {
+            // Pre-emptively block audio since Gemini will respond
+            state.set('isModelGenerating', true);
+            state.set('userAudioChunkCount', 0);
+            console.log(`[${clientId}] Pre-emptively blocking audio (pending request)`);
+            
             geminiSession.sendClientContent({ 
               turns: [{
                 role: 'user',
@@ -319,6 +331,7 @@ wss.on('connection', async (ws, req) => {
             console.log(`[${clientId}] 📌 No history, but sent pending request: "${pendingRequest}"`);
           } catch (error) {
             console.error(`[${clientId}] Error sending pending request:`, error);
+            state.set('isModelGenerating', false);
           }
         }
         
@@ -1219,11 +1232,20 @@ wss.on('connection', async (ws, req) => {
           console.log(`[${clientId}] Client signaled turn complete - telling Gemini to respond`);
           if (geminiSession) {
             try {
+              // IMPORTANT: Set isModelGenerating BEFORE signaling Gemini
+              // This blocks any incoming audio from being forwarded during the gap
+              // between when we signal and when Gemini starts sending audio back
+              state.set('isModelGenerating', true);
+              state.set('userAudioChunkCount', 0);
+              console.log(`[${clientId}] Pre-emptively blocking audio (isModelGenerating=true)`);
+              
               // Signal to Gemini that user's turn is complete
               geminiSession.sendClientContent({ turnComplete: true });
               console.log(`[${clientId}] ✓ Sent turnComplete=true to Gemini`);
             } catch (error) {
               console.error(`[${clientId}] Error sending turnComplete to Gemini:`, error);
+              // Reset state on error
+              state.set('isModelGenerating', false);
             }
           }
           break;
