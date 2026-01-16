@@ -41,8 +41,18 @@ import {
 config();
 
 // Load tool registry at startup
-await toolRegistry.load();
-toolRegistry.lock(); // Lock registry in production
+try {
+  console.log('[STARTUP] Loading tool registry...');
+  await toolRegistry.load();
+  toolRegistry.lock(); // Lock registry in production
+  console.log('[STARTUP] ✓ Tool registry loaded successfully');
+} catch (error) {
+  console.error('[STARTUP] ✗ Failed to load tool registry:', error);
+  console.error('[STARTUP] Error stack:', error.stack);
+  console.error('[STARTUP] Current working directory:', process.cwd());
+  console.error('[STARTUP] __dirname equivalent:', import.meta.url);
+  process.exit(1);
+}
 
 // Get Gemini Native provider schemas for session config (loaded from registry)
 const geminiToolSchemas = toolRegistry.getProviderSchemas('geminiNative');
@@ -1238,14 +1248,40 @@ wss.on('connection', async (ws, req) => {
   }));
 });
 
+// Handle uncaught exceptions during startup
+process.on('uncaughtException', (error) => {
+  console.error('[FATAL] Uncaught exception during startup:', error);
+  console.error('[FATAL] Error stack:', error.stack);
+  console.error('[FATAL] Current working directory:', process.cwd());
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[FATAL] Unhandled promise rejection:', reason);
+  console.error('[FATAL] Promise:', promise);
+  if (reason instanceof Error) {
+    console.error('[FATAL] Error stack:', reason.stack);
+  }
+  process.exit(1);
+});
+
 // Start server
 console.log('[STARTUP] Starting HTTP server...');
-httpServer.listen(PORT, () => {
-  console.log(`[STARTUP] ✓ Voice Server listening on port ${PORT}`);
-  console.log(`[STARTUP]   WebSocket: ws://localhost:${PORT}`);
-  console.log(`[STARTUP]   Health check: http://localhost:${PORT}/health`);
-  console.log(`[STARTUP]   Server ready and accepting connections`);
-});
+console.log('[STARTUP] Current working directory:', process.cwd());
+console.log('[STARTUP] PORT:', PORT);
+
+try {
+  httpServer.listen(PORT, '0.0.0.0', () => {
+    console.log(`[STARTUP] ✓ Voice Server listening on port ${PORT}`);
+    console.log(`[STARTUP]   WebSocket: ws://0.0.0.0:${PORT}`);
+    console.log(`[STARTUP]   Health check: http://0.0.0.0:${PORT}/health`);
+    console.log(`[STARTUP]   Server ready and accepting connections`);
+  });
+} catch (error) {
+  console.error('[FATAL] Failed to start HTTP server:', error);
+  console.error('[FATAL] Error stack:', error.stack);
+  process.exit(1);
+}
 
 // Handle server errors
 httpServer.on('error', (error) => {
