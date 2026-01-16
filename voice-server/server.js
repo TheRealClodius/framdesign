@@ -22,12 +22,12 @@ import { writeFileSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { buildSystemInstruction } from './config.js';
-import { toolRegistry } from './tools/_core/registry.js';
-import { createStateController } from './tools/_core/state-controller.js';
+import { toolRegistry } from '../tools/_core/registry.js';
+import { createStateController } from '../tools/_core/state-controller.js';
 import { GeminiLiveTransport } from './providers/gemini-live-transport.js';
-import { ToolError, ErrorType } from './tools/_core/error-types.js';
-import { retryWithBackoff } from './tools/_core/retry-handler.js';
-import { loopDetector } from './tools/_core/loop-detector.js';
+import { ToolError, ErrorType } from '../tools/_core/error-types.js';
+import { retryWithBackoff } from '../tools/_core/retry-handler.js';
+import { loopDetector } from '../tools/_core/loop-detector.js';
 import {
   startSession,
   endSession,
@@ -35,7 +35,7 @@ import {
   startNewTurn,
   recordResponseMetrics,
   setContextInitTokens
-} from './tools/_core/metrics.js';
+} from '../tools/_core/metrics.js';
 
 // Load environment variables from .env file (if present)
 config();
@@ -152,7 +152,8 @@ wss.on('connection', async (ws, req) => {
     userAudioChunkCount: 0,
     interruptionSent: false,
     audioChunkCounter: 0,
-    lastAudioFingerprint: null
+    lastAudioFingerprint: null,
+    hasSentGeneratingSignal: false
   });
 
   // Transport will be set when geminiSession is created
@@ -329,6 +330,9 @@ wss.on('connection', async (ws, req) => {
 
       // Parse tool calls via transport
       const toolCalls = transport.receiveToolCalls(message);
+      
+      // Note: We don't pause client here - agent can acknowledge tool calls while they execute
+      // (e.g., "just a sec, let me search that for you")
 
       // Voice mode budget tracking
       let retrievalCallsThisTurn = 0;
@@ -337,7 +341,10 @@ wss.on('connection', async (ws, req) => {
         MAX_TOTAL_CALLS_PER_TURN: 3
       };
 
-      for (const call of toolCalls) {
+      // Execute tools sequentially (Gemini expects results in order)
+      // But send results immediately as they complete for faster response
+      for (let i = 0; i < toolCalls.length; i++) {
+        const call = toolCalls[i];
         // Validate tool call structure
         if (!call.name) {
           console.error(`[${clientId}] Invalid tool call: missing name`, JSON.stringify(call, null, 2));
@@ -397,7 +404,16 @@ wss.on('connection', async (ws, req) => {
         }
 
         // POLICY: Enforce voice retrieval budget (HARD GATE)
-        if (toolMetadata.category === 'retrieval') {
+        let isRetrievalCall = toolMetadata.category === 'retrieval';
+
+        if (call.name === 'run_tool' && call.args?.name) {
+          const targetToolMeta = toolRegistry.getToolMetadata(call.args.name);
+          if (targetToolMeta?.category === 'retrieval') {
+            isRetrievalCall = true;
+          }
+        }
+
+        if (isRetrievalCall) {
           retrievalCallsThisTurn++;
           if (retrievalCallsThisTurn > VOICE_BUDGET.MAX_RETRIEVAL_CALLS_PER_TURN) {
             console.warn(`[${clientId}] Retrieval budget exceeded (${retrievalCallsThisTurn}/${VOICE_BUDGET.MAX_RETRIEVAL_CALLS_PER_TURN})`);
@@ -424,11 +440,18 @@ wss.on('connection', async (ws, req) => {
         }
 
         // Check for loops before execution (NEW)
+        let loopCheckKey = call.name;
+        let loopCheckArgs = call.args;
+        if (call.name === 'run_tool' && call.args?.name) {
+          loopCheckKey = `run_tool:${call.args.name}`;
+          loopCheckArgs = call.args.args;
+        }
+
         const loopCheck = loopDetector.detectLoop(
           clientId,
           currentTurn,
-          call.name,
-          call.args
+          loopCheckKey,
+          loopCheckArgs
         );
 
         if (loopCheck.detected) {
@@ -469,6 +492,7 @@ wss.on('connection', async (ws, req) => {
           ws,
           geminiSession,
           args: call.args || {},
+          capabilities: { voice: true, messaging: false }, // Voice mode capabilities
           session: {
             isActive: state.get('isActive'),
             toolsVersion: toolRegistry.getVersion(),
@@ -478,8 +502,12 @@ wss.on('connection', async (ws, req) => {
 
         // Execute tool through registry with retry logic (text mode only)
         const startTime = Date.now();
+        console.log(`[${clientId}] Executing tool: ${call.name} (mode: ${currentMode})`);
         const result = await retryWithBackoff(
-          () => toolRegistry.executeTool(call.name, executionContext),
+          () => {
+            console.log(`[${clientId}] Calling executeTool for ${call.name}...`);
+            return toolRegistry.executeTool(call.name, executionContext);
+          },
           {
             mode: currentMode,
             maxRetries: 3,
@@ -489,6 +517,7 @@ wss.on('connection', async (ws, req) => {
           }
         );
         const duration = Date.now() - startTime;
+        console.log(`[${clientId}] Tool ${call.name} completed in ${duration}ms (ok: ${result.ok})`);
 
         // Record response metrics (NEW)
         if (result.ok && result.data) {
@@ -499,7 +528,9 @@ wss.on('connection', async (ws, req) => {
         recordSessionToolCall(clientId, call.name, call.args, duration, result.ok);
 
         // Record call for loop detection (NEW)
-        loopDetector.recordCall(clientId, currentTurn, call.name, call.args, result);
+        const recordKey = loopCheckKey;
+        const recordArgs = loopCheckArgs;
+        loopDetector.recordCall(clientId, currentTurn, recordKey, recordArgs, result);
 
         // Structured audit logging
         console.log(JSON.stringify({
@@ -544,6 +575,29 @@ wss.on('connection', async (ws, req) => {
           name: call.name,
           result: result
         });
+        
+        // CRITICAL: After sending the last tool result, signal Gemini to continue generating
+        // Gemini needs this signal to know it should process tool results and respond
+        const isLastTool = i === toolCalls.length - 1;
+        if (isLastTool) {
+          console.log(`[${clientId}] All tool results sent (${toolCalls.length} tools) - signaling Gemini to continue`);
+          try {
+            // Signal client that tool execution is complete (for UI feedback)
+            if (ws && ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: 'tools_complete', toolCount: toolCalls.length }));
+              console.log(`[${clientId}] ✓ Sent tools_complete signal to client`);
+            }
+            
+            // Signal Gemini that tool results are complete and it should continue responding
+            // This tells Gemini to process the tool results and generate a voice response
+            geminiSession.sendClientContent({ turnComplete: true });
+            console.log(`[${clientId}] ✓ Sent turnComplete=true after tool results - Gemini will respond`);
+          } catch (error) {
+            console.error(`[${clientId}] Error signaling continuation after tools:`, error);
+          }
+        } else {
+          console.log(`[${clientId}] Tool ${call.name} result sent (${i + 1}/${toolCalls.length})`);
+        }
       }
     }
 
@@ -560,6 +614,14 @@ wss.on('connection', async (ws, req) => {
         state.set('shouldSuppressAudio', false); // Reset audio suppression for new model turn
         state.set('shouldSuppressTranscript', false); // Reset transcript suppression for new model turn
         // Don't reset audioChunkCounter or lastAudioFingerprint here - keep them to track across the whole turn
+        
+        // Optional optimization: Send generation signal to client
+        if (!state.get('hasSentGeneratingSignal')) {
+          if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'model_generating' }));
+            state.set('hasSentGeneratingSignal', true);
+          }
+        }
       }
       
       // Log full serverContent for debugging
@@ -641,6 +703,12 @@ wss.on('connection', async (ws, req) => {
         const turnCompleteReason = content.turnCompleteReason;
         const audioChunksThisTurn = state.get('audioChunkCounter');
         console.log(`[${clientId}] Turn complete (sent ${audioChunksThisTurn} audio chunks this turn)${turnCompleteReason ? `, reason: ${turnCompleteReason}` : ''}`);
+
+        // Optional optimization: Send turn complete signal to client
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'turn_complete' }));
+        }
+        state.set('hasSentGeneratingSignal', false);
 
         // Start new turn for loop detection and metrics (NEW)
         currentTurn++;
@@ -1076,6 +1144,20 @@ wss.on('connection', async (ws, req) => {
 
         case 'ping':
           ws.send(JSON.stringify({ type: 'pong', timestamp: Date.now() }));
+          break;
+
+        case 'turn_complete':
+          // CRITICAL #1: Client signaled turn complete - tell Gemini to respond
+          console.log(`[${clientId}] Client signaled turn complete - telling Gemini to respond`);
+          if (geminiSession) {
+            try {
+              // Signal to Gemini that user's turn is complete
+              geminiSession.sendClientContent({ turnComplete: true });
+              console.log(`[${clientId}] ✓ Sent turnComplete=true to Gemini`);
+            } catch (error) {
+              console.error(`[${clientId}] Error sending turnComplete to Gemini:`, error);
+            }
+          }
           break;
 
         default:

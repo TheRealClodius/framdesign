@@ -57,6 +57,11 @@ export class VoiceService extends EventTarget {
   };
   private audioPlaybackErrors = 0;
   private maxAudioPlaybackErrors = 5;
+  private consecutiveSilentChunks = 0; // Track consecutive silent chunks for silence detection
+  private shouldPauseAudioSending = false; // Pause sending when agent is processing or sustained silence
+  private SILENCE_PAUSE_THRESHOLD = 10; // Pause after 10 consecutive silent chunks (~1 second)
+  private SILENCE_THRESHOLD = 0.0005; // Threshold for detecting silence
+  private SPEECH_INTERRUPT_THRESHOLD = 0.015; // Threshold for intentional speech (to interrupt agent)
   
   constructor() {
     super();
@@ -380,15 +385,62 @@ export class VoiceService extends EventTarget {
         }
         const avgVal = sumVal / inputData.length;
         
-        // Log audio levels periodically (every ~10 chunks)
-        if (Math.random() < 0.1) {
-          console.log(`Audio levels - max: ${maxVal.toFixed(4)}, avg: ${avgVal.toFixed(6)}, samples: ${inputData.length}, audioContext.state: ${this.audioContext?.state}`);
+        // Two-tier threshold system to distinguish ambient noise from intentional speech
+        const isSilent = maxVal < this.SILENCE_THRESHOLD;
+        const isIntentionalSpeech = maxVal >= this.SPEECH_INTERRUPT_THRESHOLD;
+        
+        // Track consecutive silent chunks
+        if (isSilent) {
+          this.consecutiveSilentChunks = (this.consecutiveSilentChunks || 0) + 1;
+        } else if (isIntentionalSpeech) {
+          // Only resume sending if it's clearly intentional speech (not just ambient noise)
+          this.consecutiveSilentChunks = 0;
+          if (this.shouldPauseAudioSending) {
+            console.log(`User interrupting (volume: ${maxVal.toFixed(4)}) - resuming audio sending`);
+          }
+          this.shouldPauseAudioSending = false;
+        } else {
+          // Ambient noise (above silence but below speech threshold) - don't resume sending
+          // This prevents fans, keyboard clicks, etc. from triggering false interruptions
+          this.consecutiveSilentChunks = 0; // Reset to avoid premature turn_complete
         }
         
-        // Skip silent chunks (all zeros means mic not working)
+        // Pause sending after sustained silence (user stopped speaking)
+        if (this.consecutiveSilentChunks >= this.SILENCE_PAUSE_THRESHOLD) {
+          if (!this.shouldPauseAudioSending) {
+            console.log(`User stopped speaking - signaling turn complete after ${this.consecutiveSilentChunks} consecutive silent chunks`);
+            this.shouldPauseAudioSending = true;
+            
+            // CRITICAL: Signal to server that user's turn is complete
+            if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+              try {
+                this.ws.send(JSON.stringify({ type: 'turn_complete' }));
+                console.log('✓ Sent turn_complete signal to server');
+              } catch (error) {
+                console.error('Error sending turn_complete signal:', error);
+              }
+            }
+          }
+          // Don't send silent chunks - let Gemini process what it has
+          return;
+        }
+        
+        // Don't send audio if paused (agent is processing/speaking)
+        // BUT allow intentional speech through so user can interrupt
+        if (this.shouldPauseAudioSending && !isIntentionalSpeech) {
+          // Block ambient noise and silence, but allow real speech interruptions
+          return;
+        }
+        
+        // Log audio levels periodically (every ~100 chunks, less verbose)
+        if (Math.random() < 0.01) {
+          console.log(`Audio levels - max: ${maxVal.toFixed(4)}, avg: ${avgVal.toFixed(6)}, silent_chunks: ${this.consecutiveSilentChunks || 0}, paused: ${this.shouldPauseAudioSending}`);
+        }
+        
+        // Skip completely silent chunks (all zeros means mic not working)
         if (maxVal < 0.0001) {
-          // Still send to server to maintain stream, but log warning
-          if (Math.random() < 0.01) {
+          // Still send to server to maintain stream, but log warning rarely
+          if (Math.random() < 0.001) {
             console.warn('Audio appears to be silent (all zeros) - check microphone');
           }
         }
@@ -404,7 +456,10 @@ export class VoiceService extends EventTarget {
         
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
           try {
-            console.log(`Sending audio chunk to server (${base64.length} bytes base64)`);
+            // Reduced logging - only log every 50th chunk or when significant events occur
+            if (Math.random() < 0.02 || this.consecutiveSilentChunks === 50) {
+              console.log(`Sending audio chunk (${base64.length} bytes, silent_streak: ${this.consecutiveSilentChunks || 0})`);
+            }
             this.ws.send(JSON.stringify({
               type: 'audio',
               data: base64
@@ -414,7 +469,9 @@ export class VoiceService extends EventTarget {
             // Don't throw - continue processing audio
           }
         } else {
-          console.warn('WebSocket not open, cannot send audio. State:', this.ws?.readyState);
+          if (Math.random() < 0.01) { // Reduce warning frequency
+            console.warn('WebSocket not open, cannot send audio. State:', this.ws?.readyState);
+          }
         }
       } catch (error) {
         console.error('Error processing audio chunk:', error);
@@ -498,6 +555,12 @@ export class VoiceService extends EventTarget {
         break;
 
       case 'audio':
+        // Immediately pause sending when agent starts speaking
+        if (!this.shouldPauseAudioSending) {
+          console.log('Agent started speaking - pausing audio sending');
+          this.shouldPauseAudioSending = true;
+          this.consecutiveSilentChunks = 0;
+        }
         // Play audio response from Gemini
         if (message.data) {
           this.playAudio(message.data);
@@ -517,6 +580,12 @@ export class VoiceService extends EventTarget {
             this.partialTranscripts.user.push(transcript);
           } else {
             this.partialTranscripts.assistant.push(transcript);
+            // Agent is speaking - resume audio sending for next turn
+            if (this.shouldPauseAudioSending) {
+              console.log('Agent responded, resuming audio sending');
+              this.shouldPauseAudioSending = false;
+              this.consecutiveSilentChunks = 0;
+            }
           }
           
           // Emit transcript for real-time display
@@ -669,6 +738,28 @@ export class VoiceService extends EventTarget {
 
       case 'pong':
         // Heartbeat response
+        break;
+
+      case 'model_generating':
+        // Server signaled model is generating - pause immediately
+        if (!this.shouldPauseAudioSending) {
+          console.log('Model generating - pausing audio sending');
+          this.shouldPauseAudioSending = true;
+          this.consecutiveSilentChunks = 0;
+        }
+        break;
+
+      case 'tools_complete':
+        // Tools completed - keep paused, will resume when agent starts speaking (receives audio)
+        console.log(`Tools complete (${(message as any).toolCount || 'unknown'} tools) - waiting for agent response`);
+        // Don't resume yet - wait for agent to start speaking (audio chunks)
+        break;
+
+      case 'turn_complete':
+        // Turn complete - resume sending for next turn
+        console.log('Turn complete - resuming audio sending');
+        this.shouldPauseAudioSending = false;
+        this.consecutiveSilentChunks = 0;
         break;
 
       default:
