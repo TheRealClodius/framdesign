@@ -582,12 +582,10 @@ export class VoiceService extends EventTarget {
             this.partialTranscripts.user.push(transcript);
           } else {
             this.partialTranscripts.assistant.push(transcript);
-            // Agent is speaking - resume audio sending for next turn
-            if (this.shouldPauseAudioSending) {
-              console.log('Agent responded, resuming audio sending');
-              this.shouldPauseAudioSending = false;
-              this.consecutiveSilentChunks = 0;
-            }
+            // NOTE: Do NOT resume audio sending here - the agent is still speaking!
+            // Resuming here caused the agent's voice to be picked up by the mic
+            // and sent to Gemini as "user input", triggering false interruptions.
+            // Audio sending resumes on 'turn_complete' signal instead.
           }
           
           // Emit transcript for real-time display
