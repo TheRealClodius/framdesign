@@ -931,6 +931,20 @@ wss.on('connection', async (ws, req) => {
               inputAudioTranscription: {},
               // Enable output audio transcription for debugging
               outputAudioTranscription: {},
+              // Configure Voice Activity Detection (VAD) to reduce false interruptions from background noise
+              // Using LOW sensitivity settings to prevent background noise from cutting off agent speech
+              realtimeInputConfig: {
+                automaticActivityDetection: {
+                  // Less sensitive to detecting speech start (reduces false triggers from background noise)
+                  startOfSpeechSensitivity: 'START_SENSITIVITY_LOW',
+                  // Less likely to detect end of speech prematurely (KEY for preventing cutoffs)
+                  endOfSpeechSensitivity: 'END_SENSITIVITY_LOW',
+                  // Require 1 second of silence before ending turn (default is ~500ms)
+                  silenceDurationMs: 1000,
+                  // Require 100ms of speech before committing to speech start (reduces false starts)
+                  prefixPaddingMs: 100
+                }
+              },
               // Add tool support (all 5 tools from registry)
               tools: [{ functionDeclarations: geminiToolSchemas }]
             };
