@@ -165,6 +165,10 @@ wss.on('connection', async (ws, req) => {
   let conversationHistory = []; // Store for context injection
   let pendingRequest = null; // Store pending user request from text agent handoff
   let currentTurn = 1; // Track conversation turns for loop detection (NEW)
+  
+  // Track last transcript text to detect and deduplicate overlapping chunks from Gemini
+  // Gemini's streaming transcription can send chunks that overlap with previous chunks
+  let lastTranscriptText = { user: '', assistant: '' };
 
   // Initialize state controller for session
   const state = createStateController({
@@ -248,6 +252,53 @@ wss.on('connection', async (ws, req) => {
       console.error(`[${clientId}] Error in sendRealtimeInput:`, error);
       return false;
     }
+  }
+
+  // Helper function to deduplicate overlapping transcript chunks
+  // Gemini's streaming transcription can send chunks that overlap with previous chunks
+  // e.g., Previous: "linkedin.com/in/user-123456/" New: "123456/" -> should only add nothing or minimal
+  function deduplicateTranscript(previousText, newText, role) {
+    if (!previousText || !newText) return newText;
+    
+    // Normalize whitespace for comparison
+    const prevNormalized = previousText.trim();
+    const newNormalized = newText.trim();
+    
+    // If the new text is entirely contained in the previous text, it's a duplicate
+    if (prevNormalized.endsWith(newNormalized)) {
+      console.log(`[TRANSCRIPT-DEDUP] ${role}: Complete duplicate detected, skipping`);
+      return null;
+    }
+    
+    // Check for overlapping suffix/prefix
+    // Look for the longest overlap between end of previous and start of new
+    let maxOverlap = Math.min(prevNormalized.length, newNormalized.length);
+    let overlapLength = 0;
+    
+    for (let i = 1; i <= maxOverlap; i++) {
+      const prevSuffix = prevNormalized.slice(-i);
+      const newPrefix = newNormalized.slice(0, i);
+      
+      if (prevSuffix === newPrefix) {
+        overlapLength = i;
+      }
+    }
+    
+    if (overlapLength > 0) {
+      // There's an overlap - return only the non-overlapping portion
+      const deduplicated = newNormalized.slice(overlapLength);
+      console.log(`[TRANSCRIPT-DEDUP] ${role}: Overlap detected (${overlapLength} chars), original: "${newNormalized.substring(0, 30)}...", deduplicated: "${deduplicated.substring(0, 30)}..."`);
+      
+      // If after deduplication there's nothing left, return null
+      if (!deduplicated.trim()) {
+        return null;
+      }
+      
+      return deduplicated;
+    }
+    
+    // No overlap detected, return original
+    return newText;
   }
 
   // Helper function to handle messages from Gemini
@@ -792,6 +843,10 @@ wss.on('connection', async (ws, req) => {
         state.set('audioChunkCounter', 0); // Reset for next turn
         state.set('lastAudioFingerprint', null); // Reset for next turn
         
+        // Reset transcript deduplication tracking for next turn
+        // This prevents cross-turn deduplication from incorrectly filtering valid new transcripts
+        lastTranscriptText = { user: '', assistant: '' };
+        
         // If end_voice_session tool was called, now is the time to send it (after all audio is generated)
         const pendingEndVoiceSession = state.get('pendingEndVoiceSession');
         if (pendingEndVoiceSession) {
@@ -840,6 +895,10 @@ wss.on('connection', async (ws, req) => {
         state.set('audioChunkCounter', 0); // Reset for next turn
         state.set('lastAudioFingerprint', null); // Reset for next turn
         
+        // Reset transcript deduplication tracking on interruption
+        // The interrupted response is incomplete, so we need fresh deduplication for the next response
+        lastTranscriptText = { user: '', assistant: '' };
+        
         // Notify client to stop audio playback (if not already sent)
         if (!state.get('interruptionSent')) {
           ws.send(JSON.stringify({
@@ -852,45 +911,68 @@ wss.on('connection', async (ws, req) => {
       // Input transcription (user speech to text) - arrives in serverContent
       // According to Gemini Live API docs, transcripts are in serverContent.inputTranscription.text
       if (content.inputTranscription?.text) {
-        const transcriptPreview = content.inputTranscription.text.substring(0, 50);
+        const rawText = content.inputTranscription.text;
+        const transcriptPreview = rawText.substring(0, 50);
         console.log(`[${clientId}] Transcript received: user - ${transcriptPreview}...`);
-        console.log(`[${clientId}] ✓ INPUT TRANSCRIPTION RECEIVED: ${content.inputTranscription.text}`);
-        conversationTranscripts.user.push({
-          text: content.inputTranscription.text,
-          timestamp: Date.now()
-        });
+        console.log(`[${clientId}] ✓ INPUT TRANSCRIPTION RECEIVED: ${rawText}`);
         
-        setImmediate(() => {
-          ws.send(JSON.stringify({
-            type: 'transcript',
-            role: 'user',
-            text: content.inputTranscription.text
-          }));
-        });
-      }
-
-      // Output transcription (model speech to text) - arrives in serverContent
-      // According to Gemini Live API docs, transcripts are in serverContent.outputTranscription.text
-      if (content.outputTranscription?.text) {
-        const transcriptPreview = content.outputTranscription.text.substring(0, 50);
-        console.log(`[${clientId}] Transcript received: assistant - ${transcriptPreview}...`);
-        console.log(`[${clientId}] ✓ OUTPUT TRANSCRIPTION RECEIVED: ${content.outputTranscription.text}`);
+        // Deduplicate overlapping chunks from Gemini's streaming transcription
+        const deduplicatedText = deduplicateTranscript(lastTranscriptText.user, rawText, 'user');
         
-        if (state.get('shouldSuppressTranscript')) {
-          console.log(`[${clientId}] ⚠️ TRANSCRIPT SUPPRESSED - end_voice_session tool was called, preventing duplicate message in chat`);
-        } else {
-          conversationTranscripts.assistant.push({
-            text: content.outputTranscription.text,
+        if (deduplicatedText) {
+          // Update last transcript for future deduplication
+          lastTranscriptText.user = rawText;
+          
+          conversationTranscripts.user.push({
+            text: deduplicatedText,
             timestamp: Date.now()
           });
           
           setImmediate(() => {
             ws.send(JSON.stringify({
               type: 'transcript',
-              role: 'assistant',
-              text: content.outputTranscription.text
+              role: 'user',
+              text: deduplicatedText
             }));
           });
+        } else {
+          console.log(`[${clientId}] ⚠️ INPUT TRANSCRIPT SKIPPED - duplicate chunk detected`);
+        }
+      }
+
+      // Output transcription (model speech to text) - arrives in serverContent
+      // According to Gemini Live API docs, transcripts are in serverContent.outputTranscription.text
+      if (content.outputTranscription?.text) {
+        const rawText = content.outputTranscription.text;
+        const transcriptPreview = rawText.substring(0, 50);
+        console.log(`[${clientId}] Transcript received: assistant - ${transcriptPreview}...`);
+        console.log(`[${clientId}] ✓ OUTPUT TRANSCRIPTION RECEIVED: ${rawText}`);
+        
+        if (state.get('shouldSuppressTranscript')) {
+          console.log(`[${clientId}] ⚠️ TRANSCRIPT SUPPRESSED - end_voice_session tool was called, preventing duplicate message in chat`);
+        } else {
+          // Deduplicate overlapping chunks from Gemini's streaming transcription
+          const deduplicatedText = deduplicateTranscript(lastTranscriptText.assistant, rawText, 'assistant');
+          
+          if (deduplicatedText) {
+            // Update last transcript for future deduplication
+            lastTranscriptText.assistant = rawText;
+            
+            conversationTranscripts.assistant.push({
+              text: deduplicatedText,
+              timestamp: Date.now()
+            });
+            
+            setImmediate(() => {
+              ws.send(JSON.stringify({
+                type: 'transcript',
+                role: 'assistant',
+                text: deduplicatedText
+              }));
+            });
+          } else {
+            console.log(`[${clientId}] ⚠️ OUTPUT TRANSCRIPT SKIPPED - duplicate chunk detected`);
+          }
         }
       }
     }
@@ -1208,6 +1290,7 @@ wss.on('connection', async (ws, req) => {
               sessionReady = false;
               audioBuffer = [];
               conversationTranscripts = { user: [], assistant: [] };
+              lastTranscriptText = { user: '', assistant: '' }; // Reset transcript deduplication tracking
               state.set('pendingEndVoiceSession', null); // Clear any pending end session
               state.set('shouldSuppressAudio', false); // Reset audio suppression flag
               state.set('shouldSuppressTranscript', false); // Reset transcript suppression flag
@@ -1229,6 +1312,7 @@ wss.on('connection', async (ws, req) => {
             sessionReady = false;
             audioBuffer = [];
             conversationTranscripts = { user: [], assistant: [] };
+            lastTranscriptText = { user: '', assistant: '' }; // Reset transcript deduplication tracking
             state.set('pendingEndVoiceSession', null); // Clear any pending end session
             state.set('shouldSuppressAudio', false); // Reset audio suppression flag
             state.set('shouldSuppressTranscript', false); // Reset transcript suppression flag

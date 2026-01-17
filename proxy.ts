@@ -20,21 +20,25 @@ export function proxy(request: NextRequest) {
   // Check if pathname already has a locale segment
   const pathnameHasLocale = /^\/[a-z]{2}(\/|$)/.test(pathname);
 
-  // If root path, redirect to default locale
-  if (pathname === '/') {
-    return NextResponse.redirect(
-      new URL(`/${defaultLocale}`, request.url)
-    );
+  // If URL has /en prefix, redirect to clean URL (remove /en)
+  if (pathname.startsWith(`/${defaultLocale}/`) || pathname === `/${defaultLocale}`) {
+    const cleanPath = pathname === `/${defaultLocale}` 
+      ? '/' 
+      : pathname.replace(`/${defaultLocale}`, '');
+    return NextResponse.redirect(new URL(cleanPath, request.url));
   }
 
-  // If path doesn't have a locale, redirect to add default locale
-  if (!pathnameHasLocale) {
-    return NextResponse.redirect(
-      new URL(`/${defaultLocale}${pathname}`, request.url)
-    );
+  // If path has a different locale prefix, keep it (for future multi-locale support)
+  if (pathnameHasLocale) {
+    return NextResponse.next();
   }
 
-  return NextResponse.next();
+  // Rewrite clean URLs internally to /en without changing the URL bar
+  // This allows clean URLs like / to work while internally routing to /en
+  const rewriteUrl = new URL(request.url);
+  rewriteUrl.pathname = `/${defaultLocale}${pathname === '/' ? '' : pathname}`;
+  
+  return NextResponse.rewrite(rewriteUrl);
 }
 
 export const config = {
