@@ -24,7 +24,8 @@ const nextConfig: NextConfig = {
   },
   // Externalize native packages that should be loaded at runtime by Node.js
   // This tells Next.js to not bundle these packages on the server
-  serverExternalPackages: ['@lancedb/lancedb'],
+  // - tiktoken: requires .wasm file that must be loaded at runtime
+  serverExternalPackages: ['tiktoken'],
   experimental: {
     scrollRestoration: false,
     // Optimize package imports to reduce bundle size and compilation time
