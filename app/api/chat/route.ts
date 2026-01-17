@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { GoogleGenAI } from "@google/genai";
 import { FRAM_SYSTEM_PROMPT } from "@/lib/config";
 import { createHash } from "crypto";
-import { handleServerError, isRetryableError } from "@/lib/errors";
+import { handleServerError, isRetryableError, isCacheError } from "@/lib/errors";
 import fs from 'fs';
 import path from 'path';
 
@@ -932,14 +932,39 @@ export async function POST(request: Request) {
         config.systemInstruction = FRAM_SYSTEM_PROMPT;
       }
 
-      const result = await ai.models.generateContentStream({
-        model: "gemini-3-flash-preview", // Gemini 3 Flash Preview
-        contents: contentsToSend,
-        config
-      });
-      
-      console.log("Gemini API stream created");
-      return result;
+      try {
+        const result = await ai.models.generateContentStream({
+          model: "gemini-3-flash-preview", // Gemini 3 Flash Preview
+          contents: contentsToSend,
+          config
+        });
+        
+        console.log("Gemini API stream created");
+        return result;
+      } catch (err) {
+        // If cache error and we're using cache, retry without cache
+        if (isCacheError(err) && usingCache) {
+          console.warn(`Cache error detected in initial stream, retrying without cache`);
+          debugLog(`Retrying initial stream without cache`);
+          
+          // Retry without cache
+          const fallbackConfig: GeminiConfig = {
+            tools: [{ functionDeclarations: providerSchemas }],
+            systemInstruction: FRAM_SYSTEM_PROMPT
+          };
+          
+          const result = await ai.models.generateContentStream({
+            model: "gemini-3-flash-preview",
+            contents: contentsToSend,
+            config: fallbackConfig
+          });
+          
+          console.log("Gemini API stream created (fallback without cache)");
+          return result;
+        }
+        
+        throw err;
+      }
     });
 
     // Check early chunks for function calls, then stream progressively to the client
@@ -1376,6 +1401,25 @@ export async function POST(request: Request) {
              return result;
           } catch (err) {
              debugLog(`generateContentStream failed for tool: ${toolName} - ${err}`);
+             
+             // If cache error and we're using cache, retry without cache
+             if (isCacheError(err) && config.cachedContent) {
+               console.warn(`Cache error detected, retrying without cache for tool: ${toolName}`);
+               debugLog(`Retrying without cache for tool: ${toolName}`);
+               
+               // Retry without cache
+               const fallbackConfig: GeminiConfig = {
+                 tools: [{ functionDeclarations: providerSchemas }],
+                 systemInstruction: FRAM_SYSTEM_PROMPT
+               };
+               
+               return await ai.models.generateContentStream({
+                 model: "gemini-3-flash-preview",
+                 contents: updatedContents,
+                 config: fallbackConfig
+               });
+             }
+             
              throw err;
           }
         });
@@ -1579,11 +1623,33 @@ export async function POST(request: Request) {
                         config.systemInstruction = FRAM_SYSTEM_PROMPT;
                       }
 
-                      return await ai.models.generateContentStream({
-                        model: "gemini-3-flash-preview",
-                        contents: currentContents,
-                        config
-                      });
+                      try {
+                        return await ai.models.generateContentStream({
+                          model: "gemini-3-flash-preview",
+                          contents: currentContents,
+                          config
+                        });
+                      } catch (err) {
+                        // If cache error and we're using cache, retry without cache
+                        if (isCacheError(err) && config.cachedContent) {
+                          console.warn(`Cache error detected in chained call, retrying without cache`);
+                          debugLog(`Retrying chained call without cache`);
+                          
+                          // Retry without cache
+                          const fallbackConfig: GeminiConfig = {
+                            tools: [{ functionDeclarations: providerSchemas }],
+                            systemInstruction: FRAM_SYSTEM_PROMPT
+                          };
+                          
+                          return await ai.models.generateContentStream({
+                            model: "gemini-3-flash-preview",
+                            contents: currentContents,
+                            config: fallbackConfig
+                          });
+                        }
+                        
+                        throw err;
+                      }
                     });
 
                     // Loop back to process the new stream
