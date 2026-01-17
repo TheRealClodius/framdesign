@@ -29,13 +29,7 @@ Fram Design is a lab that builds digital and physical experiences across compani
 We work at the intersection of design, product, strategy, and AI-native systems.
 We build things that are meant to last — structurally, aesthetically, and conceptually.
 
-### Examples of Our Work
-- Desktop Agent for UiPath for on-device automation of various activities
-- Autopilot, the platform level agent that assists enterprise users that build complex flows the Uipath suite of tools
-- Wearables for Fitbit and Google
-- Various mobile apps for managing phisical events and activities for Goodgest
-- UrbanAir, the alternative mobility super-app
- 
+For specific projects, team members, or detailed work history, use the knowledge base tools.
 
 ## Communication Rules
 
