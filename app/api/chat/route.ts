@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI } from "@google/genai";
 import { FRAM_SYSTEM_PROMPT } from "@/lib/config";
 import { createHash } from "crypto";
 import { handleServerError, isRetryableError } from "@/lib/errors";
@@ -11,9 +11,96 @@ import {
 } from "@/lib/constants";
 import { estimateTokens, estimateMessageTokens } from "@/lib/token-count";
 import { toolRegistry } from '@/tools/_core/registry';
-import { ErrorType, ToolError } from '@/tools/_core/error-types';
 import { createStateController } from '@/tools/_core/state-controller';
 import { retryWithBackoff as retryToolExecution } from '@/tools/_core/retry-handler';
+
+// Type definitions
+type ProviderSchema = {
+  name: string;
+  description: string;
+  parametersJsonSchema: Record<string, unknown>;
+};
+
+type GeminiConfig = {
+  tools?: Array<{ functionDeclarations: ProviderSchema[] }>;
+  cachedContent?: string;
+  systemInstruction?: string;
+};
+
+type FunctionCall = {
+  name: string;
+  args: Record<string, unknown>;
+  thought_signature?: string;
+};
+
+type FunctionCallPart = {
+  functionCall: FunctionCall;
+};
+
+type ObservabilityContextStack = {
+  systemPromptSource: string;
+  totalMessages: number;
+  recentMessages: number;
+  summaryPresent: boolean;
+  summaryUpToIndex: number;
+  cachedContentUsed: boolean;
+  cachedTokens?: number;
+  estimatedTokens: number;
+  timeoutExpired: boolean;
+};
+
+type ObservabilityToolCall = {
+  position: number;
+  chainPosition: number;
+  toolId: string;
+  args: Record<string, unknown>;
+  thoughtSignature?: string;
+  startTime: number;
+  duration: number;
+  ok: boolean;
+  result: unknown;
+  error: unknown;
+};
+
+type StateController = {
+  get: (key: string) => unknown;
+  set: (key: string, value: unknown) => void;
+  applyIntent?: (intent: unknown) => void;
+  getSnapshot: () => Record<string, unknown>;
+};
+
+type ToolMetadata = {
+  version?: string;
+  category?: string;
+  [key: string]: unknown;
+};
+
+type ObservabilityData = {
+  contextStack: ObservabilityContextStack;
+  toolCalls: ObservabilityToolCall[];
+  chainedCalls: number;
+  totalDuration: number;
+  finalResponseLength: number;
+  requestStartTime: number;
+};
+
+type StreamChunkPart = {
+  text?: string;
+  functionCall?: FunctionCall;
+};
+
+type StreamChunkContent = {
+  parts?: StreamChunkPart[];
+};
+
+type StreamChunkCandidate = {
+  content?: StreamChunkContent;
+};
+
+type StreamChunk = {
+  candidates?: StreamChunkCandidate[];
+  text?: string | (() => string);
+};
 
 // Schema conversion removed - using canonical JSON Schema directly from registry
 
@@ -166,7 +253,7 @@ function enforceTokenBudget(
  * Creates or retrieves the system prompt cache
  * Automatically invalidates and recreates cache if system prompt changes
  */
-async function getSystemPromptCache(ai: GoogleGenAI, providerSchemas: any[]): Promise<string | null> {
+async function getSystemPromptCache(ai: GoogleGenAI, providerSchemas: ProviderSchema[]): Promise<string | null> {
   // Calculate current system prompt hash
   const currentPromptHash = hashSystemPrompt(FRAM_SYSTEM_PROMPT);
   
@@ -258,7 +345,7 @@ async function getConversationCache(
   summary: string | null,
   recentMessages: Array<{ role: string; parts: Array<{ text: string }> }>,
   summaryUpToIndex: number,
-  providerSchemas: any[]
+  providerSchemas: ProviderSchema[]
 ): Promise<{ 
   cacheName: string | null; 
   summaryCacheName: string | null;
@@ -433,9 +520,9 @@ export async function POST(request: Request) {
   const observabilityMode = url.searchParams.get('_observability') === 'true';
   
   // Initialize observability collector (only if mode is enabled)
-  const observability = observabilityMode ? {
-    contextStack: {} as any,
-    toolCalls: [] as any[],
+  const observability: ObservabilityData | null = observabilityMode ? {
+    contextStack: {} as ObservabilityContextStack,
+    toolCalls: [] as ObservabilityToolCall[],
     chainedCalls: 0,
     totalDuration: 0,
     finalResponseLength: 0,
@@ -472,12 +559,13 @@ export async function POST(request: Request) {
           timeoutExpired: false
         };
         observability.totalDuration = Date.now() - observability.requestStartTime;
-        (response as any).observability = {
+        (response as { observability?: ObservabilityData }).observability = {
           contextStack: observability.contextStack,
           toolCalls: [],
           chainedCalls: 0,
           totalDuration: observability.totalDuration,
-          finalResponseLength: JSON.stringify(response).length
+          finalResponseLength: JSON.stringify(response).length,
+          requestStartTime: observability.requestStartTime
         };
       }
       
@@ -502,12 +590,13 @@ export async function POST(request: Request) {
           timeoutExpired: false
         };
         observability.totalDuration = Date.now() - observability.requestStartTime;
-        (errorResponse as any).observability = {
+        (errorResponse as { observability?: ObservabilityData }).observability = {
           contextStack: observability.contextStack,
           toolCalls: [],
           chainedCalls: 0,
           totalDuration: observability.totalDuration,
-          finalResponseLength: JSON.stringify(errorResponse).length
+          finalResponseLength: JSON.stringify(errorResponse).length,
+          requestStartTime: observability.requestStartTime
         };
       }
       
@@ -543,12 +632,13 @@ export async function POST(request: Request) {
             timeoutExpired: false
           };
           observability.totalDuration = Date.now() - observability.requestStartTime;
-          (errorResponse as any).observability = {
+          (errorResponse as { observability?: ObservabilityData }).observability = {
             contextStack: observability.contextStack,
             toolCalls: [],
             chainedCalls: 0,
             totalDuration: observability.totalDuration,
-            finalResponseLength: JSON.stringify(errorResponse).length
+            finalResponseLength: JSON.stringify(errorResponse).length,
+            requestStartTime: observability.requestStartTime
           };
         }
         
@@ -809,11 +899,7 @@ export async function POST(request: Request) {
 
       // When using cached content, tools must be included in the cache, not in the request
       // So we conditionally include tools based on whether we're using cached content
-      const config: {
-        tools?: Array<{ functionDeclarations: any[] }>;
-        cachedContent?: string;
-        systemInstruction?: string;
-      } = {};
+      const config: GeminiConfig = {};
 
       // Add cached content reference if available
       // Only add if cachedContent is truthy and not empty
@@ -847,9 +933,9 @@ export async function POST(request: Request) {
 
     // Check early chunks for function calls, then stream progressively to the client
     // Store the full functionCall part including thought_signature (required by Gemini 3)
-    let functionCall: { name: string; args: Record<string, unknown>; thought_signature?: string } | null = null;
+    let functionCall: FunctionCall | null = null;
     // Store the full functionCall part as returned by the model (preserves thought_signature)
-    let functionCallPart: { functionCall: { name: string; args: Record<string, unknown>; thought_signature?: string } } | null = null;
+    let functionCallPart: FunctionCallPart | null = null;
     const bufferedChunks: unknown[] = [];
 
     try {
@@ -862,13 +948,13 @@ export async function POST(request: Request) {
         if (done) break;
         bufferedChunks.push(value);
 
-        const typed = value as { candidates?: Array<{ content?: { parts?: Array<{ text?: string; functionCall?: { name: string; args: Record<string, unknown>; thought_signature?: string } }> } }> };
+        const typed = value as { candidates?: Array<{ content?: { parts?: Array<{ text?: string; functionCall?: FunctionCall }> } }> };
         const candidates = typed.candidates?.[0]?.content?.parts || [];
         const callPart = candidates.find((part) => part.functionCall);
         if (callPart?.functionCall) {
           functionCall = callPart.functionCall;
           // Preserve the entire part including thought_signature for follow-up requests
-          functionCallPart = callPart as { functionCall: { name: string; args: Record<string, unknown>; thought_signature?: string } };
+          functionCallPart = callPart as FunctionCallPart;
           break;
         }
       }
@@ -879,10 +965,10 @@ export async function POST(request: Request) {
         const state = createStateController({
           mode: 'text',
           isActive: true
-        }) as any;
+        }) as StateController;
 
         // Get tool metadata
-        const toolMetadata = toolRegistry.getToolMetadata('ignore_user') as any;
+        const toolMetadata = toolRegistry.getToolMetadata('ignore_user') as ToolMetadata | null;
 
         // Build execution context
         const executionContext = {
@@ -905,7 +991,7 @@ export async function POST(request: Request) {
             mode: 'text',
             maxRetries: 3,
             toolId: 'ignore_user',
-            toolMetadata: toolMetadata,
+            toolMetadata: (toolMetadata || {}) as object,
             clientId: `text-${Date.now()}`
           }
         );
@@ -952,12 +1038,13 @@ export async function POST(request: Request) {
           
           // Append observability if enabled
           if (observability) {
-            (response as any).observability = {
+            (response as { observability?: ObservabilityData }).observability = {
               contextStack: observability.contextStack,
               toolCalls: observability.toolCalls,
               chainedCalls: observability.chainedCalls,
               totalDuration: observability.totalDuration,
-              finalResponseLength: JSON.stringify(response).length
+              finalResponseLength: JSON.stringify(response).length,
+              requestStartTime: observability.requestStartTime
             };
           }
           
@@ -970,12 +1057,13 @@ export async function POST(request: Request) {
           
           // Append observability even on error
           if (observability) {
-            (errorResponse as any).observability = {
+            (errorResponse as { observability?: ObservabilityData }).observability = {
               contextStack: observability.contextStack,
               toolCalls: observability.toolCalls,
               chainedCalls: observability.chainedCalls,
               totalDuration: observability.totalDuration,
-              finalResponseLength: JSON.stringify(errorResponse).length
+              finalResponseLength: JSON.stringify(errorResponse).length,
+              requestStartTime: observability.requestStartTime
             };
           }
           
@@ -989,9 +1077,9 @@ export async function POST(request: Request) {
         const state = createStateController({
           mode: 'text',
           isActive: true
-        }) as any;
+        }) as StateController;
 
-        const toolMetadata = toolRegistry.getToolMetadata('start_voice_session') as any;
+        const toolMetadata = toolRegistry.getToolMetadata('start_voice_session') as ToolMetadata | null;
 
         const executionContext = {
           clientId: `text-${Date.now()}`,
@@ -1012,7 +1100,7 @@ export async function POST(request: Request) {
             mode: 'text',
             maxRetries: 3,
             toolId: 'start_voice_session',
-            toolMetadata: toolMetadata,
+            toolMetadata: toolMetadata ? (toolMetadata as object) : {},
             clientId: `text-${Date.now()}`
           }
         );
@@ -1073,12 +1161,13 @@ export async function POST(request: Request) {
           
           // Append observability if enabled
           if (observability) {
-            (response as any).observability = {
+            (response as { observability?: ObservabilityData }).observability = {
               contextStack: observability.contextStack,
               toolCalls: observability.toolCalls,
               chainedCalls: observability.chainedCalls,
               totalDuration: observability.totalDuration,
-              finalResponseLength: JSON.stringify(response).length
+              finalResponseLength: JSON.stringify(response).length,
+              requestStartTime: observability.requestStartTime
             };
           }
           
@@ -1091,12 +1180,13 @@ export async function POST(request: Request) {
           
           // Append observability even on error
           if (observability) {
-            (errorResponse as any).observability = {
+            (errorResponse as { observability?: ObservabilityData }).observability = {
               contextStack: observability.contextStack,
               toolCalls: observability.toolCalls,
               chainedCalls: observability.chainedCalls,
               totalDuration: observability.totalDuration,
-              finalResponseLength: JSON.stringify(errorResponse).length
+              finalResponseLength: JSON.stringify(errorResponse).length,
+              requestStartTime: observability.requestStartTime
             };
           }
           
@@ -1113,10 +1203,10 @@ export async function POST(request: Request) {
         const state = createStateController({
           mode: 'text',
           isActive: true
-        }) as any;
+        }) as StateController;
 
         // Get tool metadata
-        const toolMetadata = toolRegistry.getToolMetadata(toolName) as any;
+        const toolMetadata = toolRegistry.getToolMetadata(toolName) as ToolMetadata | null;
         
         if (!toolMetadata) {
           console.error(`Unknown tool: ${toolName}`);
@@ -1147,7 +1237,7 @@ export async function POST(request: Request) {
             mode: 'text',
             maxRetries: 3,
             toolId: toolName,
-            toolMetadata: toolMetadata,
+            toolMetadata: toolMetadata ? (toolMetadata as object) : {},
             clientId: `text-${Date.now()}`
           }
         );
@@ -1189,12 +1279,13 @@ export async function POST(request: Request) {
           
           // Append observability even on error
           if (observability) {
-            (errorResponse as any).observability = {
+            (errorResponse as { observability?: ObservabilityData }).observability = {
               contextStack: observability.contextStack,
               toolCalls: observability.toolCalls,
               chainedCalls: observability.chainedCalls,
               totalDuration: observability.totalDuration,
-              finalResponseLength: JSON.stringify(errorResponse).length
+              finalResponseLength: JSON.stringify(errorResponse).length,
+              requestStartTime: observability.requestStartTime
             };
           }
           
@@ -1210,7 +1301,7 @@ export async function POST(request: Request) {
             role: "model" as const,
             parts: [
               // Use the preserved functionCallPart which includes thought_signature
-              functionCallPart || {
+              (functionCallPart as FunctionCallPart) || {
                 functionCall: {
                   name: toolName,
                   args: functionCall.args || {}
@@ -1238,11 +1329,7 @@ export async function POST(request: Request) {
 
         // Make a new API call with the tool result
         const followUpStream = await retryWithBackoff(async () => {
-          const config: {
-            tools?: Array<{ functionDeclarations: any[] }>;
-            cachedContent?: string;
-            systemInstruction?: string;
-          } = {};
+          const config: GeminiConfig = {};
 
           // Use cached content if available
           if (cachedContent && cachedContent.trim()) {
@@ -1283,7 +1370,7 @@ export async function POST(request: Request) {
                 // Loop to handle chained function calls
                 while (chainCount < MAX_CHAIN_LENGTH) {
                   // Collect all chunks from current stream
-                  const collectedChunks: any[] = [];
+                  const collectedChunks: unknown[] = [];
                   const iterator = currentStream[Symbol.asyncIterator]();
                   while (true) {
                     const { value, done } = await iterator.next();
@@ -1292,20 +1379,20 @@ export async function POST(request: Request) {
                   }
 
                   // Extract function calls and text from collected chunks
-                  let nextFunctionCall: any = null;
-                  let nextFunctionCallPart: any = null;
+                  let nextFunctionCall: FunctionCall | null = null;
+                  let nextFunctionCallPart: FunctionCallPart | null = null;
                   let responseText = "";
 
                   for (const chunk of collectedChunks) {
-                    const typed = chunk as any;
-                    const candidates = typed?.candidates?.[0]?.content?.parts || [];
+                    const typed = chunk as StreamChunk;
+                    const candidates: StreamChunkPart[] = typed?.candidates?.[0]?.content?.parts || [];
 
                     // Look for function calls and text in parts
                     let foundTextInParts = false;
                     for (const part of candidates) {
                       if (part.functionCall && !nextFunctionCall) {
                         nextFunctionCall = part.functionCall;
-                        nextFunctionCallPart = part; // Preserve with thoughtSignature
+                        nextFunctionCallPart = { functionCall: part.functionCall } as FunctionCallPart;
                       }
                       if (part.text) {
                         responseText += part.text;
@@ -1315,11 +1402,12 @@ export async function POST(request: Request) {
 
                     // Only try direct text property if no text was found in parts
                     // This prevents duplication when API returns text in both places
-                    if (!foundTextInParts) {
-                      if (typeof typed?.text === "function") {
-                        responseText += typed.text();
-                      } else if (typed?.text) {
-                        responseText += typed.text;
+                    if (!foundTextInParts && typed) {
+                      const textProp = typed.text;
+                      if (typeof textProp === "function") {
+                        responseText += textProp();
+                      } else if (typeof textProp === "string") {
+                        responseText += textProp;
                       }
                     }
                   }
@@ -1331,7 +1419,7 @@ export async function POST(request: Request) {
                     console.log(`[Chain ${chainCount}/${MAX_CHAIN_LENGTH}] Executing chained function: ${chainedToolName}`);
 
                     // Execute the chained tool
-                    const chainedToolMetadata = toolRegistry.getToolMetadata(chainedToolName) as any;
+                    const chainedToolMetadata = toolRegistry.getToolMetadata(chainedToolName) as ToolMetadata | null;
                     if (!chainedToolMetadata) {
                       console.error(`Unknown chained tool: ${chainedToolName}`);
                       const errorMsg = `Error: Unknown tool "${chainedToolName}"`;
@@ -1424,11 +1512,7 @@ export async function POST(request: Request) {
 
                     // Make another API call with the new tool result
                     currentStream = await retryWithBackoff(async () => {
-                      const config: {
-                        tools?: Array<{ functionDeclarations: any[] }>;
-                        cachedContent?: string;
-                        systemInstruction?: string;
-                      } = {};
+                      const config: GeminiConfig = {};
 
                       if (cachedContent && cachedContent.trim()) {
                         config.cachedContent = cachedContent;
