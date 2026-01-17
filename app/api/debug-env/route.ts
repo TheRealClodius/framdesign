@@ -17,9 +17,26 @@ export async function GET() {
       present: !!process.env.CONTACT_EMAIL,
       value: process.env.CONTACT_EMAIL || "Not set",
     },
+    QDRANT_CLUSTER_ENDPOINT: {
+      present: !!process.env.QDRANT_CLUSTER_ENDPOINT,
+      length: process.env.QDRANT_CLUSTER_ENDPOINT?.length || 0,
+    },
+    QDRANT_API_KEY: {
+      present: !!process.env.QDRANT_API_KEY,
+      length: process.env.QDRANT_API_KEY?.length || 0,
+    },
     nodeEnv: process.env.NODE_ENV,
     vercelEnv: process.env.VERCEL_ENV || "Not set",
   };
 
-  return NextResponse.json(envCheck, { status: 200 });
+  // Test if we can import the chat route dependencies
+  let toolRegistryStatus = "not tested";
+  try {
+    const { toolRegistry } = await import("@/tools/_core/registry");
+    toolRegistryStatus = toolRegistry ? "imported" : "null";
+  } catch (e) {
+    toolRegistryStatus = `error: ${e instanceof Error ? e.message : String(e)}`;
+  }
+
+  return NextResponse.json({ ...envCheck, toolRegistryStatus }, { status: 200 });
 }
