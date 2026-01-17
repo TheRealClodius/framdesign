@@ -67,6 +67,9 @@ export class VoiceService extends EventTarget {
   // Threshold for intentional speech (to interrupt agent) - higher to reduce false interruptions
   // This prevents background noise (fans, AC, keyboard) and residual echo from triggering interruptions
   private SPEECH_INTERRUPT_THRESHOLD = 0.05;
+  private noiseFloor = 0.001;
+  private NOISE_FLOOR_ALPHA = 0.92;
+  private NOISE_FLOOR_MAX = 0.02;
   // Thinking sound for tool execution feedback
   private thinkingAudio: HTMLAudioElement | null = null;
   private thinkingFadeInterval: number | null = null;
@@ -151,6 +154,7 @@ export class VoiceService extends EventTarget {
     this.conversationHistory = conversationHistory;
     this.partialTranscripts = { user: [], assistant: [] };
     this.audioPlaybackErrors = 0;
+    this.noiseFloor = this.SILENCE_THRESHOLD;
     this.nextPlayTime = 0;
 
     // 1. Request microphone permission
@@ -390,20 +394,35 @@ export class VoiceService extends EventTarget {
         // DEBUG: Check if we're getting real audio data
         let maxVal = 0;
         let sumVal = 0;
+        let sumSquares = 0;
         for (let i = 0; i < inputData.length; i++) {
           const absVal = Math.abs(inputData[i]);
           if (absVal > maxVal) maxVal = absVal;
           sumVal += absVal;
+          sumSquares += inputData[i] * inputData[i];
         }
         const avgVal = sumVal / inputData.length;
+        const rmsVal = Math.sqrt(sumSquares / inputData.length);
+        
+        // Track a smoothed noise floor when input is mostly quiet
+        if (rmsVal < this.NOISE_FLOOR_MAX) {
+          const candidate = Math.max(rmsVal, this.SILENCE_THRESHOLD);
+          this.noiseFloor = this.noiseFloor
+            ? this.noiseFloor * this.NOISE_FLOOR_ALPHA + candidate * (1 - this.NOISE_FLOOR_ALPHA)
+            : candidate;
+        }
+        
+        const silenceThreshold = Math.max(this.SILENCE_THRESHOLD, this.noiseFloor * 1.2);
+        const speechThreshold = Math.max(this.SPEECH_THRESHOLD, this.noiseFloor * 2.5);
+        const interruptThreshold = Math.max(this.SPEECH_INTERRUPT_THRESHOLD, this.noiseFloor * 6);
         
         // Three-tier threshold system:
         // 1. Silent: below SILENCE_THRESHOLD - counts toward turn_complete
         // 2. Normal speech: above SPEECH_THRESHOLD - marks user as speaking, resets silence counter
         // 3. Loud speech: above SPEECH_INTERRUPT_THRESHOLD - can interrupt agent mid-sentence
-        const isSilent = maxVal < this.SILENCE_THRESHOLD;
-        const isSpeech = maxVal >= this.SPEECH_THRESHOLD;
-        const isIntentionalSpeech = maxVal >= this.SPEECH_INTERRUPT_THRESHOLD;
+        const isSilent = rmsVal < silenceThreshold;
+        const isSpeech = rmsVal >= speechThreshold;
+        const isIntentionalSpeech = rmsVal >= interruptThreshold || maxVal >= interruptThreshold;
         
         // Track consecutive silent chunks
         if (isSilent) {
@@ -459,11 +478,11 @@ export class VoiceService extends EventTarget {
         
         // Log audio levels periodically (every ~100 chunks, less verbose)
         if (Math.random() < 0.01) {
-          console.log(`Audio levels - max: ${maxVal.toFixed(4)}, avg: ${avgVal.toFixed(6)}, silent_chunks: ${this.consecutiveSilentChunks || 0}, paused: ${this.shouldPauseAudioSending}`);
+          console.log(`Audio levels - max: ${maxVal.toFixed(4)}, rms: ${rmsVal.toFixed(6)}, avg: ${avgVal.toFixed(6)}, noiseFloor: ${this.noiseFloor.toFixed(6)}, silent_chunks: ${this.consecutiveSilentChunks || 0}, paused: ${this.shouldPauseAudioSending}`);
         }
         
         // Skip completely silent chunks (all zeros means mic not working)
-        if (maxVal < 0.0001) {
+        if (rmsVal < 0.0001) {
           // Still send to server to maintain stream, but log warning rarely
           if (Math.random() < 0.001) {
             console.warn('Audio appears to be silent (all zeros) - check microphone');

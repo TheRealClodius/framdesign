@@ -189,6 +189,10 @@ wss.on('connection', async (ws, req) => {
   // Audio buffer for storing audio chunks while awaiting user turn
   // This ensures Gemini receives all audio as a batch, preventing timing issues
   let pendingAudioBuffer = [];
+  // Fallback VAD: auto-complete user turn if client signal is missed
+  let userTurnTimeout = null;
+  let userTurnCompletionInProgress = false;
+  const USER_TURN_SILENCE_MS = 900;
 
   // Transport will be set when geminiSession is created
   let transport = null;
@@ -262,6 +266,28 @@ wss.on('connection', async (ws, req) => {
     }
   }
 
+  function clearUserTurnTimeout() {
+    if (userTurnTimeout) {
+      clearTimeout(userTurnTimeout);
+      userTurnTimeout = null;
+    }
+  }
+
+  function scheduleUserTurnTimeout() {
+    clearUserTurnTimeout();
+    userTurnTimeout = setTimeout(() => {
+      if (!state.get('awaitingUserTurn')) {
+        return;
+      }
+      if (pendingAudioBuffer.length === 0) {
+        return;
+      }
+      finalizeUserTurn('silence_timeout').catch((error) => {
+        console.error(`[${clientId}] Error auto-finalizing user turn:`, error);
+      });
+    }, USER_TURN_SILENCE_MS);
+  }
+
   // Helper function to deduplicate overlapping transcript chunks
   // Gemini's streaming transcription can send chunks that overlap with previous chunks
   // e.g., Previous: "linkedin.com/in/user-123456/" New: "123456/" -> should only add nothing or minimal
@@ -307,6 +333,56 @@ wss.on('connection', async (ws, req) => {
     
     // No overlap detected, return original
     return newText;
+  }
+
+  async function finalizeUserTurn(source) {
+    if (userTurnCompletionInProgress) {
+      console.log(`[${clientId}] User turn completion already in progress, skipping (${source})`);
+      return;
+    }
+    userTurnCompletionInProgress = true;
+    clearUserTurnTimeout();
+
+    // Clear awaiting flag so new audio can flow while Gemini responds
+    state.set('awaitingUserTurn', false);
+
+    try {
+      if (!geminiSession) {
+        console.error(`[${clientId}] Cannot finalize user turn - geminiSession is null`);
+        return;
+      }
+
+      if (pendingAudioBuffer.length === 0) {
+        console.log(`[${clientId}] No buffered audio for user turn (${source}) - skipping Gemini turnComplete`);
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'turn_complete' }));
+        }
+        return;
+      }
+
+      console.log(`[${clientId}] Finalizing user turn (${source}) with ${pendingAudioBuffer.length} buffered chunks`);
+      const chunksToSend = pendingAudioBuffer;
+      pendingAudioBuffer = [];
+
+      for (const audioChunk of chunksToSend) {
+        sendAudioToGemini(audioChunk);
+      }
+
+      // Block audio during model generation
+      state.set('isModelGenerating', true);
+      state.set('userAudioChunkCount', 0); // Reset barge-in counter
+      console.log(`[${clientId}] Setting isModelGenerating=true (audio blocked until barge-in threshold)`);
+
+      // Signal to Gemini that user's turn is complete
+      await geminiSession.sendClientContent({ turnComplete: true });
+      console.log(`[${clientId}] ✓ Sent turnComplete=true to Gemini`);
+    } catch (error) {
+      console.error(`[${clientId}] Error finalizing user turn (${source}):`, error);
+      // Reset state on error to avoid deadlock
+      state.set('isModelGenerating', false);
+    } finally {
+      userTurnCompletionInProgress = false;
+    }
   }
 
   // Helper function to handle messages from Gemini
@@ -421,7 +497,12 @@ wss.on('connection', async (ws, req) => {
     // This ensures suppression flags are set before we process transcripts
     // (toolCall and serverContent can arrive in the same message)
     // Check both toolCall (singular) and toolCalls (plural) for SDK compatibility
-    const toolCallData = message.toolCall || message.toolCalls || message.serverContent?.toolCall;
+    const toolCallData =
+      message.toolCall ||
+      message.toolCalls ||
+      message.serverContent?.toolCall ||
+      message.bidiGenerateContentToolCall?.toolCall ||
+      message.bidiGenerateContentToolCall;
     if (toolCallData && transport) {
       console.log(`[${clientId}] Tool call requested:`, JSON.stringify(toolCallData, null, 2));
 
@@ -804,15 +885,18 @@ wss.on('connection', async (ws, req) => {
         console.log(`[${clientId}] ⚠️ ServerContent received but no modelTurn.parts found`);
       }
 
-      // Turn complete
-      if (content.turnComplete) {
+      // Turn complete (Gemini can signal via turnComplete or generationComplete depending on API version)
+      const isTurnComplete = !!(content.turnComplete || content.generationComplete);
+      if (isTurnComplete) {
         const turnCompleteReason = content.turnCompleteReason;
+        const completionSignal = content.turnComplete ? 'turnComplete' : 'generationComplete';
         const audioChunksThisTurn = state.get('audioChunkCounter');
-        console.log(`[${clientId}] Turn complete (sent ${audioChunksThisTurn} audio chunks this turn)${turnCompleteReason ? `, reason: ${turnCompleteReason}` : ''}`);
+        console.log(`[${clientId}] Turn complete via ${completionSignal} (sent ${audioChunksThisTurn} audio chunks this turn)${turnCompleteReason ? `, reason: ${turnCompleteReason}` : ''}`);
 
         // CRITICAL: Block audio forwarding until user's turn_complete is received
         // This prevents accumulated ambient audio from triggering false interruptions
         state.set('awaitingUserTurn', true);
+        clearUserTurnTimeout();
         console.log(`[${clientId}] 🔇 Audio blocked until user turn_complete`);
 
         // Optional optimization: Send turn complete signal to client
@@ -913,6 +997,7 @@ wss.on('connection', async (ws, req) => {
         state.set('interruptionSent', false);
         state.set('userAudioChunkCount', 0); // Reset barge-in counter
         state.set('awaitingUserTurn', false); // Reset - user is now actively speaking
+        clearUserTurnTimeout();
         pendingAudioBuffer = []; // Clear any buffered audio
         state.set('shouldSuppressAudio', false); // Reset audio suppression on interruption
         state.set('shouldSuppressTranscript', false); // Reset transcript suppression on interruption
@@ -1075,7 +1160,7 @@ wss.on('connection', async (ws, req) => {
             };
             
             console.log(`[${clientId}] System instruction injected (${systemInstruction.length} chars, includes tool docs from registry)`);
-            console.log(`[${clientId}] VAD config: startSensitivity=LOW, endSensitivity=LOW, silenceDurationMs=1500, prefixPaddingMs=300`);
+            console.log(`[${clientId}] VAD config: startSensitivity=LOW, endSensitivity=LOW, silenceDurationMs=1000, prefixPaddingMs=300`);
             
             // Log tool declarations explicitly
             const toolDecls = config.tools?.[0]?.functionDeclarations || [];
@@ -1293,6 +1378,7 @@ wss.on('connection', async (ws, req) => {
               if (state.get('awaitingUserTurn')) {
                 // Buffer the audio - will be sent when turn_complete is received
                 pendingAudioBuffer.push(data.data);
+                scheduleUserTurnTimeout();
                 // Log periodically to avoid spam
                 if (pendingAudioBuffer.length === 1 || pendingAudioBuffer.length % 20 === 0) {
                   console.log(`[${clientId}] 📦 Buffering audio (${pendingAudioBuffer.length} chunks buffered)`);
@@ -1332,6 +1418,9 @@ wss.on('connection', async (ws, req) => {
               geminiSession = null;
               sessionReady = false;
               audioBuffer = [];
+              pendingAudioBuffer = [];
+              clearUserTurnTimeout();
+              userTurnCompletionInProgress = false;
               conversationTranscripts = { user: [], assistant: [] };
               lastTranscriptText = { user: '', assistant: '' }; // Reset transcript deduplication tracking
               state.set('pendingEndVoiceSession', null); // Clear any pending end session
@@ -1354,6 +1443,9 @@ wss.on('connection', async (ws, req) => {
             ws.send(JSON.stringify({ type: 'stopped' }));
             sessionReady = false;
             audioBuffer = [];
+            pendingAudioBuffer = [];
+            clearUserTurnTimeout();
+            userTurnCompletionInProgress = false;
             conversationTranscripts = { user: [], assistant: [] };
             lastTranscriptText = { user: '', assistant: '' }; // Reset transcript deduplication tracking
             state.set('pendingEndVoiceSession', null); // Clear any pending end session
@@ -1371,47 +1463,7 @@ wss.on('connection', async (ws, req) => {
         case 'turn_complete':
           // Client signaled turn complete - tell Gemini to respond
           console.log(`[${clientId}] Client signaled turn complete - telling Gemini to respond`);
-          
-          // Clear the awaitingUserTurn flag - user's turn is now complete
-          state.set('awaitingUserTurn', false);
-          
-          // Safety check: if we have very little buffered audio (< 5 chunks, ~0.5s),
-          // the user likely didn't actually speak - this is a false turn_complete.
-          // Require minimum buffer OR the awaitingUserTurn was already false (audio was flowing).
-          const MIN_BUFFER_CHUNKS = 5;
-          if (pendingAudioBuffer.length > 0 && pendingAudioBuffer.length < MIN_BUFFER_CHUNKS) {
-            console.log(`[${clientId}] ⚠️ Ignoring turn_complete - only ${pendingAudioBuffer.length} buffered chunks (< ${MIN_BUFFER_CHUNKS}), user likely didn't speak`);
-            pendingAudioBuffer = []; // Clear the small buffer
-            break; // Don't send turnComplete to Gemini
-          }
-          
-          if (geminiSession) {
-            try {
-              // First, send any buffered audio that was collected while awaiting user turn
-              // This ensures Gemini receives the complete user input before we signal turn complete
-              if (pendingAudioBuffer.length > 0) {
-                console.log(`[${clientId}] 🔊 Sending ${pendingAudioBuffer.length} buffered audio chunks to Gemini`);
-                for (const audioChunk of pendingAudioBuffer) {
-                  sendAudioToGemini(audioChunk);
-                }
-                pendingAudioBuffer = []; // Clear the buffer
-              }
-              
-              // Set isModelGenerating BEFORE signaling Gemini
-              // This blocks audio forwarding until sustained speech is detected for barge-in
-              state.set('isModelGenerating', true);
-              state.set('userAudioChunkCount', 0); // Reset barge-in counter
-              console.log(`[${clientId}] Setting isModelGenerating=true (audio blocked until barge-in threshold)`);
-              
-              // Signal to Gemini that user's turn is complete
-              geminiSession.sendClientContent({ turnComplete: true });
-              console.log(`[${clientId}] ✓ Sent turnComplete=true to Gemini`);
-            } catch (error) {
-              console.error(`[${clientId}] Error sending turnComplete to Gemini:`, error);
-              // Reset state on error
-              state.set('isModelGenerating', false);
-            }
-          }
+          await finalizeUserTurn('client_signal');
           break;
 
         default:
@@ -1437,6 +1489,9 @@ wss.on('connection', async (ws, req) => {
     // Clean up session tracking (NEW)
     endSession(clientId);
     loopDetector.clearSession(clientId);
+    clearUserTurnTimeout();
+    userTurnCompletionInProgress = false;
+    pendingAudioBuffer = [];
 
     if (geminiSession) {
       try {
