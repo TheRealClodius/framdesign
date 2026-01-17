@@ -15,7 +15,7 @@
  */
 
 import { WebSocketServer, WebSocket } from 'ws';
-import { GoogleGenAI, Modality, Type } from '@google/genai';
+import { GoogleGenAI, Modality } from '@google/genai';
 import { createServer } from 'http';
 import { config } from 'dotenv';
 import { writeFileSync } from 'fs';
@@ -26,7 +26,7 @@ import { buildSystemInstruction } from './config.js';
 import { toolRegistry } from '../tools/_core/registry.js';
 import { createStateController } from '../tools/_core/state-controller.js';
 import { GeminiLiveTransport } from './providers/gemini-live-transport.js';
-import { ToolError, ErrorType } from '../tools/_core/error-types.js';
+import { ErrorType } from '../tools/_core/error-types.js';
 import { retryWithBackoff } from '../tools/_core/retry-handler.js';
 import { loopDetector } from '../tools/_core/loop-detector.js';
 import {
@@ -68,9 +68,6 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const VERTEXAI_PROJECT = process.env.VERTEXAI_PROJECT;
 const VERTEXAI_LOCATION = process.env.VERTEXAI_LOCATION || 'us-central1';
 const GOOGLE_APPLICATION_CREDENTIALS = process.env.GOOGLE_APPLICATION_CREDENTIALS; // Service account JSON path
-// VERTEXAI_API_KEY is deprecated - use GOOGLE_APPLICATION_CREDENTIALS instead
-// Only used as fallback for legacy Railway deployments
-const VERTEXAI_API_KEY = process.env.VERTEXAI_API_KEY;
 const PORT = process.env.PORT || 8080;
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'http://localhost:3000').split(',');
 
@@ -178,11 +175,15 @@ wss.on('connection', async (ws, req) => {
     shouldSuppressAudio: false,
     shouldSuppressTranscript: false,
     isModelGenerating: false,
-    userAudioChunkCount: 0,
     interruptionSent: false,
     audioChunkCounter: 0,
     lastAudioFingerprint: null,
-    hasSentGeneratingSignal: false
+    hasSentGeneratingSignal: false,
+    // Counter for audio chunks during model generation - requires sustained speech for barge-in
+    userAudioChunkCount: 0,
+    // Block audio forwarding between agent turn complete and user turn complete
+    // This prevents accumulated audio from triggering false interruptions
+    awaitingUserTurn: false
   });
 
   // Transport will be set when geminiSession is created
@@ -230,15 +231,18 @@ wss.on('connection', async (ws, req) => {
   const ai = new GoogleGenAI(aiConfig);
 
   // Helper function to send audio to Gemini
+  let audioSendCount = 0;
   function sendAudioToGemini(base64Audio) {
     if (!geminiSession) {
       console.warn(`[${clientId}] Cannot send audio - no session`);
       return false;
     }
     
-    // Log first few characters of audio data for debugging
-    const preview = base64Audio.substring(0, 20);
-    console.log(`[${clientId}] Sending audio to Gemini (${base64Audio.length} chars, preview: ${preview}...)`);
+    // Reduce log verbosity - only log every 50th chunk
+    audioSendCount++;
+    if (audioSendCount === 1 || audioSendCount % 50 === 0) {
+      console.log(`[${clientId}] Audio → Gemini (chunk #${audioSendCount}, ${base64Audio.length} chars)`);
+    }
     
     try {
       geminiSession.sendRealtimeInput({
@@ -349,11 +353,10 @@ wss.on('connection', async (ws, req) => {
               console.log(`[${clientId}] 📌 Appended pending request to history: "${pendingRequest}"`);
             }
             
-            // If Gemini will respond, pre-emptively block audio to prevent interruptions
+            // If Gemini will respond, pre-emptively set generating flag
             if (shouldRespond) {
               state.set('isModelGenerating', true);
-              state.set('userAudioChunkCount', 0);
-              console.log(`[${clientId}] Pre-emptively blocking audio (history injection with response)`);
+              console.log(`[${clientId}] Pre-emptively setting isModelGenerating (history injection with response)`);
             }
             
             geminiSession.sendClientContent({ 
@@ -368,10 +371,9 @@ wss.on('connection', async (ws, req) => {
         } else if (pendingRequest) {
           // No history but there's a pending request - send it as a user message
           try {
-            // Pre-emptively block audio since Gemini will respond
+            // Pre-emptively set generating flag since Gemini will respond
             state.set('isModelGenerating', true);
-            state.set('userAudioChunkCount', 0);
-            console.log(`[${clientId}] Pre-emptively blocking audio (pending request)`);
+            console.log(`[${clientId}] Pre-emptively setting isModelGenerating (pending request)`);
             
             geminiSession.sendClientContent({ 
               turns: [{
@@ -421,6 +423,15 @@ wss.on('connection', async (ws, req) => {
 
       // Parse tool calls via transport
       const toolCalls = transport.receiveToolCalls(message);
+      
+      // Signal client that tool execution is starting (for thinking sound feedback)
+      if (toolCalls.length > 0 && ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ 
+          type: 'tool_call_started', 
+          toolCount: toolCalls.length 
+        }));
+        console.log(`[${clientId}] ✓ Sent tool_call_started signal (${toolCalls.length} tools)`);
+      }
       
       // Note: We don't pause client here - agent can acknowledge tool calls while they execute
       // (e.g., "just a sec, let me search that for you")
@@ -698,7 +709,7 @@ wss.on('connection', async (ws, req) => {
       // Track if model is generating
       if (content.modelTurn?.parts?.length > 0) {
         state.set('isModelGenerating', true);
-        state.set('userAudioChunkCount', 0); // Reset audio chunk counter when model starts generating
+        state.set('userAudioChunkCount', 0); // Reset audio chunk counter for barge-in detection
         state.set('interruptionSent', false); // Reset interruption flag for new model turn
         state.set('shouldSuppressAudio', false); // Reset audio suppression for new model turn
         state.set('shouldSuppressTranscript', false); // Reset transcript suppression for new model turn
@@ -793,6 +804,11 @@ wss.on('connection', async (ws, req) => {
         const audioChunksThisTurn = state.get('audioChunkCounter');
         console.log(`[${clientId}] Turn complete (sent ${audioChunksThisTurn} audio chunks this turn)${turnCompleteReason ? `, reason: ${turnCompleteReason}` : ''}`);
 
+        // CRITICAL: Block audio forwarding until user's turn_complete is received
+        // This prevents accumulated ambient audio from triggering false interruptions
+        state.set('awaitingUserTurn', true);
+        console.log(`[${clientId}] 🔇 Audio blocked until user turn_complete`);
+
         // Optional optimization: Send turn complete signal to client
         if (ws && ws.readyState === WebSocket.OPEN) {
           ws.send(JSON.stringify({ type: 'turn_complete' }));
@@ -838,8 +854,8 @@ wss.on('connection', async (ws, req) => {
         }
         
         state.set('isModelGenerating', false);
-        state.set('userAudioChunkCount', 0);
         state.set('interruptionSent', false);
+        state.set('userAudioChunkCount', 0); // Reset barge-in counter
         state.set('audioChunkCounter', 0); // Reset for next turn
         state.set('lastAudioFingerprint', null); // Reset for next turn
         
@@ -888,8 +904,9 @@ wss.on('connection', async (ws, req) => {
         const audioChunksBeforeInterrupt = state.get('audioChunkCounter');
         console.log(`[${clientId}] Response interrupted by user input (sent ${audioChunksBeforeInterrupt} audio chunks before interruption)`);
         state.set('isModelGenerating', false);
-        state.set('userAudioChunkCount', 0);
         state.set('interruptionSent', false);
+        state.set('userAudioChunkCount', 0); // Reset barge-in counter
+        state.set('awaitingUserTurn', false); // Reset - user is now actively speaking
         state.set('shouldSuppressAudio', false); // Reset audio suppression on interruption
         state.set('shouldSuppressTranscript', false); // Reset transcript suppression on interruption
         state.set('audioChunkCounter', 0); // Reset for next turn
@@ -1036,12 +1053,15 @@ wss.on('connection', async (ws, req) => {
                   startOfSpeechSensitivity: 'START_SENSITIVITY_LOW',
                   // Less likely to detect end of speech prematurely (KEY for preventing cutoffs)
                   endOfSpeechSensitivity: 'END_SENSITIVITY_LOW',
-                  // Require 1.5 seconds of silence before ending turn (default is ~500ms)
-                  silenceDurationMs: 1500,
+                  // Silence duration before ending turn - reduced from 1500ms to 1000ms for faster response
+                  silenceDurationMs: 1000,
                   // Require 300ms of sustained speech before committing to speech start
                   // This is KEY to prevent brief noise spikes from triggering interruptions
                   prefixPaddingMs: 300
                 }
+                // NOTE: Removed turnCoverage: 'TURN_INCLUDES_ONLY_ACTIVITY' because it was
+                // causing Gemini to ignore all audio when combined with LOW VAD sensitivity
+                // and client-side audio filtering. Client-side filtering is sufficient.
               },
               // Add tool support (all 5 tools from registry)
               tools: [{ functionDeclarations: geminiToolSchemas }]
@@ -1110,7 +1130,17 @@ wss.on('connection', async (ws, req) => {
                   if (message.serverContent?.toolCall) console.log(`[${clientId}] ✓ Found message.serverContent.toolCall`);
                   if (message.bidiGenerateContentToolCall) console.log(`[${clientId}] ✓ Found message.bidiGenerateContentToolCall`);
                   
-                  console.log(`[${clientId}] Received message from Gemini:`, JSON.stringify(message, null, 2));
+                  // Log Gemini message but exclude audio data to reduce log noise
+                  const logMessage = JSON.parse(JSON.stringify(message));
+                  if (logMessage.serverContent?.modelTurn?.parts) {
+                    logMessage.serverContent.modelTurn.parts = logMessage.serverContent.modelTurn.parts.map(part => {
+                      if (part.inlineData?.data) {
+                        return { inlineData: { mimeType: part.inlineData.mimeType, data: `[${part.inlineData.data.length} chars]` } };
+                      }
+                      return part;
+                    });
+                  }
+                  console.log(`[${clientId}] Received message from Gemini:`, JSON.stringify(logMessage, null, 2));
                   await handleGeminiMessage(clientId, message);
                   // Note: History injection and audio buffer flushing are handled in handleGeminiMessage
                   // to ensure correct ordering (history BEFORE audio)
@@ -1226,39 +1256,40 @@ wss.on('connection', async (ws, req) => {
           // Session is ready, send audio directly
           if (geminiSession) {
             try {
-              // Block audio while model is generating to prevent Gemini's VAD from
-              // triggering on background noise and interrupting the response.
-              // Only allow audio through if it's a confirmed intentional interruption.
+              // If model is generating, require sustained speech before allowing barge-in
+              // This prevents brief audio spikes from triggering interruption
               if (state.get('isModelGenerating')) {
                 const currentCount = state.get('userAudioChunkCount') + 1;
                 state.set('userAudioChunkCount', currentCount);
                 
-                // Require sustained speech before allowing interruption
-                const INTERRUPTION_THRESHOLD = 10; // Require 10 consecutive chunks (~1 second)
-                if (currentCount >= INTERRUPTION_THRESHOLD && !state.get('interruptionSent')) {
-                  console.log(`[${clientId}] 🔴 USER INTERRUPTING - sustained speech detected (${currentCount} chunks)`);
-                  state.set('interruptionSent', true);
-                  
-                  // Notify client to stop playback, and send audio to trigger Gemini interruption
-                  ws.send(JSON.stringify({
-                    type: 'interrupted'
-                  }));
-                  // Now send audio to Gemini to trigger the interruption
-                  console.log(`[${clientId}] Sending interruption audio (${base64Length} chars base64)`);
-                  sendAudioToGemini(data.data);
-                } else {
-                  // Block audio - don't send to Gemini, prevents VAD false triggers
-                  // Log occasionally for debugging
-                  if (currentCount === 1 || currentCount % 10 === 0) {
-                    console.log(`[${clientId}] Blocking audio while model generating (chunk ${currentCount}/${INTERRUPTION_THRESHOLD} for interruption)`);
+                // Require sustained speech (10 chunks ≈ 1 second) before allowing interruption
+                const INTERRUPTION_THRESHOLD = 10;
+                if (currentCount >= INTERRUPTION_THRESHOLD) {
+                  if (!state.get('interruptionSent')) {
+                    console.log(`[${clientId}] 🔴 USER INTERRUPTING - sustained speech detected (${currentCount} chunks)`);
+                    state.set('interruptionSent', true);
+                    
+                    // Notify client to stop playback
+                    ws.send(JSON.stringify({
+                      type: 'interrupted'
+                    }));
                   }
+                  // Send audio to Gemini to trigger the interruption
+                  sendAudioToGemini(data.data);
                 }
-                break; // Don't fall through to send audio
+                // Silently block audio during generation (chunk counting for barge-in)
+                break;
+              }
+              
+              // Check if we're awaiting user's turn_complete
+              // If so, block audio to prevent accumulated chunks from triggering false interruptions
+              if (state.get('awaitingUserTurn')) {
+                // Silently discard audio - user hasn't started their turn yet
+                break;
               }
               
               // Model not generating - reset counter and send audio normally
               state.set('userAudioChunkCount', 0);
-              console.log(`[${clientId}] Sending audio (${base64Length} chars base64, ~${Math.round(base64Length * 3 / 4)} bytes)`);
               sendAudioToGemini(data.data);
             } catch (error) {
               console.error(`[${clientId}] Error sending audio:`, error);
@@ -1326,16 +1357,20 @@ wss.on('connection', async (ws, req) => {
           break;
 
         case 'turn_complete':
-          // CRITICAL #1: Client signaled turn complete - tell Gemini to respond
+          // Client signaled turn complete - tell Gemini to respond
           console.log(`[${clientId}] Client signaled turn complete - telling Gemini to respond`);
+          
+          // Clear the awaitingUserTurn flag - user's turn is now complete
+          state.set('awaitingUserTurn', false);
+          console.log(`[${clientId}] 🔊 Audio unblocked (user turn complete)`);
+          
           if (geminiSession) {
             try {
-              // IMPORTANT: Set isModelGenerating BEFORE signaling Gemini
-              // This blocks any incoming audio from being forwarded during the gap
-              // between when we signal and when Gemini starts sending audio back
+              // Set isModelGenerating BEFORE signaling Gemini
+              // This blocks audio forwarding until sustained speech is detected for barge-in
               state.set('isModelGenerating', true);
-              state.set('userAudioChunkCount', 0);
-              console.log(`[${clientId}] Pre-emptively blocking audio (isModelGenerating=true)`);
+              state.set('userAudioChunkCount', 0); // Reset barge-in counter
+              console.log(`[${clientId}] Setting isModelGenerating=true (audio blocked until barge-in threshold)`);
               
               // Signal to Gemini that user's turn is complete
               geminiSession.sendClientContent({ turnComplete: true });

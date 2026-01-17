@@ -64,6 +64,10 @@ export class VoiceService extends EventTarget {
   // Threshold for intentional speech (to interrupt agent) - raised from 0.025 to 0.05 to reduce false interruptions
   // This prevents background noise (fans, AC, keyboard) and residual echo from triggering interruptions
   private SPEECH_INTERRUPT_THRESHOLD = 0.05;
+  // Thinking sound for tool execution feedback
+  private thinkingAudio: HTMLAudioElement | null = null;
+  private thinkingFadeInterval: number | null = null;
+  private isThinkingSoundActive = false;
   
   constructor() {
     super();
@@ -167,6 +171,9 @@ export class VoiceService extends EventTarget {
     // 2. Setup audio context for processing
     this.audioContext = new AudioContext({ sampleRate: 48000 });
     
+    // Preload thinking sound for tool execution feedback
+    this.preloadThinkingSound();
+    
     // 3. Connect to WebSocket server
     return this.connectWebSocket();
   }
@@ -214,7 +221,7 @@ export class VoiceService extends EventTarget {
           this.handleMessage(JSON.parse(event.data));
         };
 
-        this.ws.onerror = (event) => {
+        this.ws.onerror = (_event) => {
           // WebSocket error events don't provide detailed error info
           // The onclose handler provides more useful information (close codes, reasons)
           // Only log at debug level to avoid noise - onclose will handle user-visible errors
@@ -387,7 +394,7 @@ export class VoiceService extends EventTarget {
         }
         const avgVal = sumVal / inputData.length;
         
-        // Two-tier threshold system to distinguish ambient noise from intentional speech
+        // Two-tier threshold system to distinguish silence and intentional speech
         const isSilent = maxVal < this.SILENCE_THRESHOLD;
         const isIntentionalSpeech = maxVal >= this.SPEECH_INTERRUPT_THRESHOLD;
         
@@ -426,6 +433,9 @@ export class VoiceService extends EventTarget {
           // Don't send silent chunks - let Gemini process what it has
           return;
         }
+        
+        // NOTE: Removed AUDIO_SEND_THRESHOLD gating as it was causing choppy audio
+        // and processing delays. Server-side chunk counter handles barge-in protection.
         
         // Don't send audio if paused (agent is processing/speaking)
         // BUT allow intentional speech through so user can interrupt
@@ -557,6 +567,10 @@ export class VoiceService extends EventTarget {
         break;
 
       case 'audio':
+        // Fade out thinking sound when agent starts speaking
+        if (this.isThinkingSoundActive) {
+          this.fadeOutThinkingSound();
+        }
         // Immediately pause sending when agent starts speaking
         if (!this.shouldPauseAudioSending) {
           console.log('Agent started speaking - pausing audio sending');
@@ -659,6 +673,7 @@ export class VoiceService extends EventTarget {
       case 'interrupted':
         // Model was interrupted by user speech - stop audio playback immediately
         console.log('Model interrupted - stopping audio playback');
+        this.stopThinkingSound();
         this.stopAudioPlayback();
         break;
 
@@ -751,13 +766,23 @@ export class VoiceService extends EventTarget {
 
       case 'tools_complete':
         // Tools completed - keep paused, will resume when agent starts speaking (receives audio)
-        console.log(`Tools complete (${(message as any).toolCount || 'unknown'} tools) - waiting for agent response`);
+        const toolsCompleteMessage = message as WebSocketMessage & { toolCount?: number };
+        console.log(`Tools complete (${toolsCompleteMessage.toolCount || 'unknown'} tools) - waiting for agent response`);
         // Don't resume yet - wait for agent to start speaking (audio chunks)
+        break;
+
+      case 'tool_call_started':
+        // Tool execution started - fade in thinking sound
+        const toolCallStartedMessage = message as WebSocketMessage & { toolCount?: number };
+        console.log(`Tool call started (${toolCallStartedMessage.toolCount || 'unknown'} tools)`);
+        this.fadeInThinkingSound();
         break;
 
       case 'turn_complete':
         // Turn complete - resume sending for next turn
+        // Also stop thinking sound as fallback (in case audio didn't arrive)
         console.log('Turn complete - resuming audio sending');
+        this.stopThinkingSound();
         this.shouldPauseAudioSending = false;
         this.consecutiveSilentChunks = 0;
         break;
@@ -939,6 +964,169 @@ export class VoiceService extends EventTarget {
   }
 
   /**
+   * Preload thinking sound audio element
+   */
+  private preloadThinkingSound(): void {
+    if (!VOICE_CONFIG.THINKING_SOUND.ENABLED) {
+      return;
+    }
+
+    try {
+      // Create audio element if it doesn't exist
+      if (!this.thinkingAudio) {
+        this.thinkingAudio = new Audio(VOICE_CONFIG.THINKING_SOUND.PATH);
+        this.thinkingAudio.loop = true;
+        this.thinkingAudio.volume = 0;
+        this.thinkingAudio.preload = 'auto';
+        
+        // Handle errors gracefully
+        this.thinkingAudio.addEventListener('error', (e) => {
+          console.warn('Thinking sound failed to load:', e);
+          this.thinkingAudio = null;
+        });
+        
+        console.log('Thinking sound preloaded');
+      }
+    } catch (error) {
+      console.warn('Failed to preload thinking sound:', error);
+      this.thinkingAudio = null;
+    }
+  }
+
+  /**
+   * Fade in thinking sound (400ms transition)
+   */
+  private fadeInThinkingSound(): void {
+    if (!VOICE_CONFIG.THINKING_SOUND.ENABLED || !this.thinkingAudio) {
+      return;
+    }
+
+    // If already active, don't restart
+    if (this.isThinkingSoundActive) {
+      return;
+    }
+
+    try {
+      // Clear any existing fade interval
+      if (this.thinkingFadeInterval) {
+        clearInterval(this.thinkingFadeInterval);
+        this.thinkingFadeInterval = null;
+      }
+
+      // Start audio at volume 0
+      this.thinkingAudio.volume = 0;
+      this.thinkingAudio.play().catch((error) => {
+        console.warn('Failed to play thinking sound:', error);
+        return;
+      });
+
+      this.isThinkingSoundActive = true;
+
+      // Fade in over specified duration
+      const targetVolume = VOICE_CONFIG.THINKING_SOUND.VOLUME;
+      const fadeDuration = VOICE_CONFIG.THINKING_SOUND.FADE_IN_DURATION_MS;
+      const steps = 20; // Number of fade steps
+      const stepDuration = fadeDuration / steps;
+      const volumeStep = targetVolume / steps;
+
+      let currentStep = 0;
+      this.thinkingFadeInterval = window.setInterval(() => {
+        currentStep++;
+        const newVolume = Math.min(volumeStep * currentStep, targetVolume);
+        if (this.thinkingAudio) {
+          this.thinkingAudio.volume = newVolume;
+        }
+
+        if (currentStep >= steps || (this.thinkingAudio && this.thinkingAudio.volume >= targetVolume)) {
+          if (this.thinkingAudio) {
+            this.thinkingAudio.volume = targetVolume;
+          }
+          if (this.thinkingFadeInterval) {
+            clearInterval(this.thinkingFadeInterval);
+            this.thinkingFadeInterval = null;
+          }
+        }
+      }, stepDuration);
+
+      console.log('Thinking sound fading in');
+    } catch (error) {
+      console.warn('Failed to fade in thinking sound:', error);
+      this.isThinkingSoundActive = false;
+    }
+  }
+
+  /**
+   * Fade out thinking sound (200ms transition)
+   */
+  private fadeOutThinkingSound(): void {
+    if (!this.isThinkingSoundActive || !this.thinkingAudio) {
+      return;
+    }
+
+    try {
+      // Clear any existing fade interval
+      if (this.thinkingFadeInterval) {
+        clearInterval(this.thinkingFadeInterval);
+        this.thinkingFadeInterval = null;
+      }
+
+      const startVolume = this.thinkingAudio.volume;
+      const fadeDuration = VOICE_CONFIG.THINKING_SOUND.FADE_OUT_DURATION_MS;
+      const steps = 20; // Number of fade steps
+      const stepDuration = fadeDuration / steps;
+      const volumeStep = startVolume / steps;
+
+      let currentStep = 0;
+      this.thinkingFadeInterval = window.setInterval(() => {
+        currentStep++;
+        const newVolume = Math.max(startVolume - (volumeStep * currentStep), 0);
+        if (this.thinkingAudio) {
+          this.thinkingAudio.volume = newVolume;
+        }
+
+        if (currentStep >= steps || (this.thinkingAudio && this.thinkingAudio.volume <= 0)) {
+          if (this.thinkingAudio) {
+            this.thinkingAudio.volume = 0;
+            this.thinkingAudio.pause();
+            this.thinkingAudio.currentTime = 0; // Reset to start for next play
+          }
+          if (this.thinkingFadeInterval) {
+            clearInterval(this.thinkingFadeInterval);
+            this.thinkingFadeInterval = null;
+          }
+          this.isThinkingSoundActive = false;
+          console.log('Thinking sound faded out');
+        }
+      }, stepDuration);
+    } catch (error) {
+      console.warn('Failed to fade out thinking sound:', error);
+      this.isThinkingSoundActive = false;
+    }
+  }
+
+  /**
+   * Stop thinking sound immediately (for cleanup/interruptions)
+   */
+  private stopThinkingSound(): void {
+    if (this.thinkingFadeInterval) {
+      clearInterval(this.thinkingFadeInterval);
+      this.thinkingFadeInterval = null;
+    }
+
+    if (this.thinkingAudio) {
+      try {
+        this.thinkingAudio.pause();
+        this.thinkingAudio.currentTime = 0;
+        this.thinkingAudio.volume = 0;
+      } catch (_error) {
+        // Ignore errors during cleanup
+      }
+    }
+
+    this.isThinkingSoundActive = false;
+  }
+
+  /**
    * Stop all audio playback immediately (for interruptions)
    */
   private stopAudioPlayback(): void {
@@ -1017,6 +1205,9 @@ export class VoiceService extends EventTarget {
   private cleanup(): void {
     // Stop heartbeat
     this.stopHeartbeat();
+    
+    // Stop thinking sound
+    this.stopThinkingSound();
     
     // Clear reconnect timer
     if (this.reconnectTimer) {
