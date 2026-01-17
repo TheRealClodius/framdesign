@@ -181,10 +181,14 @@ wss.on('connection', async (ws, req) => {
     hasSentGeneratingSignal: false,
     // Counter for audio chunks during model generation - requires sustained speech for barge-in
     userAudioChunkCount: 0,
-    // Block audio forwarding between agent turn complete and user turn complete
+    // Buffer audio between agent turn complete and user turn complete
     // This prevents accumulated audio from triggering false interruptions
     awaitingUserTurn: false
   });
+
+  // Audio buffer for storing audio chunks while awaiting user turn
+  // This ensures Gemini receives all audio as a batch, preventing timing issues
+  let pendingAudioBuffer = [];
 
   // Transport will be set when geminiSession is created
   let transport = null;
@@ -711,6 +715,8 @@ wss.on('connection', async (ws, req) => {
         state.set('isModelGenerating', true);
         state.set('userAudioChunkCount', 0); // Reset audio chunk counter for barge-in detection
         state.set('interruptionSent', false); // Reset interruption flag for new model turn
+        state.set('awaitingUserTurn', false); // Reset - model is now generating
+        pendingAudioBuffer = []; // Clear any stale buffered audio
         state.set('shouldSuppressAudio', false); // Reset audio suppression for new model turn
         state.set('shouldSuppressTranscript', false); // Reset transcript suppression for new model turn
         // Don't reset audioChunkCounter or lastAudioFingerprint here - keep them to track across the whole turn
@@ -907,6 +913,7 @@ wss.on('connection', async (ws, req) => {
         state.set('interruptionSent', false);
         state.set('userAudioChunkCount', 0); // Reset barge-in counter
         state.set('awaitingUserTurn', false); // Reset - user is now actively speaking
+        pendingAudioBuffer = []; // Clear any buffered audio
         state.set('shouldSuppressAudio', false); // Reset audio suppression on interruption
         state.set('shouldSuppressTranscript', false); // Reset transcript suppression on interruption
         state.set('audioChunkCounter', 0); // Reset for next turn
@@ -1282,9 +1289,14 @@ wss.on('connection', async (ws, req) => {
               }
               
               // Check if we're awaiting user's turn_complete
-              // If so, block audio to prevent accumulated chunks from triggering false interruptions
+              // If so, buffer audio to prevent timing issues with Gemini
               if (state.get('awaitingUserTurn')) {
-                // Silently discard audio - user hasn't started their turn yet
+                // Buffer the audio - will be sent when turn_complete is received
+                pendingAudioBuffer.push(data.data);
+                // Log periodically to avoid spam
+                if (pendingAudioBuffer.length === 1 || pendingAudioBuffer.length % 20 === 0) {
+                  console.log(`[${clientId}] 📦 Buffering audio (${pendingAudioBuffer.length} chunks buffered)`);
+                }
                 break;
               }
               
@@ -1362,10 +1374,19 @@ wss.on('connection', async (ws, req) => {
           
           // Clear the awaitingUserTurn flag - user's turn is now complete
           state.set('awaitingUserTurn', false);
-          console.log(`[${clientId}] 🔊 Audio unblocked (user turn complete)`);
           
           if (geminiSession) {
             try {
+              // First, send any buffered audio that was collected while awaiting user turn
+              // This ensures Gemini receives the complete user input before we signal turn complete
+              if (pendingAudioBuffer.length > 0) {
+                console.log(`[${clientId}] 🔊 Sending ${pendingAudioBuffer.length} buffered audio chunks to Gemini`);
+                for (const audioChunk of pendingAudioBuffer) {
+                  sendAudioToGemini(audioChunk);
+                }
+                pendingAudioBuffer = []; // Clear the buffer
+              }
+              
               // Set isModelGenerating BEFORE signaling Gemini
               // This blocks audio forwarding until sustained speech is detected for barge-in
               state.set('isModelGenerating', true);
