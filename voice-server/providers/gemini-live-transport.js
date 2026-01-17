@@ -77,6 +77,12 @@ export class GeminiLiveTransport extends ToolTransport {
     } else if (modelEvent?.serverContent?.toolCall?.functionCalls) {
       // Format 3: Nested in serverContent
       functionCalls = modelEvent.serverContent.toolCall.functionCalls;
+    } else if (modelEvent?.bidiGenerateContentToolCall?.toolCall?.functionCalls) {
+      // Format 4: BidiGenerateContent tool call wrapper
+      functionCalls = modelEvent.bidiGenerateContentToolCall.toolCall.functionCalls;
+    } else if (modelEvent?.bidiGenerateContentToolCall?.functionCalls) {
+      // Format 5: Direct function calls inside BidiGenerateContent wrapper
+      functionCalls = modelEvent.bidiGenerateContentToolCall.functionCalls;
     }
     
     if (functionCalls && Array.isArray(functionCalls)) {
