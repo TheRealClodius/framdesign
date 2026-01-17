@@ -1234,7 +1234,7 @@ wss.on('connection', async (ws, req) => {
                 state.set('userAudioChunkCount', currentCount);
                 
                 // Require sustained speech before allowing interruption
-                const INTERRUPTION_THRESHOLD = 5; // Require 5 consecutive chunks (~500ms)
+                const INTERRUPTION_THRESHOLD = 10; // Require 10 consecutive chunks (~1 second)
                 if (currentCount >= INTERRUPTION_THRESHOLD && !state.get('interruptionSent')) {
                   console.log(`[${clientId}] 🔴 USER INTERRUPTING - sustained speech detected (${currentCount} chunks)`);
                   state.set('interruptionSent', true);

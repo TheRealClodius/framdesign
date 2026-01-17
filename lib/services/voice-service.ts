@@ -61,9 +61,9 @@ export class VoiceService extends EventTarget {
   private shouldPauseAudioSending = false; // Pause sending when agent is processing or sustained silence
   private SILENCE_PAUSE_THRESHOLD = 10; // Pause after 10 consecutive silent chunks (~1 second)
   private SILENCE_THRESHOLD = 0.0005; // Threshold for detecting silence
-  // Threshold for intentional speech (to interrupt agent) - raised from 0.015 to reduce false interruptions
-  // This prevents background noise (fans, AC, keyboard) from triggering interruptions
-  private SPEECH_INTERRUPT_THRESHOLD = 0.025;
+  // Threshold for intentional speech (to interrupt agent) - raised from 0.025 to 0.05 to reduce false interruptions
+  // This prevents background noise (fans, AC, keyboard) and residual echo from triggering interruptions
+  private SPEECH_INTERRUPT_THRESHOLD = 0.05;
   
   constructor() {
     super();
