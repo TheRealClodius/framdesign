@@ -770,6 +770,16 @@ export async function POST(request: Request) {
       const toolCount = toolRegistry.tools.size;
       const estimatedTokens = estimateMessageTokens(contentsToSend);
       
+      // Calculate cached tokens (system prompt + tool schemas when caching is active)
+      let cachedTokens = 0;
+      if (cachedContent) {
+        // System prompt tokens
+        cachedTokens += estimateTokens(FRAM_SYSTEM_PROMPT);
+        // Tool schemas are also cached - estimate based on JSON size
+        const toolSchemasJson = JSON.stringify(providerSchemas);
+        cachedTokens += estimateTokens(toolSchemasJson);
+      }
+      
       observability.contextStack = {
         systemPromptSource: `core.md + ${toolCount} tools`,
         totalMessages: totalMessages,
@@ -777,6 +787,7 @@ export async function POST(request: Request) {
         summaryPresent: !!summary,
         summaryUpToIndex: summaryUpToIndex,
         cachedContentUsed: !!cachedContent,
+        cachedTokens: cachedTokens,
         estimatedTokens: estimatedTokens,
         timeoutExpired: timeoutExpired || false
       };

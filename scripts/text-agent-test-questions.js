@@ -23,5 +23,10 @@ export const TEST_QUESTIONS = [
   
   // Negative cases
   "Tell me about a project that doesn't exist",
-  "Who is John Smith?"
+  "Who is John Smith?",
+  
+  // Additional questions to trigger compaction (need 12+ for >20 messages)
+  "What technologies does Fram work with?",
+  "How can I contact Fram Design?",
+  "What makes Fram different from other design studios?"
 ];

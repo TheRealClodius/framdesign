@@ -144,12 +144,16 @@ export function formatTestSummary(summary) {
   
   // Token metrics
   if (summary.tokenMetrics) {
+    const totalIn = summary.tokenMetrics.totalInputTokens;
+    const totalOut = summary.tokenMetrics.totalOutputTokens;
+    const totalCached = summary.tokenMetrics.totalCachedTokens;
+    const grandTotal = totalIn + totalOut + totalCached;
+    const cachedPercent = grandTotal > 0 ? ((totalCached / grandTotal) * 100).toFixed(1) : 0;
+    
     output += `${colors.bright}Token Metrics (tiktoken):${colors.reset}\n`;
-    output += `  • Final conversation: ${summary.tokenMetrics.finalConversationTokens} tokens\n`;
-    output += `  • Peak server-reported: ${summary.tokenMetrics.peakServerTokens} tokens\n`;
-    if (summary.tokenMetrics.avgTokensPerTurn > 0) {
-      output += `  • Avg tokens/response: ${summary.tokenMetrics.avgTokensPerTurn.toFixed(0)} tokens\n`;
-    }
+    output += `  • Total input:  ${totalIn} tokens\n`;
+    output += `  • Total output: ${totalOut} tokens\n`;
+    output += `  • Total cached: ${totalCached} tokens (${cachedPercent}% of total)\n`;
     output += '\n';
   }
   

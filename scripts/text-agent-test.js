@@ -53,16 +53,12 @@ let testSummary = {
   avgResponseTime: 0,
   startTime: Date.now(),
   tokenMetrics: {
-    // Input tokens - cumulative server-reported (what API is actually charged)
+    // Input tokens - cumulative server-reported (conversation, excluding cached)
     totalInputTokens: 0,
-    peakInputTokens: 0,
     // Output tokens - cumulative (model responses)
     totalOutputTokens: 0,
-    // Final conversation size
-    finalConversationTokens: 0,
-    // Caching effectiveness
-    cacheHits: 0,
-    cacheMisses: 0
+    // Cached tokens - cumulative (system prompt + tools, saved per request)
+    totalCachedTokens: 0
   }
 };
 
@@ -100,11 +96,13 @@ async function processQuestion(question, questionIndex = null, totalQuestions = 
     if (response.observability?.contextStack) {
       console.log(formatContextStack(response.observability.contextStack, localTokens.total));
       
-      // Track peak server tokens
-      const serverTokens = response.observability.contextStack.estimatedTokens || 0;
-      if (serverTokens > testSummary.tokenMetrics.peakServerTokens) {
-        testSummary.tokenMetrics.peakServerTokens = serverTokens;
-      }
+      // Track input tokens (server-reported conversation tokens)
+      const serverInputTokens = response.observability.contextStack.estimatedTokens || 0;
+      testSummary.tokenMetrics.totalInputTokens += serverInputTokens;
+      
+      // Track cached tokens (system prompt + tools saved per request)
+      const cachedTokens = response.observability.contextStack.cachedTokens || 0;
+      testSummary.tokenMetrics.totalCachedTokens += cachedTokens;
     }
 
     // Display tool calls
@@ -140,16 +138,16 @@ async function processQuestion(question, questionIndex = null, totalQuestions = 
       testSummary.successful++;
     }
 
-    // Add assistant response to history and track tokens
+    // Add assistant response to history and track output tokens
     if (response.text) {
       conversationHistory.push({
         role: 'assistant',
         content: response.text
       });
       
-      // Track response tokens
+      // Track output tokens (model responses)
       const responseTokens = countConversationTokens([{ role: 'assistant', content: response.text }]);
-      testSummary.tokenMetrics.totalResponseTokens += responseTokens.total;
+      testSummary.tokenMetrics.totalOutputTokens += responseTokens.total;
     }
 
     // Update average response time
@@ -191,9 +189,6 @@ async function runNonInteractive() {
   // Calculate final token metrics
   const finalTokens = countConversationTokens(conversationHistory);
   testSummary.tokenMetrics.finalConversationTokens = finalTokens.total;
-  if (testSummary.successful > 0) {
-    testSummary.tokenMetrics.avgTokensPerTurn = testSummary.tokenMetrics.totalResponseTokens / testSummary.successful;
-  }
   
   console.log(formatTestSummary(testSummary));
 }
@@ -223,9 +218,6 @@ async function runInteractive() {
         // Calculate final token metrics
         const finalTokens = countConversationTokens(conversationHistory);
         testSummary.tokenMetrics.finalConversationTokens = finalTokens.total;
-        if (testSummary.successful > 0) {
-          testSummary.tokenMetrics.avgTokensPerTurn = testSummary.tokenMetrics.totalResponseTokens / testSummary.successful;
-        }
         console.log(formatTestSummary(testSummary));
         process.exit(0);
       }
@@ -278,9 +270,6 @@ process.on('SIGINT', () => {
   // Calculate final token metrics
   const finalTokens = countConversationTokens(conversationHistory);
   testSummary.tokenMetrics.finalConversationTokens = finalTokens.total;
-  if (testSummary.successful > 0) {
-    testSummary.tokenMetrics.avgTokensPerTurn = testSummary.tokenMetrics.totalResponseTokens / testSummary.successful;
-  }
   console.log(formatTestSummary(testSummary));
   process.exit(0);
 });
