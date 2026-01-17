@@ -92,6 +92,57 @@ describe('Tool Execution', () => {
       expect(result.ok).toBe(false);
       expect(result.error.type).toBe(ErrorType.VALIDATION);
     });
+
+    test('should filter out extra properties before validation (chained calls)', async () => {
+      // This simulates what happens when Gemini includes extra properties in chained calls
+      const result = await toolRegistry.executeTool('kb_search', {
+        clientId: 'test123',
+        args: {
+          query: 'test query',
+          top_k: 5,
+          // These extra properties should be filtered out before validation
+          extra_property: 'should be removed',
+          another_extra: 123,
+          _some_internal: 'also removed'
+        },
+        session: { isActive: true },
+        capabilities: { voice: false }
+      });
+
+      // Should succeed because extra properties are filtered, not fail validation
+      expect(result.ok).toBe(true);
+      expect(result.data).toBeDefined();
+      expect(result.data.query).toBe('test query');
+      expect(result.data.results).toBeDefined();
+      expect(Array.isArray(result.data.results)).toBe(true);
+      // Verify no validation error occurred (the key test)
+      expect(result.error).toBeUndefined();
+    });
+
+    test('should filter nested object extra properties', async () => {
+      const result = await toolRegistry.executeTool('kb_search', {
+        clientId: 'test123',
+        args: {
+          query: 'test',
+          filters: {
+            type: 'person',
+            // Extra nested properties should be filtered
+            extra_nested: 'removed',
+            _internal: 'also removed'
+          },
+          extra_top_level: 'removed'
+        },
+        session: { isActive: true },
+        capabilities: { voice: false }
+      });
+
+      // Should succeed - nested extra properties filtered
+      expect(result.ok).toBe(true);
+      expect(result.data).toBeDefined();
+      expect(result.data.query).toBe('test');
+      // Verify no validation error occurred
+      expect(result.error).toBeUndefined();
+    });
   });
 
   describe('Tool Not Found', () => {

@@ -561,4 +561,118 @@ describe('ToolRegistry', () => {
       }
     });
   });
+
+  describe('filterArgsBySchema', () => {
+    test('should filter out extra properties not in schema', () => {
+      const schema = {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          query: { type: 'string' },
+          top_k: { type: 'number' }
+        }
+      };
+
+      const args = {
+        query: 'test',
+        top_k: 5,
+        extra_prop: 'should be removed',
+        another_extra: 123
+      };
+
+      const filtered = registry.filterArgsBySchema(args, schema, 'test_tool');
+      
+      expect(filtered).toEqual({
+        query: 'test',
+        top_k: 5
+      });
+      expect(filtered.extra_prop).toBeUndefined();
+      expect(filtered.another_extra).toBeUndefined();
+    });
+
+    test('should handle nested objects with filters', () => {
+      const schema = {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          query: { type: 'string' },
+          filters: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              type: { type: 'string' }
+            }
+          }
+        }
+      };
+
+      const args = {
+        query: 'test',
+        filters: {
+          type: 'person',
+          extra_nested: 'should be removed'
+        },
+        extra_top: 'should be removed'
+      };
+
+      const filtered = registry.filterArgsBySchema(args, schema, 'test_tool');
+      
+      expect(filtered).toEqual({
+        query: 'test',
+        filters: {
+          type: 'person'
+        }
+      });
+      expect(filtered.filters.extra_nested).toBeUndefined();
+      expect(filtered.extra_top).toBeUndefined();
+    });
+
+    test('should preserve arrays and primitives', () => {
+      const schema = {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          query: { type: 'string' },
+          tags: { type: 'array' },
+          count: { type: 'number' }
+        }
+      };
+
+      const args = {
+        query: 'test',
+        tags: ['tag1', 'tag2'],
+        count: 42,
+        extra: 'remove'
+      };
+
+      const filtered = registry.filterArgsBySchema(args, schema);
+      
+      expect(filtered.query).toBe('test');
+      expect(filtered.tags).toEqual(['tag1', 'tag2']);
+      expect(filtered.count).toBe(42);
+      expect(filtered.extra).toBeUndefined();
+    });
+
+    test('should handle null and undefined values', () => {
+      const schema = {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          query: { type: 'string' }
+        }
+      };
+
+      expect(registry.filterArgsBySchema(null, schema)).toEqual({});
+      expect(registry.filterArgsBySchema(undefined, schema)).toEqual({});
+      expect(registry.filterArgsBySchema({}, schema)).toEqual({});
+    });
+
+    test('should return original args if schema has no properties', () => {
+      const schema = { type: 'object' };
+      const args = { query: 'test' };
+      
+      const filtered = registry.filterArgsBySchema(args, schema);
+      expect(filtered).toEqual(args);
+    });
+  });
 });

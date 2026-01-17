@@ -300,6 +300,54 @@ class ToolRegistry {
   }
 
   /**
+   * Filter args to only include properties defined in the schema
+   * This prevents validation errors when LLMs include extra properties
+   *
+   * @param {object} args - Arguments to filter
+   * @param {object} schema - JSON Schema for the tool parameters
+   * @param {string} toolId - Tool ID for logging (optional)
+   * @returns {object} - Filtered arguments
+   */
+  filterArgsBySchema(args, schema, toolId = null) {
+    if (!args || typeof args !== 'object' || Array.isArray(args) || !schema || !schema.properties) {
+      return args || {};
+    }
+
+    const filtered = {};
+    const allowedProperties = Object.keys(schema.properties);
+    const removedProperties = [];
+
+    for (const key of allowedProperties) {
+      if (key in args) {
+        const propSchema = schema.properties[key];
+        const value = args[key];
+        
+        // Handle nested objects (e.g., filters)
+        if (propSchema.type === 'object' && propSchema.properties && typeof value === 'object' && value !== null && !Array.isArray(value)) {
+          filtered[key] = this.filterArgsBySchema(value, propSchema);
+        } else {
+          // For arrays, primitives, or null values, pass through as-is
+          filtered[key] = value;
+        }
+      }
+    }
+
+    // Check for removed properties
+    for (const key of Object.keys(args)) {
+      if (!allowedProperties.includes(key)) {
+        removedProperties.push(key);
+      }
+    }
+
+    // Log if properties were removed (helpful for debugging)
+    if (removedProperties.length > 0 && toolId) {
+      console.log(`[Registry] Filtered ${removedProperties.length} extra properties from ${toolId} args: ${removedProperties.join(', ')}`);
+    }
+
+    return filtered;
+  }
+
+  /**
    * Execute tool with validation and error handling
    *
    * @param {string} toolId - Tool identifier
@@ -336,11 +384,42 @@ class ToolRegistry {
       throw new Error(`Handler for ${toolId} is not a function, got ${typeof handler}`);
     }
 
+    // Filter args to only include schema-defined properties
+    // This prevents validation errors when LLMs include extra properties (common in chained calls)
+    const filteredArgs = this.filterArgsBySchema(executionContext.args || {}, tool.jsonSchema, toolId);
+    
+    // Update execution context with filtered args
+    const filteredExecutionContext = {
+      ...executionContext,
+      args: filteredArgs
+    };
+
     // Validate parameters
-    const valid = validator(executionContext.args || {});
+    const valid = validator(filteredArgs);
     if (!valid) {
       const duration = Date.now() - startTime;
-      const errors = validator.errors.map(e => `${e.instancePath} ${e.message}`).join(', ');
+      
+      // Build detailed error messages, including property names for additionalProperties errors
+      const errorMessages = validator.errors.map(e => {
+        let msg = e.instancePath ? `${e.instancePath} ${e.message}` : e.message;
+        
+        // For additionalProperties errors, include the property names from params
+        if (e.keyword === 'additionalProperties' && e.params && e.params.additionalProperty) {
+          msg = `${e.instancePath || 'root'} has additional property '${e.params.additionalProperty}' which is not allowed`;
+        }
+        
+        return msg;
+      });
+      
+      const errors = errorMessages.join(', ');
+      
+      // Log original args if validation fails (helpful for debugging)
+      console.error(`[Registry] Validation failed for ${toolId}:`, {
+        filteredArgs,
+        originalArgs: executionContext.args,
+        errors: validator.errors
+      });
+      
       recordToolExecution(toolId, duration, false);
       recordError(toolId, ErrorType.VALIDATION);
       return createResponse(toolId, false, {
@@ -351,8 +430,8 @@ class ToolRegistry {
       }, startTime);
     }
 
-    // Build handler context
-    const context = buildContext(executionContext, tool);
+    // Build handler context (use filtered args)
+    const context = buildContext(filteredExecutionContext, tool);
 
     // Execute handler
     try {
