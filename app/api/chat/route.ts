@@ -3,6 +3,16 @@ import { GoogleGenAI } from "@google/genai";
 import { FRAM_SYSTEM_PROMPT } from "@/lib/config";
 import { createHash } from "crypto";
 import { handleServerError, isRetryableError } from "@/lib/errors";
+import fs from 'fs';
+import path from 'path';
+
+function debugLog(msg: string) {
+  try {
+    fs.appendFileSync(path.join(process.cwd(), 'debug.log'), new Date().toISOString() + ' ' + msg + '\n');
+  } catch (e) {
+    // ignore
+  }
+}
 import {
   CACHE_CONFIG,
   MESSAGE_LIMITS,
@@ -30,11 +40,11 @@ type GeminiConfig = {
 type FunctionCall = {
   name: string;
   args: Record<string, unknown>;
-  thought_signature?: string;
 };
 
 type FunctionCallPart = {
   functionCall: FunctionCall;
+  thoughtSignature?: string; // Must be sibling of functionCall, not inside it
 };
 
 type ObservabilityContextStack = {
@@ -87,6 +97,7 @@ type ObservabilityData = {
 type StreamChunkPart = {
   text?: string;
   functionCall?: FunctionCall;
+  thoughtSignature?: string; // Note: SDK returns thoughtSignature as sibling of functionCall
 };
 
 type StreamChunkContent = {
@@ -932,9 +943,9 @@ export async function POST(request: Request) {
     });
 
     // Check early chunks for function calls, then stream progressively to the client
-    // Store the full functionCall part including thought_signature (required by Gemini 3)
+    // Store the functionCall data (name and args)
     let functionCall: FunctionCall | null = null;
-    // Store the full functionCall part as returned by the model (preserves thought_signature)
+    // Store the full functionCallPart with thoughtSignature as sibling (required by Gemini 3)
     let functionCallPart: FunctionCallPart | null = null;
     const bufferedChunks: unknown[] = [];
 
@@ -948,13 +959,21 @@ export async function POST(request: Request) {
         if (done) break;
         bufferedChunks.push(value);
 
-        const typed = value as { candidates?: Array<{ content?: { parts?: Array<{ text?: string; functionCall?: FunctionCall }> } }> };
+        const typed = value as { candidates?: Array<{ content?: { parts?: Array<StreamChunkPart> } }> };
         const candidates = typed.candidates?.[0]?.content?.parts || [];
         const callPart = candidates.find((part) => part.functionCall);
         if (callPart?.functionCall) {
           functionCall = callPart.functionCall;
-          // Preserve the entire part including thought_signature for follow-up requests
-          functionCallPart = callPart as FunctionCallPart;
+          // Preserve thoughtSignature as a SIBLING of functionCall (required by Gemini 3)
+          // The API expects: { functionCall: {...}, thoughtSignature: "..." }
+          // NOT: { functionCall: { ..., thought_signature: "..." } }
+          functionCallPart = {
+            functionCall: {
+              name: functionCall.name,
+              args: functionCall.args
+            },
+            thoughtSignature: callPart.thoughtSignature
+          };
           break;
         }
       }
@@ -1004,7 +1023,7 @@ export async function POST(request: Request) {
             chainPosition: 0,
             toolId: 'ignore_user',
             args: functionCall.args,
-            thoughtSignature: functionCall.thought_signature,
+            thoughtSignature: functionCallPart?.thoughtSignature,
             startTime: startTime,
             duration: duration,
             ok: result.ok,
@@ -1113,7 +1132,7 @@ export async function POST(request: Request) {
             chainPosition: 0,
             toolId: 'start_voice_session',
             args: functionCall.args || {},
-            thoughtSignature: functionCall.thought_signature,
+            thoughtSignature: functionCallPart?.thoughtSignature,
             startTime: startTime,
             duration: duration,
             ok: result.ok,
@@ -1250,7 +1269,7 @@ export async function POST(request: Request) {
             chainPosition: 0,
             toolId: toolName,
             args: functionCall.args || {},
-            thoughtSignature: functionCall.thought_signature,
+            thoughtSignature: functionCallPart?.thoughtSignature,
             startTime: startTime,
             duration: duration,
             ok: result.ok,
@@ -1294,13 +1313,13 @@ export async function POST(request: Request) {
 
         // Continue conversation with tool result
         // Add the function call and result to the conversation
-        // IMPORTANT: Use the full functionCallPart which includes thought_signature (required by Gemini 3)
+        // IMPORTANT: Use the full functionCallPart which includes thoughtSignature as sibling (required by Gemini 3)
         const updatedContents = [
           ...contentsToSend,
           {
             role: "model" as const,
             parts: [
-              // Use the preserved functionCallPart which includes thought_signature
+              // Use the preserved functionCallPart which includes thoughtSignature
               (functionCallPart as FunctionCallPart) || {
                 functionCall: {
                   name: toolName,
@@ -1328,6 +1347,7 @@ export async function POST(request: Request) {
         console.log("Updated contents length:", updatedContents.length);
 
         // Make a new API call with the tool result
+        debugLog(`Preparing follow-up stream for tool: ${toolName}`);
         const followUpStream = await retryWithBackoff(async () => {
           const config: GeminiConfig = {};
 
@@ -1344,13 +1364,20 @@ export async function POST(request: Request) {
           console.log(`Contents length: ${updatedContents.length}`);
           console.log(`Using cached content: ${!!config.cachedContent}`);
           console.log(`Tools in config: ${!!config.tools}`);
-          console.log(`Last 2 messages:`, JSON.stringify(updatedContents.slice(-2), null, 2));
-
-          return await ai.models.generateContentStream({
-            model: "gemini-3-flash-preview",
-            contents: updatedContents,
-            config
-          });
+          
+          try {
+             debugLog(`Calling generateContentStream for tool: ${toolName}`);
+             const result = await ai.models.generateContentStream({
+                model: "gemini-3-flash-preview",
+                contents: updatedContents,
+                config
+             });
+             debugLog(`generateContentStream returned for tool: ${toolName}`);
+             return result;
+          } catch (err) {
+             debugLog(`generateContentStream failed for tool: ${toolName} - ${err}`);
+             throw err;
+          }
         });
 
         // Support chained function calls (up to 5 in a row)
@@ -1372,44 +1399,75 @@ export async function POST(request: Request) {
                   // Collect all chunks from current stream
                   const collectedChunks: unknown[] = [];
                   const iterator = currentStream[Symbol.asyncIterator]();
+                  let chunkCount = 0;
                   while (true) {
+                    debugLog(`Iterating stream loop ${chunkCount}...`);
                     const { value, done } = await iterator.next();
+                    chunkCount++;
+                    debugLog(`Stream chunk ${chunkCount} received: done=${done}`);
                     if (done) break;
                     collectedChunks.push(value);
                   }
+                  debugLog(`Stream iteration complete. ${chunkCount} chunks.`);
+
 
                   // Extract function calls and text from collected chunks
                   let nextFunctionCall: FunctionCall | null = null;
                   let nextFunctionCallPart: FunctionCallPart | null = null;
                   let responseText = "";
+                  
+                  // Accumulate function call data across chunks
+                  // Note: thoughtSignature is tracked separately (sibling of functionCall, not inside it)
+                  const accumulatedFunctionCall: Partial<FunctionCall> = {};
+                  let accumulatedThoughtSignature: string | undefined = undefined;
+                  let hasFunctionCall = false;
+                  
+                  // Debug: Dump chunks if needed
+                  const debugChunks: unknown[] = [];
 
                   for (const chunk of collectedChunks) {
                     const typed = chunk as StreamChunk;
+                    debugChunks.push(typed); // Store for debugging
                     const candidates: StreamChunkPart[] = typed?.candidates?.[0]?.content?.parts || [];
 
                     // Look for function calls and text in parts
-                    let foundTextInParts = false;
                     for (const part of candidates) {
-                      if (part.functionCall && !nextFunctionCall) {
-                        nextFunctionCall = part.functionCall;
-                        nextFunctionCallPart = { functionCall: part.functionCall } as FunctionCallPart;
+                      if (part.functionCall) {
+                        hasFunctionCall = true;
+                        
+                        if (part.functionCall.name) accumulatedFunctionCall.name = part.functionCall.name;
+                        
+                        // thoughtSignature is a SIBLING of functionCall in the part, not inside it
+                        if (part.thoughtSignature) {
+                           accumulatedThoughtSignature = part.thoughtSignature;
+                        }
+                        
+                        if (part.functionCall.args) {
+                           accumulatedFunctionCall.args = { ...accumulatedFunctionCall.args, ...part.functionCall.args };
+                        }
                       }
                       if (part.text) {
                         responseText += part.text;
-                        foundTextInParts = true;
                       }
                     }
-
-                    // Only try direct text property if no text was found in parts
-                    // This prevents duplication when API returns text in both places
-                    if (!foundTextInParts && typed) {
-                      const textProp = typed.text;
-                      if (typeof textProp === "function") {
-                        responseText += textProp();
-                      } else if (typeof textProp === "string") {
-                        responseText += textProp;
-                      }
-                    }
+                  }
+                  
+                  if (hasFunctionCall && accumulatedFunctionCall.name) {
+                     nextFunctionCall = accumulatedFunctionCall as FunctionCall;
+                     // Build the part with thoughtSignature as a SIBLING of functionCall
+                     nextFunctionCallPart = {
+                       functionCall: nextFunctionCall,
+                       thoughtSignature: accumulatedThoughtSignature
+                     };
+                     
+                     if (!accumulatedThoughtSignature) {
+                        console.error(`[Chain ${chainCount}] MISSING thoughtSignature! Dumping chunks to chunks_debug.json`);
+                        try {
+                           fs.writeFileSync('chunks_debug.json', JSON.stringify(debugChunks, null, 2));
+                        } catch (e) {
+                           console.error('Failed to write chunks debug file', e);
+                        }
+                     }
                   }
 
                   // If there's a function call, execute it and loop
@@ -1460,7 +1518,7 @@ export async function POST(request: Request) {
                         chainPosition: chainCount,
                         toolId: chainedToolName,
                         args: nextFunctionCall.args || {},
-                        thoughtSignature: nextFunctionCall.thought_signature,
+                        thoughtSignature: nextFunctionCallPart?.thoughtSignature,
                         startTime: chainedStartTime,
                         duration: chainedDuration,
                         ok: chainedResult.ok,
@@ -1562,19 +1620,29 @@ export async function POST(request: Request) {
                   }).catch((err) => console.warn("Background summarization failed:", err));
                 }
                 
-                // Append observability data if enabled
-                if (observability) {
-                  observability.finalResponseLength = totalBytesSent;
-                  observability.totalDuration = Date.now() - observability.requestStartTime;
-                  const observabilityJson = JSON.stringify({
-                    contextStack: observability.contextStack,
-                    toolCalls: observability.toolCalls,
-                    chainedCalls: observability.chainedCalls,
-                    totalDuration: observability.totalDuration,
-                    finalResponseLength: observability.finalResponseLength
-                  });
-                  controller.enqueue(encoder.encode(`\n---OBSERVABILITY---\n${observabilityJson}`));
-                }
+                  // Append observability data if enabled
+                  if (observability) {
+                    try {
+                      observability.finalResponseLength = totalBytesSent;
+                      observability.totalDuration = Date.now() - observability.requestStartTime;
+                      const observabilityJson = JSON.stringify({
+                        contextStack: observability.contextStack,
+                        toolCalls: observability.toolCalls,
+                        chainedCalls: observability.chainedCalls,
+                        totalDuration: observability.totalDuration,
+                        finalResponseLength: observability.finalResponseLength
+                      });
+                      controller.enqueue(encoder.encode(`\n---OBSERVABILITY---\n${observabilityJson}`));
+                    } catch (obsError) {
+                      console.error("Error serializing observability data:", obsError);
+                      // Send partial observability or error indication if serialization fails
+                      try {
+                        controller.enqueue(encoder.encode(`\n---OBSERVABILITY---\n${JSON.stringify({ error: "Serialization failed" })}`));
+                      } catch (e) {
+                         // Ignore secondary failure
+                      }
+                    }
+                  }
                 
                 controller.close();
               } catch (error) {

@@ -23,9 +23,9 @@ export async function execute(context) {
   // Check capabilities.voice or fallback to checking meta/context for voice mode
   const isVoiceMode = capabilities?.voice === true;
 
-  if (isVoiceMode && topK > 3) {
-    topK = 3; // Clamp for voice mode
-    console.log('[kb_search] Voice mode detected: clamped top_k from', originalTopK, 'to 3');
+  if (topK > 3) {
+    topK = 3; // Clamp for stability
+    console.log('[kb_search] Stability clamp: clamped top_k from', originalTopK, 'to 3');
   }
 
   try {
@@ -74,17 +74,19 @@ export async function execute(context) {
     try {
       queryEmbedding = await generateQueryEmbedding(args.query);
     } catch (error) {
+      const errorMessage = error.message || String(error);
+      
       // Classify embedding errors
-      if (error.message?.includes('API key') || error.message?.includes('Invalid')) {
-        throw new ToolError(ErrorType.AUTH, error.message, { retryable: false });
+      if (errorMessage.includes('API key') || errorMessage.includes('Invalid')) {
+        throw new ToolError(ErrorType.AUTH, errorMessage, { retryable: false });
       }
-      if (error.message?.includes('rate limit') || error.message?.includes('quota')) {
-        throw new ToolError(ErrorType.RATE_LIMIT, error.message, { retryable: true });
+      if (errorMessage.includes('rate limit') || errorMessage.includes('quota')) {
+        throw new ToolError(ErrorType.RATE_LIMIT, errorMessage, { retryable: true });
       }
-      if (error.message?.includes('timeout')) {
-        throw new ToolError(ErrorType.TRANSIENT, error.message, { retryable: true });
+      if (errorMessage.includes('timeout')) {
+        throw new ToolError(ErrorType.TRANSIENT, errorMessage, { retryable: true });
       }
-      throw new ToolError(ErrorType.TRANSIENT, `Embedding generation failed: ${error.message}`, {
+      throw new ToolError(ErrorType.TRANSIENT, `Embedding generation failed: ${errorMessage}`, {
         retryable: true
       });
     }
@@ -117,7 +119,8 @@ export async function execute(context) {
         qdrantFilters
       );
     } catch (error) {
-      throw new ToolError(ErrorType.TRANSIENT, `Vector search failed: ${error.message}`, {
+      const errorMessage = error.message || String(error);
+      throw new ToolError(ErrorType.TRANSIENT, `Vector search failed: ${errorMessage}`, {
         retryable: true
       });
     }
