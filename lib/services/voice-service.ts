@@ -59,9 +59,12 @@ export class VoiceService extends EventTarget {
   private maxAudioPlaybackErrors = 5;
   private consecutiveSilentChunks = 0; // Track consecutive silent chunks for silence detection
   private shouldPauseAudioSending = false; // Pause sending when agent is processing or sustained silence
+  private userHasSpokenThisTurn = false; // Track if user has spoken since last turn complete
   private SILENCE_PAUSE_THRESHOLD = 10; // Pause after 10 consecutive silent chunks (~1 second)
   private SILENCE_THRESHOLD = 0.0005; // Threshold for detecting silence
-  // Threshold for intentional speech (to interrupt agent) - raised from 0.025 to 0.05 to reduce false interruptions
+  // Threshold for detecting any speech (for turn detection) - lower to catch normal speaking
+  private SPEECH_THRESHOLD = 0.008; // Normal speech level
+  // Threshold for intentional speech (to interrupt agent) - higher to reduce false interruptions
   // This prevents background noise (fans, AC, keyboard) and residual echo from triggering interruptions
   private SPEECH_INTERRUPT_THRESHOLD = 0.05;
   // Thinking sound for tool execution feedback
@@ -394,31 +397,41 @@ export class VoiceService extends EventTarget {
         }
         const avgVal = sumVal / inputData.length;
         
-        // Two-tier threshold system to distinguish silence and intentional speech
+        // Three-tier threshold system:
+        // 1. Silent: below SILENCE_THRESHOLD - counts toward turn_complete
+        // 2. Normal speech: above SPEECH_THRESHOLD - marks user as speaking, resets silence counter
+        // 3. Loud speech: above SPEECH_INTERRUPT_THRESHOLD - can interrupt agent mid-sentence
         const isSilent = maxVal < this.SILENCE_THRESHOLD;
+        const isSpeech = maxVal >= this.SPEECH_THRESHOLD;
         const isIntentionalSpeech = maxVal >= this.SPEECH_INTERRUPT_THRESHOLD;
         
         // Track consecutive silent chunks
         if (isSilent) {
           this.consecutiveSilentChunks = (this.consecutiveSilentChunks || 0) + 1;
-        } else if (isIntentionalSpeech) {
-          // Only resume sending if it's clearly intentional speech (not just ambient noise)
+        } else if (isSpeech) {
+          // User is speaking - reset silence counter and mark as spoken
           this.consecutiveSilentChunks = 0;
-          if (this.shouldPauseAudioSending) {
+          this.userHasSpokenThisTurn = true; // Mark that user has spoken
+          
+          // Only resume sending (interrupt agent) if it's LOUD intentional speech
+          if (isIntentionalSpeech && this.shouldPauseAudioSending) {
             console.log(`User interrupting (volume: ${maxVal.toFixed(4)}) - resuming audio sending`);
+            this.shouldPauseAudioSending = false;
           }
-          this.shouldPauseAudioSending = false;
         } else {
-          // Ambient noise (above silence but below speech threshold) - don't resume sending
-          // This prevents fans, keyboard clicks, etc. from triggering false interruptions
-          this.consecutiveSilentChunks = 0; // Reset to avoid premature turn_complete
+          // Ambient noise (above silence but below speech threshold) - don't count as speech
+          // but also don't count as silence (to avoid false turn_complete)
+          this.consecutiveSilentChunks = 0;
         }
         
         // Pause sending after sustained silence (user stopped speaking)
+        // CRITICAL: Only send turn_complete if the user has actually spoken this turn
+        // This prevents false turn_complete during silence before user speaks
         if (this.consecutiveSilentChunks >= this.SILENCE_PAUSE_THRESHOLD) {
-          if (!this.shouldPauseAudioSending) {
+          if (!this.shouldPauseAudioSending && this.userHasSpokenThisTurn) {
             console.log(`User stopped speaking - signaling turn complete after ${this.consecutiveSilentChunks} consecutive silent chunks`);
             this.shouldPauseAudioSending = true;
+            this.userHasSpokenThisTurn = false; // Reset for next turn
             
             // CRITICAL: Signal to server that user's turn is complete
             if (this.ws && this.ws.readyState === WebSocket.OPEN) {
@@ -785,6 +798,7 @@ export class VoiceService extends EventTarget {
         this.stopThinkingSound();
         this.shouldPauseAudioSending = false;
         this.consecutiveSilentChunks = 0;
+        this.userHasSpokenThisTurn = false; // Reset for next turn - wait for user to speak
         break;
 
       default:

@@ -1375,6 +1375,16 @@ wss.on('connection', async (ws, req) => {
           // Clear the awaitingUserTurn flag - user's turn is now complete
           state.set('awaitingUserTurn', false);
           
+          // Safety check: if we have very little buffered audio (< 5 chunks, ~0.5s),
+          // the user likely didn't actually speak - this is a false turn_complete.
+          // Require minimum buffer OR the awaitingUserTurn was already false (audio was flowing).
+          const MIN_BUFFER_CHUNKS = 5;
+          if (pendingAudioBuffer.length > 0 && pendingAudioBuffer.length < MIN_BUFFER_CHUNKS) {
+            console.log(`[${clientId}] ⚠️ Ignoring turn_complete - only ${pendingAudioBuffer.length} buffered chunks (< ${MIN_BUFFER_CHUNKS}), user likely didn't speak`);
+            pendingAudioBuffer = []; // Clear the small buffer
+            break; // Don't send turnComplete to Gemini
+          }
+          
           if (geminiSession) {
             try {
               // First, send any buffered audio that was collected while awaiting user turn
