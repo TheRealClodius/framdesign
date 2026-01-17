@@ -9,6 +9,7 @@ import {
   TOKEN_CONFIG,
   STREAM_CONFIG,
 } from "@/lib/constants";
+import { estimateTokens, estimateMessageTokens } from "@/lib/token-count";
 import { toolRegistry } from '@/tools/_core/registry';
 import { ErrorType, ToolError } from '@/tools/_core/error-types';
 import { createStateController } from '@/tools/_core/state-controller';
@@ -30,26 +31,6 @@ const conversationCacheStore = new Map<string, {
 let systemPromptCache: string | null = null;
 let systemPromptCachePromise: Promise<string | null> | null = null;
 let systemPromptHash: string | null = null; // Hash of the system prompt to detect changes
-
-/**
- * Estimates token count for a string (rough approximation: 1 token ≈ 4 chars)
- */
-function estimateTokens(text: string): number {
-  return Math.ceil(text.length * TOKEN_CONFIG.TOKENS_PER_CHAR);
-}
-
-/**
- * Estimates total tokens for an array of message parts
- */
-function estimateMessageTokens(messages: Array<{ role: string; parts: Array<{ text: string }> }>): number {
-  let total = 0;
-  for (const msg of messages) {
-    for (const part of msg.parts) {
-      total += estimateTokens(part.text);
-    }
-  }
-  return total;
-}
 
 /**
  * Creates a hash of the conversation history to identify unique conversations
@@ -447,6 +428,20 @@ async function retryWithBackoff<T>(
 }
 
 export async function POST(request: Request) {
+  // Check for observability mode (dev-only)
+  const url = new URL(request.url);
+  const observabilityMode = url.searchParams.get('_observability') === 'true';
+  
+  // Initialize observability collector (only if mode is enabled)
+  const observability = observabilityMode ? {
+    contextStack: {} as any,
+    toolCalls: [] as any[],
+    chainedCalls: 0,
+    totalDuration: 0,
+    finalResponseLength: 0,
+    requestStartTime: Date.now()
+  } : null;
+
   try {
     const body = await request.json();
     const { messages, timeoutExpired } = body;
@@ -460,16 +455,63 @@ export async function POST(request: Request) {
     if (!apiKey) {
       // Return a mock response if no API key is configured
       console.error("GEMINI_API_KEY is missing!");
-      return NextResponse.json({
+      const response = {
         message: "I AM A DEMO AI ASSISTANT. PLEASE CONFIGURE THE GEMINI_API_KEY ENVIRONMENT VARIABLE TO ENABLE REAL RESPONSES."
-      });
+      };
+      
+      // Append observability if enabled (with minimal context stack)
+      if (observability) {
+        observability.contextStack = {
+          systemPromptSource: "N/A (no API key)",
+          totalMessages: 0,
+          recentMessages: 0,
+          summaryPresent: false,
+          summaryUpToIndex: 0,
+          cachedContentUsed: false,
+          estimatedTokens: 0,
+          timeoutExpired: false
+        };
+        observability.totalDuration = Date.now() - observability.requestStartTime;
+        (response as any).observability = {
+          contextStack: observability.contextStack,
+          toolCalls: [],
+          chainedCalls: 0,
+          totalDuration: observability.totalDuration,
+          finalResponseLength: JSON.stringify(response).length
+        };
+      }
+      
+      return NextResponse.json(response);
     }
 
     if (!messages || messages.length === 0) {
-      return NextResponse.json(
-        { error: "No messages provided" },
-        { status: 400 }
-      );
+      const errorResponse = {
+        error: "No messages provided"
+      };
+      
+      // Append observability if enabled
+      if (observability) {
+        observability.contextStack = {
+          systemPromptSource: "N/A (no messages)",
+          totalMessages: 0,
+          recentMessages: 0,
+          summaryPresent: false,
+          summaryUpToIndex: 0,
+          cachedContentUsed: false,
+          estimatedTokens: 0,
+          timeoutExpired: false
+        };
+        observability.totalDuration = Date.now() - observability.requestStartTime;
+        (errorResponse as any).observability = {
+          contextStack: observability.contextStack,
+          toolCalls: [],
+          chainedCalls: 0,
+          totalDuration: observability.totalDuration,
+          finalResponseLength: JSON.stringify(errorResponse).length
+        };
+      }
+      
+      return NextResponse.json(errorResponse, { status: 400 });
     }
 
     const ai = new GoogleGenAI({ apiKey });
@@ -482,14 +524,35 @@ export async function POST(request: Request) {
         console.log(`✓ Tool registry loaded: v${toolRegistry.getVersion()}`);
       } catch (error) {
         console.error('Failed to load tool registry:', error);
-        return NextResponse.json(
-          {
-            error: 'Tool registry initialization failed',
-            message: error instanceof Error ? error.message : 'Unknown error',
-            details: 'The tool registry file is missing or invalid. This should be generated during build.'
-          },
-          { status: 500 }
-        );
+        const errorResponse = {
+          error: 'Tool registry initialization failed',
+          message: error instanceof Error ? error.message : 'Unknown error',
+          details: 'The tool registry file is missing or invalid. This should be generated during build.'
+        };
+        
+        // Append observability if enabled
+        if (observability) {
+          observability.contextStack = {
+            systemPromptSource: "N/A (registry failed)",
+            totalMessages: messages?.length || 0,
+            recentMessages: 0,
+            summaryPresent: false,
+            summaryUpToIndex: 0,
+            cachedContentUsed: false,
+            estimatedTokens: 0,
+            timeoutExpired: false
+          };
+          observability.totalDuration = Date.now() - observability.requestStartTime;
+          (errorResponse as any).observability = {
+            contextStack: observability.contextStack,
+            toolCalls: [],
+            chainedCalls: 0,
+            totalDuration: observability.totalDuration,
+            finalResponseLength: JSON.stringify(errorResponse).length
+          };
+        }
+        
+        return NextResponse.json(errorResponse, { status: 500 });
       }
     }
 
@@ -702,6 +765,23 @@ export async function POST(request: Request) {
       console.log(`Dropped ${budgetResult.droppedMessages} oldest message(s) to fit token budget`);
     }
 
+    // Collect context stack data for observability
+    if (observability) {
+      const toolCount = toolRegistry.tools.size;
+      const estimatedTokens = estimateMessageTokens(contentsToSend);
+      
+      observability.contextStack = {
+        systemPromptSource: `core.md + ${toolCount} tools`,
+        totalMessages: totalMessages,
+        recentMessages: recentMessages.length,
+        summaryPresent: !!summary,
+        summaryUpToIndex: summaryUpToIndex,
+        cachedContentUsed: !!cachedContent,
+        estimatedTokens: estimatedTokens,
+        timeoutExpired: timeoutExpired || false
+      };
+    }
+
     // Generate response with streaming (with retry logic)
     const stream = await retryWithBackoff(async () => {
       const estimatedTokens = estimateMessageTokens(contentsToSend);
@@ -820,6 +900,23 @@ export async function POST(request: Request) {
         );
         const duration = Date.now() - startTime;
 
+        // Collect observability data
+        if (observability) {
+          observability.toolCalls.push({
+            position: observability.toolCalls.length + 1,
+            chainPosition: 0,
+            toolId: 'ignore_user',
+            args: functionCall.args,
+            thoughtSignature: functionCall.thought_signature,
+            startTime: startTime,
+            duration: duration,
+            ok: result.ok,
+            result: result.ok ? result.data : null,
+            error: result.ok ? null : result.error
+          });
+          observability.totalDuration = Date.now() - observability.requestStartTime;
+        }
+
         // Structured audit logging
         console.log(JSON.stringify({
           event: 'tool_execution',
@@ -834,18 +931,44 @@ export async function POST(request: Request) {
 
         // Return response based on result
         if (result.ok) {
-          return NextResponse.json({
+          const response = {
             message: result.data.farewellMessage || functionCall.args.farewell_message,
             timeout: {
               duration: result.data.durationSeconds || functionCall.args.duration_seconds,
               until: result.data.timeoutUntil
             }
-          });
+          };
+          
+          // Append observability if enabled
+          if (observability) {
+            (response as any).observability = {
+              contextStack: observability.contextStack,
+              toolCalls: observability.toolCalls,
+              chainedCalls: observability.chainedCalls,
+              totalDuration: observability.totalDuration,
+              finalResponseLength: JSON.stringify(response).length
+            };
+          }
+          
+          return NextResponse.json(response);
         } else {
           console.error('ignore_user tool failed:', result.error);
-          return NextResponse.json({
+          const errorResponse = {
             error: result.error.message
-          }, { status: 500 });
+          };
+          
+          // Append observability even on error
+          if (observability) {
+            (errorResponse as any).observability = {
+              contextStack: observability.contextStack,
+              toolCalls: observability.toolCalls,
+              chainedCalls: observability.chainedCalls,
+              totalDuration: observability.totalDuration,
+              finalResponseLength: JSON.stringify(errorResponse).length
+            };
+          }
+          
+          return NextResponse.json(errorResponse, { status: 500 });
         }
       }
 
@@ -884,6 +1007,23 @@ export async function POST(request: Request) {
         );
         const duration = Date.now() - startTime;
 
+        // Collect observability data
+        if (observability) {
+          observability.toolCalls.push({
+            position: observability.toolCalls.length + 1,
+            chainPosition: 0,
+            toolId: 'start_voice_session',
+            args: functionCall.args || {},
+            thoughtSignature: functionCall.thought_signature,
+            startTime: startTime,
+            duration: duration,
+            ok: result.ok,
+            result: result.ok ? result.data : null,
+            error: result.ok ? null : result.error
+          });
+          observability.totalDuration = Date.now() - observability.requestStartTime;
+        }
+
         console.log(JSON.stringify({
           event: 'tool_execution',
           toolId: 'start_voice_session',
@@ -914,16 +1054,42 @@ export async function POST(request: Request) {
             messageText = "Let's switch to voice mode.";
           }
 
-          return NextResponse.json({
+          const response = {
             message: messageText,
             startVoiceSession: true,
             pendingRequest: pendingRequest
-          });
+          };
+          
+          // Append observability if enabled
+          if (observability) {
+            (response as any).observability = {
+              contextStack: observability.contextStack,
+              toolCalls: observability.toolCalls,
+              chainedCalls: observability.chainedCalls,
+              totalDuration: observability.totalDuration,
+              finalResponseLength: JSON.stringify(response).length
+            };
+          }
+          
+          return NextResponse.json(response);
         } else {
           console.error('start_voice_session tool failed:', result.error);
-          return NextResponse.json({
+          const errorResponse = {
             error: result.error.message
-          }, { status: 500 });
+          };
+          
+          // Append observability even on error
+          if (observability) {
+            (errorResponse as any).observability = {
+              contextStack: observability.contextStack,
+              toolCalls: observability.toolCalls,
+              chainedCalls: observability.chainedCalls,
+              totalDuration: observability.totalDuration,
+              finalResponseLength: JSON.stringify(errorResponse).length
+            };
+          }
+          
+          return NextResponse.json(errorResponse, { status: 500 });
         }
       }
 
@@ -976,6 +1142,23 @@ export async function POST(request: Request) {
         );
         const duration = Date.now() - startTime;
 
+        // Collect observability data
+        if (observability) {
+          observability.toolCalls.push({
+            position: observability.toolCalls.length + 1,
+            chainPosition: 0,
+            toolId: toolName,
+            args: functionCall.args || {},
+            thoughtSignature: functionCall.thought_signature,
+            startTime: startTime,
+            duration: duration,
+            ok: result.ok,
+            result: result.ok ? result.data : null,
+            error: result.ok ? null : result.error
+          });
+          observability.totalDuration = Date.now() - observability.requestStartTime;
+        }
+
         console.log(JSON.stringify({
           event: 'tool_execution',
           toolId: toolName,
@@ -989,9 +1172,22 @@ export async function POST(request: Request) {
 
         if (!result.ok) {
           console.error(`${toolName} tool failed:`, result.error);
-          return NextResponse.json({
+          const errorResponse = {
             error: result.error.message
-          }, { status: 500 });
+          };
+          
+          // Append observability even on error
+          if (observability) {
+            (errorResponse as any).observability = {
+              contextStack: observability.contextStack,
+              toolCalls: observability.toolCalls,
+              chainedCalls: observability.chainedCalls,
+              totalDuration: observability.totalDuration,
+              finalResponseLength: JSON.stringify(errorResponse).length
+            };
+          }
+          
+          return NextResponse.json(errorResponse, { status: 500 });
         }
 
         // Continue conversation with tool result
@@ -1093,7 +1289,8 @@ export async function POST(request: Request) {
                     const typed = chunk as any;
                     const candidates = typed?.candidates?.[0]?.content?.parts || [];
 
-                    // Look for function calls
+                    // Look for function calls and text in parts
+                    let foundTextInParts = false;
                     for (const part of candidates) {
                       if (part.functionCall && !nextFunctionCall) {
                         nextFunctionCall = part.functionCall;
@@ -1101,14 +1298,18 @@ export async function POST(request: Request) {
                       }
                       if (part.text) {
                         responseText += part.text;
+                        foundTextInParts = true;
                       }
                     }
 
-                    // Also try direct text property
-                    if (typeof typed?.text === "function") {
-                      responseText += typed.text();
-                    } else if (typed?.text) {
-                      responseText += typed.text;
+                    // Only try direct text property if no text was found in parts
+                    // This prevents duplication when API returns text in both places
+                    if (!foundTextInParts) {
+                      if (typeof typed?.text === "function") {
+                        responseText += typed.text();
+                      } else if (typed?.text) {
+                        responseText += typed.text;
+                      }
                     }
                   }
 
@@ -1152,6 +1353,24 @@ export async function POST(request: Request) {
                       }
                     );
                     const chainedDuration = Date.now() - chainedStartTime;
+
+                    // Collect observability data for chained calls
+                    if (observability) {
+                      observability.toolCalls.push({
+                        position: observability.toolCalls.length + 1,
+                        chainPosition: chainCount,
+                        toolId: chainedToolName,
+                        args: nextFunctionCall.args || {},
+                        thoughtSignature: nextFunctionCall.thought_signature,
+                        startTime: chainedStartTime,
+                        duration: chainedDuration,
+                        ok: chainedResult.ok,
+                        result: chainedResult.ok ? chainedResult.data : null,
+                        error: chainedResult.ok ? null : chainedResult.error
+                      });
+                      observability.chainedCalls = chainCount;
+                      observability.totalDuration = Date.now() - observability.requestStartTime;
+                    }
 
                     console.log(JSON.stringify({
                       event: 'chained_tool_execution',
@@ -1248,6 +1467,20 @@ export async function POST(request: Request) {
                   }).catch((err) => console.warn("Background summarization failed:", err));
                 }
                 
+                // Append observability data if enabled
+                if (observability) {
+                  observability.finalResponseLength = totalBytesSent;
+                  observability.totalDuration = Date.now() - observability.requestStartTime;
+                  const observabilityJson = JSON.stringify({
+                    contextStack: observability.contextStack,
+                    toolCalls: observability.toolCalls,
+                    chainedCalls: observability.chainedCalls,
+                    totalDuration: observability.totalDuration,
+                    finalResponseLength: observability.finalResponseLength
+                  });
+                  controller.enqueue(encoder.encode(`\n---OBSERVABILITY---\n${observabilityJson}`));
+                }
+                
                 controller.close();
               } catch (error) {
                 console.error("Error in chained tool execution:", error);
@@ -1332,6 +1565,20 @@ export async function POST(request: Request) {
                 }).catch((err) => console.warn("Background summarization failed:", err));
               }
               
+              // Append observability data if enabled
+              if (observability) {
+                observability.finalResponseLength = bytesSent;
+                observability.totalDuration = Date.now() - observability.requestStartTime;
+                const observabilityJson = JSON.stringify({
+                  contextStack: observability.contextStack,
+                  toolCalls: observability.toolCalls,
+                  chainedCalls: observability.chainedCalls,
+                  totalDuration: observability.totalDuration,
+                  finalResponseLength: observability.finalResponseLength
+                });
+                controller.enqueue(encoder.encode(`\n---OBSERVABILITY---\n${observabilityJson}`));
+              }
+              
               controller.close();
             } catch (error) {
               console.error("Error streaming response:", error);
@@ -1355,6 +1602,8 @@ export async function POST(request: Request) {
 
   } catch (error) {
     console.error("Error in chat route:", error);
+    // Note: Observability data collected up to error point is lost in error cases
+    // This is acceptable as errors are rare and observability is primarily for successful requests
     return handleServerError(error);
   }
 }

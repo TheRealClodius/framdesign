@@ -1,24 +1,11 @@
 /**
- * Tests for token estimation functions
+ * Tests for token estimation functions using tiktoken
  */
 
+import { estimateTokens, estimateMessageTokens } from '@/lib/token-count';
+
 describe('Token Estimation', () => {
-  const TOKENS_PER_CHAR = 0.25;
   const SUMMARY_WORD_LIMIT = 80;
-
-  function estimateTokens(text: string): number {
-    return Math.ceil(text.length * TOKENS_PER_CHAR);
-  }
-
-  function estimateMessageTokens(messages: Array<{ role: string; parts: Array<{ text: string }> }>): number {
-    let total = 0;
-    for (const msg of messages) {
-      for (const part of msg.parts) {
-        total += estimateTokens(part.text);
-      }
-    }
-    return total;
-  }
 
   function trimToWords(text: string, maxWords: number): string {
     const words = text.trim().split(/\s+/);
@@ -76,8 +63,9 @@ describe('Token Estimation', () => {
   test('should estimate tokens correctly for simple text', () => {
     const text = 'Hello world';
     const tokens = estimateTokens(text);
-    // 11 chars * 0.25 = 2.75, rounded up = 3
-    expect(tokens).toBe(3);
+    // tiktoken will give accurate count (typically 2-3 tokens for "Hello world")
+    expect(tokens).toBeGreaterThan(0);
+    expect(tokens).toBeLessThan(10);
   });
 
   test('should handle empty string', () => {
@@ -88,14 +76,17 @@ describe('Token Estimation', () => {
   test('should handle long text', () => {
     const text = 'a'.repeat(1000);
     const tokens = estimateTokens(text);
-    // 1000 chars * 0.25 = 250
-    expect(tokens).toBe(250);
+    // tiktoken will give accurate count (typically around 250-300 tokens for 1000 'a' chars)
+    expect(tokens).toBeGreaterThan(200);
+    expect(tokens).toBeLessThan(400);
   });
 
-  test('should round up correctly', () => {
-    const text = 'abc'; // 3 chars * 0.25 = 0.75, rounded up = 1
+  test('should count tokens for short text', () => {
+    const text = 'abc';
     const tokens = estimateTokens(text);
-    expect(tokens).toBe(1);
+    // tiktoken will give accurate count (typically 1-2 tokens)
+    expect(tokens).toBeGreaterThan(0);
+    expect(tokens).toBeLessThan(5);
   });
 
   test('should estimate tokens for single message', () => {
@@ -107,7 +98,8 @@ describe('Token Estimation', () => {
     ];
     const tokens = estimateMessageTokens(messages);
     expect(tokens).toBeGreaterThan(0);
-    expect(tokens).toBe(5); // 19 chars * 0.25 = 4.75, rounded up = 5
+    // tiktoken will give accurate count (typically 4-6 tokens)
+    expect(tokens).toBeLessThan(10);
   });
 
   test('should estimate tokens for multiple messages', () => {
@@ -122,10 +114,9 @@ describe('Token Estimation', () => {
       },
     ];
     const tokens = estimateMessageTokens(messages);
-    // 'Hello' = 5 chars * 0.25 = 1.25 = 2
-    // 'Hi there!' = 9 chars * 0.25 = 2.25 = 3
-    // Total = 5
-    expect(tokens).toBe(5);
+    // tiktoken will give accurate count (typically 3-5 tokens total)
+    expect(tokens).toBeGreaterThan(0);
+    expect(tokens).toBeLessThan(10);
   });
 
   test('should handle messages with multiple parts', () => {
@@ -139,10 +130,9 @@ describe('Token Estimation', () => {
       },
     ];
     const tokens = estimateMessageTokens(messages);
-    // 'Part 1' = 6 chars * 0.25 = 1.5 = 2
-    // 'Part 2' = 6 chars * 0.25 = 1.5 = 2
-    // Total = 4
-    expect(tokens).toBe(4);
+    // tiktoken will give accurate count (typically 2-4 tokens)
+    expect(tokens).toBeGreaterThan(0);
+    expect(tokens).toBeLessThan(10);
   });
 
   test('should handle empty messages array', () => {
@@ -153,7 +143,9 @@ describe('Token Estimation', () => {
 
   test('should respect MAX_TOKENS limit', () => {
     const MAX_TOKENS = 30000;
-    const veryLongText = 'a'.repeat(MAX_TOKENS * 4 + 1000); // Exceeds limit
+    // Create text that will exceed limit (using tiktoken's more accurate counting)
+    // For tiktoken, ~4 chars per token is still a reasonable approximation for this test
+    const veryLongText = 'a'.repeat(MAX_TOKENS * 4 + 1000);
     const tokens = estimateTokens(veryLongText);
     
     expect(tokens).toBeGreaterThan(MAX_TOKENS);

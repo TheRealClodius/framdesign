@@ -21,6 +21,7 @@ import { config } from 'dotenv';
 import { writeFileSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
+import { encoding_for_model } from 'tiktoken';
 import { buildSystemInstruction } from './config.js';
 import { toolRegistry } from '../tools/_core/registry.js';
 import { createStateController } from '../tools/_core/state-controller.js';
@@ -976,8 +977,21 @@ wss.on('connection', async (ws, req) => {
             
             console.log(`[${clientId}] Session config:`, JSON.stringify(config, null, 2));
 
-            // Estimate context window usage (NEW)
-            const estimateTokens = (text) => Math.ceil((text || '').length / 4);
+            // Estimate context window usage using tiktoken
+            let encoder = null;
+            const estimateTokens = (text) => {
+              if (!text) return 0;
+              try {
+                if (!encoder) {
+                  encoder = encoding_for_model('gpt-3.5-turbo');
+                }
+                return encoder.encode(text).length;
+              } catch (error) {
+                // Fallback to character-based estimation if tiktoken fails
+                console.warn('[token-count] tiktoken failed, falling back to char estimation:', error);
+                return Math.ceil((text || '').length / 4);
+              }
+            };
             const systemPromptTokens = estimateTokens(systemInstruction);
 
             // Calculate tool declaration tokens

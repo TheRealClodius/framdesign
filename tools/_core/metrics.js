@@ -13,15 +13,38 @@
  *   metrics.startSession(sessionId);
  */
 
+import { encoding_for_model } from 'tiktoken';
+
+// Lazy-loaded encoder instance
+let encoder = null;
+
 /**
- * Estimate tokens from text (rough: chars / 4)
+ * Get or create the token encoder instance
+ */
+function getEncoder() {
+  if (!encoder) {
+    // Use gpt-3.5-turbo as default model (uses cl100k_base encoding)
+    encoder = encoding_for_model('gpt-3.5-turbo');
+  }
+  return encoder;
+}
+
+/**
+ * Count tokens from text using tiktoken
  *
- * @param {string} text - Text to estimate
- * @returns {number} - Estimated tokens
+ * @param {string} text - Text to count tokens for
+ * @returns {number} - Token count
  */
 function estimateTokens(text) {
   if (!text) return 0;
-  return Math.ceil(text.length / 4);
+  try {
+    const enc = getEncoder();
+    return enc.encode(text).length;
+  } catch (error) {
+    // Fallback to character-based estimation if tiktoken fails
+    console.warn('tiktoken failed, falling back to char estimation:', error);
+    return Math.ceil(text.length / 4);
+  }
 }
 
 /**

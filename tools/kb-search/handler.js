@@ -70,6 +70,7 @@ export async function execute(context) {
 
     // Generate query embedding (Qdrant accepts vectors directly)
     let queryEmbedding = [];
+    const embeddingStart = Date.now();
     try {
       queryEmbedding = await generateQueryEmbedding(args.query);
     } catch (error) {
@@ -87,6 +88,7 @@ export async function execute(context) {
         retryable: true
       });
     }
+    const embeddingDuration = Date.now() - embeddingStart;
 
     // Execute vector search
     // Search for more chunks than requested to account for deduplication
@@ -107,6 +109,7 @@ export async function execute(context) {
     }
     
     let rawResults;
+    const searchStart = Date.now();
     try {
       rawResults = await searchSimilar(
         queryEmbedding,
@@ -118,6 +121,7 @@ export async function execute(context) {
         retryable: true
       });
     }
+    const searchDuration = Date.now() - searchStart;
 
     // Handle empty results (not an error)
     if (!rawResults || rawResults.length === 0) {
@@ -127,7 +131,15 @@ export async function execute(context) {
           results: [],
           total_found: 0,
           query: args.query,
-          filters_applied: args.filters || null
+          filters_applied: args.filters || null,
+          _timing: {
+            embeddingDuration,
+            searchDuration
+          }
+        },
+        meta: {
+          embeddingDuration,
+          searchDuration
         }
       };
     }
@@ -181,7 +193,15 @@ export async function execute(context) {
         total_found: uniqueEntities,
         query: args.query,
         filters_applied: args.filters || null,
-        clamped: topK !== originalTopK
+        clamped: topK !== originalTopK,
+        _timing: {
+          embeddingDuration,
+          searchDuration
+        }
+      },
+      meta: {
+        embeddingDuration,
+        searchDuration
       }
     };
   } catch (error) {
