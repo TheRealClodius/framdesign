@@ -312,7 +312,13 @@ export default function MarkdownWithMermaid({ content, className = "", isStreami
           }
         };
         
-        const normalizedSrc = normalizeImagePath(src);
+        // Handle Blob objects by converting to object URL
+        let normalizedSrc: string;
+        if (src instanceof Blob) {
+          normalizedSrc = URL.createObjectURL(src);
+        } else {
+          normalizedSrc = normalizeImagePath(src);
+        }
         
         return (
         <span className="relative block my-3 group">
