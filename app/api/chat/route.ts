@@ -944,8 +944,7 @@ export async function POST(request: Request) {
       } catch (err) {
         // If cache error and we're using cache, retry without cache
         if (isCacheError(err) && usingCache) {
-          console.warn(`Cache error detected in initial stream, retrying without cache`);
-          debugLog(`Retrying initial stream without cache`);
+          debugLog(`Cache expired/not found in initial stream, retrying without cache (expected behavior)`);
           
           // Retry without cache
           const fallbackConfig: GeminiConfig = {
@@ -1407,8 +1406,7 @@ export async function POST(request: Request) {
              
              // If cache error and we're using cache, retry without cache
              if (isCacheError(err) && config.cachedContent) {
-               console.warn(`Cache error detected, retrying without cache for tool: ${toolName}`);
-               debugLog(`Retrying without cache for tool: ${toolName}`);
+               debugLog(`Cache expired/not found for tool ${toolName}, retrying without cache (expected behavior)`);
                
                // Retry without cache
                const fallbackConfig: GeminiConfig = {
@@ -1635,8 +1633,7 @@ export async function POST(request: Request) {
                       } catch (err) {
                         // If cache error and we're using cache, retry without cache
                         if (isCacheError(err) && config.cachedContent) {
-                          console.warn(`Cache error detected in chained call, retrying without cache`);
-                          debugLog(`Retrying chained call without cache`);
+                          debugLog(`Cache expired/not found in chained call ${chainCount}, retrying without cache (expected behavior)`);
                           
                           // Retry without cache
                           const fallbackConfig: GeminiConfig = {

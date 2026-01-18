@@ -78,10 +78,66 @@ export async function execute(context) {
     }));
 
     if (matchingChunks.length === 0) {
-      // Entity not found
+      // Entity not found - try to suggest similar entity IDs
+      let suggestion = '';
+      
+      // Extract type and name from entity ID
+      const parts = entityId.split(':');
+      if (parts.length === 2) {
+        const [type, name] = parts;
+        
+        // Special case: uipath_delegate -> desktop_agent_uipath
+        if (name === 'uipath_delegate' && type === 'project') {
+          suggestion = ' Did you mean "project:desktop_agent_uipath"?';
+        } else {
+          // Try to find similar entity IDs by searching for entities of the same type
+          try {
+            // Get all entities of the same type to suggest alternatives
+            const allResults = await searchSimilar(
+              dummyEmbedding,
+              50,
+              { entity_type: type }
+            );
+            
+            // Extract unique entity IDs
+            const entityIds = new Set();
+            for (const result of allResults) {
+              const id = result.metadata?.entity_id;
+              if (id && id.startsWith(`${type}:`)) {
+                entityIds.add(id);
+              }
+            }
+            
+            // Find similar names (simple string similarity)
+            const similarIds = Array.from(entityIds).filter(id => {
+              const idName = id.split(':')[1];
+              if (!idName) return false;
+              // Check if names share common words or are similar
+              const nameWords = name.toLowerCase().split('_');
+              const idWords = idName.toLowerCase().split('_');
+              const commonWords = nameWords.filter(w => idWords.includes(w));
+              return commonWords.length > 0 || 
+                     idName.toLowerCase().includes(name.toLowerCase()) ||
+                     name.toLowerCase().includes(idName.toLowerCase());
+            });
+            
+            if (similarIds.length > 0) {
+              suggestion = ` Did you mean one of: ${similarIds.slice(0, 3).map(id => `"${id}"`).join(', ')}?`;
+            } else if (entityIds.size > 0) {
+              // If no similar names, just show some examples of the same type
+              const examples = Array.from(entityIds).slice(0, 3);
+              suggestion = ` Available ${type} entities include: ${examples.map(id => `"${id}"`).join(', ')}.`;
+            }
+          } catch (suggestionError) {
+            // If suggestion lookup fails, just use the basic error message
+            console.warn(`[kb_get] Failed to generate suggestions:`, suggestionError);
+          }
+        }
+      }
+      
       throw new ToolError(
         ErrorType.PERMANENT,
-        `Entity '${entityId}' not found in KB`,
+        `Entity '${entityId}' not found in KB.${suggestion} Use kb_search to find the correct entity ID.`,
         { retryable: false }
       );
     }

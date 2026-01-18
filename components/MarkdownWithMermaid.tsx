@@ -369,24 +369,31 @@ export default function MarkdownWithMermaid({ content, className = "", isStreami
                     
                     // Try different fallback strategies based on attempt number
                     if (fallbackAttempts === 0) {
-                      // First attempt: try the original decoded path with spaces (actual filename)
-                      // The actual file is "Semantic Space design sketch beginnings.png" (with spaces)
-                      fixedFilename = filename; // Use decoded filename as-is (should have spaces)
-                      // Don't re-encode, try with spaces - Next.js should handle this
-                      const unencodedParts = parts.map((part, index) => {
+                      // First attempt: try replacing hyphens with underscores
+                      // Common case: agent generates "photo-of-andrei.png" but file is "photo_of_andrei.png"
+                      fixedFilename = filename.replace(/-/g, "_");
+                      parts[parts.length - 1] = fixedFilename;
+                      const fixedParts = parts.map((part, index) => {
                         if (index === 0 && part === "") return "";
-                        return part; // Don't encode, use as-is
+                        return encodeURIComponent(part);
                       });
-                      fixedPath = unencodedParts.join("/");
+                      fixedPath = fixedParts.join("/");
                       if (decodedPath.startsWith("/") && !fixedPath.startsWith("/")) {
                         fixedPath = "/" + fixedPath;
                       }
                     } else if (fallbackAttempts === 1) {
-                      // Second attempt: properly encode the path with spaces
-                      // Replace any underscores with spaces first (in case source had wrong format)
-                      fixedFilename = filename.replace(/_/g, " ");
+                      // Second attempt: try replacing hyphens with spaces
+                      // Common case: agent generates "fram-portrait.png" but file is "photo of fram.png"
+                      fixedFilename = filename.replace(/-/g, " ");
+                      // Also handle special case: if filename contains "portrait" or similar, try "photo of" prefix
+                      if (filename.toLowerCase().includes("portrait") && parts.length >= 2) {
+                        // Check if we're in the fram folder
+                        const folderName = parts[parts.length - 2];
+                        if (folderName === "fram") {
+                          fixedFilename = "photo of fram.png";
+                        }
+                      }
                       parts[parts.length - 1] = fixedFilename;
-                      // Now properly encode
                       const fixedParts = parts.map((part, index) => {
                         if (index === 0 && part === "") return "";
                         return encodeURIComponent(part);
@@ -396,8 +403,8 @@ export default function MarkdownWithMermaid({ content, className = "", isStreami
                         fixedPath = "/" + fixedPath;
                       }
                     } else if (fallbackAttempts === 2) {
-                      // Third attempt: try with spaces replaced by hyphens (if file was renamed)
-                      fixedFilename = filename.replace(/\s+/g, "-");
+                      // Third attempt: try replacing underscores with spaces (for files with spaces)
+                      fixedFilename = filename.replace(/_/g, " ");
                       parts[parts.length - 1] = fixedFilename;
                       const fixedParts = parts.map((part, index) => {
                         if (index === 0 && part === "") return "";
