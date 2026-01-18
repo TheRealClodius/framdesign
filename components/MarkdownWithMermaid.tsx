@@ -316,8 +316,10 @@ export default function MarkdownWithMermaid({ content, className = "", isStreami
         let normalizedSrc: string;
         if (src instanceof Blob) {
           normalizedSrc = URL.createObjectURL(src);
-        } else {
+        } else if (typeof src === 'string' || src === undefined) {
           normalizedSrc = normalizeImagePath(src);
+        } else {
+          normalizedSrc = "";
         }
         
         return (
