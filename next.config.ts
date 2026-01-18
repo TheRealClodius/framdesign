@@ -28,10 +28,9 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ['tiktoken'],
   experimental: {
     scrollRestoration: false,
-    // Optimize package imports to reduce bundle size and compilation time
-    // Note: @lancedb/lancedb is excluded because it contains native .node modules
-    // that should be loaded at runtime, not bundled
-    optimizePackageImports: ['mermaid', '@google/genai'],
+    // DISABLED: optimizePackageImports causes Next.js to hang during startup
+    // on iCloud Drive due to extensive file system scanning of mermaid's large dependency tree
+    // optimizePackageImports: ['mermaid', '@google/genai'],
   },
   // Use webpack explicitly for builds that need native module handling
   // Empty turbopack config to acknowledge we're using webpack intentionally
@@ -183,13 +182,9 @@ const nextConfig: NextConfig = {
 
     // Optimize compilation performance in development
     if (dev) {
-      // Increase cache for faster rebuilds
-      config.cache = {
-        type: 'filesystem',
-        buildDependencies: {
-          config: [__filename],
-        },
-      };
+      // DISABLED: filesystem cache causes hangs on iCloud Drive
+      // Use memory cache instead for better performance on slow file systems
+      config.cache = false;
       
       // Optimize module resolution
       config.resolve.symlinks = false;

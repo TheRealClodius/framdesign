@@ -1270,6 +1270,9 @@ export async function POST(request: Request) {
             isActive: state.get('isActive'),
             toolsVersion: toolRegistry.getVersion(),
             state: state.getSnapshot()
+          },
+          meta: {
+            perplexityApiKey: process.env.PERPLEXITY_API_KEY
           }
         };
 

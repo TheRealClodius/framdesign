@@ -29,5 +29,8 @@ export const TEST_QUESTIONS = [
   // Additional questions to trigger compaction (need 12+ for >20 messages)
   "What technologies does Fram work with?",
   "How can I contact Fram Design?",
-  "What makes Fram different from other design studios?"
+  "What makes Fram different from other design studios?",
+  
+  // Perplexity search test (requires real-time information)
+  "What are the latest developments in AI as of 2026?"
 ];

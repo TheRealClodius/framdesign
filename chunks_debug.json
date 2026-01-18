@@ -1,0 +1,167 @@
+[
+  {
+    "candidates": [
+      {
+        "content": {
+          "parts": [
+            {
+              "functionCall": {
+                "name": "kb_get",
+                "args": {
+                  "id": "person:andrei_clodius"
+                }
+              },
+              "thoughtSignature": "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"
+            }
+          ],
+          "role": "model"
+        },
+        "index": 0
+      }
+    ],
+    "modelVersion": "gemini-3-flash-preview",
+    "responseId": "v1xraaSlG7aonsEP6uPiyAU",
+    "usageMetadata": {
+      "promptTokenCount": 6711,
+      "candidatesTokenCount": 23,
+      "totalTokenCount": 7053,
+      "cachedContentTokenCount": 4840,
+      "promptTokensDetails": [
+        {
+          "modality": "TEXT",
+          "tokenCount": 6711
+        }
+      ],
+      "cacheTokensDetails": [
+        {
+          "modality": "TEXT",
+          "tokenCount": 4840
+        }
+      ],
+      "thoughtsTokenCount": 319
+    },
+    "sdkHttpResponse": {
+      "headers": {
+        "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+        "content-disposition": "attachment",
+        "content-type": "text/event-stream",
+        "date": "Sat, 17 Jan 2026 09:56:15 GMT",
+        "server": "scaffolding on HTTPServer2",
+        "server-timing": "gfet4t7; dur=3055",
+        "transfer-encoding": "chunked",
+        "vary": "Origin, X-Origin, Referer",
+        "x-content-type-options": "nosniff",
+        "x-frame-options": "SAMEORIGIN",
+        "x-xss-protection": "0"
+      }
+    }
+  },
+  {
+    "candidates": [
+      {
+        "content": {
+          "parts": [
+            {
+              "functionCall": {
+                "name": "kb_get",
+                "args": {
+                  "id": "project:vector_watch"
+                }
+              }
+            }
+          ],
+          "role": "model"
+        },
+        "index": 0
+      }
+    ],
+    "modelVersion": "gemini-3-flash-preview",
+    "responseId": "v1xraaSlG7aonsEP6uPiyAU",
+    "usageMetadata": {
+      "promptTokenCount": 6860,
+      "candidatesTokenCount": 43,
+      "totalTokenCount": 7222,
+      "cachedContentTokenCount": 4840,
+      "promptTokensDetails": [
+        {
+          "modality": "TEXT",
+          "tokenCount": 6860
+        }
+      ],
+      "cacheTokensDetails": [
+        {
+          "modality": "TEXT",
+          "tokenCount": 4840
+        }
+      ],
+      "thoughtsTokenCount": 319
+    },
+    "sdkHttpResponse": {
+      "headers": {
+        "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+        "content-disposition": "attachment",
+        "content-type": "text/event-stream",
+        "date": "Sat, 17 Jan 2026 09:56:15 GMT",
+        "server": "scaffolding on HTTPServer2",
+        "server-timing": "gfet4t7; dur=3055",
+        "transfer-encoding": "chunked",
+        "vary": "Origin, X-Origin, Referer",
+        "x-content-type-options": "nosniff",
+        "x-frame-options": "SAMEORIGIN",
+        "x-xss-protection": "0"
+      }
+    }
+  },
+  {
+    "candidates": [
+      {
+        "content": {
+          "parts": [
+            {
+              "text": ""
+            }
+          ],
+          "role": "model"
+        },
+        "finishReason": "STOP",
+        "index": 0
+      }
+    ],
+    "modelVersion": "gemini-3-flash-preview",
+    "responseId": "v1xraaSlG7aonsEP6uPiyAU",
+    "usageMetadata": {
+      "promptTokenCount": 6860,
+      "candidatesTokenCount": 43,
+      "totalTokenCount": 7222,
+      "cachedContentTokenCount": 4840,
+      "promptTokensDetails": [
+        {
+          "modality": "TEXT",
+          "tokenCount": 6860
+        }
+      ],
+      "cacheTokensDetails": [
+        {
+          "modality": "TEXT",
+          "tokenCount": 4840
+        }
+      ],
+      "thoughtsTokenCount": 319
+    },
+    "sdkHttpResponse": {
+      "headers": {
+        "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+        "content-disposition": "attachment",
+        "content-type": "text/event-stream",
+        "date": "Sat, 17 Jan 2026 09:56:15 GMT",
+        "server": "scaffolding on HTTPServer2",
+        "server-timing": "gfet4t7; dur=3055",
+        "transfer-encoding": "chunked",
+        "vary": "Origin, X-Origin, Referer",
+        "x-content-type-options": "nosniff",
+        "x-frame-options": "SAMEORIGIN",
+        "x-xss-protection": "0"
+      }
+    }
+  }
+]

@@ -44,6 +44,7 @@ const HANDLER_IMPORTS = {
   'ignore_user': () => import('../ignore-user/handler.js'),
   'kb_get': () => import('../kb-get/handler.js'),
   'kb_search': () => import('../kb-search/handler.js'),
+  'perplexity_search': () => import('../perplexity-search/handler.js'),
   'start_voice_session': () => import('../start-voice-session/handler.js'),
 };
 
@@ -609,7 +610,9 @@ function buildContext(executionContext, tool) {
     },
 
     // Tool metadata (for handler's reference)
+    // Merge execution context meta with tool metadata
     meta: {
+      ...(executionContext.meta || {}),
       toolId: tool.toolId,
       version: tool.version,
       category: tool.category

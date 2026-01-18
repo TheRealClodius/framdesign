@@ -4,7 +4,7 @@
  * Text Agent Test CLI Tool
  * 
  * Tests the text agent using the actual /api/chat endpoint with complete observability.
- * Supports both non-interactive mode (5 prebaked questions) and interactive mode.
+ * Supports both non-interactive mode (prebaked test questions) and interactive mode.
  */
 
 import { config } from 'dotenv';
@@ -35,7 +35,7 @@ const isNonInteractive = args.includes('--non-interactive');
 if (!isInteractive && !isNonInteractive) {
   console.error(formatError('Please specify --interactive or --non-interactive'));
   console.log('\nUsage:');
-  console.log('  node scripts/text-agent-test.js --non-interactive   # Run 5 test questions');
+  console.log('  node scripts/text-agent-test.js --non-interactive   # Run test questions');
   console.log('  node scripts/text-agent-test.js --interactive       # Manual Q&A loop');
   process.exit(1);
 }
@@ -168,10 +168,10 @@ async function processQuestion(question, questionIndex = null, totalQuestions = 
 }
 
 /**
- * Non-interactive mode: Run 5 prebaked questions
+ * Non-interactive mode: Run prebaked test questions
  */
 async function runNonInteractive() {
-  console.log('Running non-interactive mode with 5 test questions...\n');
+  console.log(`Running non-interactive mode with ${TEST_QUESTIONS.length} test questions...\n`);
 
   for (let i = 0; i < TEST_QUESTIONS.length; i++) {
     await processQuestion(TEST_QUESTIONS[i], i, TEST_QUESTIONS.length);
@@ -249,6 +249,9 @@ async function main() {
   // Verify environment variables
   if (!process.env.GEMINI_API_KEY) {
     console.warn('Warning: GEMINI_API_KEY not set. Some features may not work.\n');
+  }
+  if (!process.env.PERPLEXITY_API_KEY) {
+    console.warn('Warning: PERPLEXITY_API_KEY not set. perplexity_search tool will not work.\n');
   }
 
   // Run appropriate mode

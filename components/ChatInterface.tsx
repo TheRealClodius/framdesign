@@ -14,6 +14,162 @@
  * Location: components/ChatInterface.tsx
  * Used in: app/[locale]/page.tsx (main landing page, below hero section)
  * API Endpoint: /api/chat (handles chat requests and streaming responses)
+ * 
+ * HEIGHT SYSTEM EXPLANATION:
+ * 
+ * The height is controlled through a cascading flexbox system:
+ * 
+ * NESTING STRUCTURE (Desktop):
+ * ┌─────────────────────────────────────────────────┐
+ * │ page.tsx: form-container (md:h-[100vh])         │ ← 100vh viewport height
+ * │   ┌───────────────────────────────────────────┐ │
+ * │   │ ChatInterface section (md:flex-1)        │ │ ← Takes remaining space
+ * │   │   ┌────────────────────────────────────┐ │ │
+ * │   │   │ HEADER (line 983)                  │ │ │ ← Fixed height
+ * │   │   │ - "FRAM ASSISTANT" + Clear button  │ │ │   mb-10 (2.5rem)
+ * │   │   │ - flex-shrink-0                     │ │ │   flex-shrink-0
+ * │   │   └────────────────────────────────────┘ │ │
+ * │   │   ┌────────────────────────────────────┐ │ │
+ * │   │   │ Messages Wrapper (md:flex-1)      │ │ │ ← Flexible, fills space
+ * │   │   │   ┌──────────────────────────────┐ │ │ │
+ * │   │   │   │ Messages Container           │ │ │ │ ← Scrollable area
+ * │   │   │   │ (md:flex-1, overflow-y-auto) │ │ │ │   md:flex-1
+ * │   │   │   └──────────────────────────────┘ │ │ │
+ * │   │   │   ┌──────────────────────────────┐ │ │ │
+ * │   │   │   │ PROMPT BOX (line 1068)       │ │ │ │ ← Fixed height
+ * │   │   │   │ - Textarea form              │ │ │ │   flex-shrink-0
+ * │   │   │   │ - Auto-grows (max-h-[120px]) │ │ │ │   Auto height
+ * │   │   │   │ - Voice controls below        │ │ │ │
+ * │   │   │   └──────────────────────────────┘ │ │ │
+ * │   │   └────────────────────────────────────┘ │ │
+ * │   └───────────────────────────────────────────┘ │
+ * │   ┌───────────────────────────────────────────┐ │
+ * │   │ FOOTER (page.tsx line 26)                 │ │ ← Fixed height
+ * │   │ - Copyright text                          │ │   pt-8 pb-9
+ * │   │ - flex-shrink-0                           │ │   flex-shrink-0
+ * │   └───────────────────────────────────────────┘ │
+ * └─────────────────────────────────────────────────┘
+ * 
+ * DETAILED HEIGHT BREAKDOWN:
+ * 
+ * 1. PARENT CONTAINER (page.tsx line 23):
+ *    - Mobile: No fixed height (content-driven)
+ *    - Desktop: `md:h-[100vh]` - Sets container to 100% of viewport height
+ *    - Desktop: `md:flex md:flex-col` - Enables flexbox column layout
+ * 
+ * 2. CHAT SECTION (line 982):
+ *    - Mobile: `h-fit` - Height fits content naturally
+ *    - Desktop: `md:flex-1` - Takes up remaining space in parent flex container
+ *    - Desktop: `md:flex md:flex-col` - Becomes flex container for children
+ *    - Desktop: `md:min-h-0` - Critical! Allows flex children to shrink below content size
+ *    - Padding: `pt-12 pb-9` (top: 3rem, bottom: 2.25rem)
+ * 
+ * 3. HEADER (line 983):
+ *    - Contains: "FRAM ASSISTANT" text + Clear button
+ *    - Height: Content height (text + button)
+ *    - Spacing: `mb-10` (margin-bottom: 2.5rem)
+ *    - Behavior: `flex-shrink-0` - Never shrinks, maintains fixed height
+ *    - To edit header height: Change `mb-10` or add explicit height class
+ * 
+ * 4. MESSAGES WRAPPER (line 994):
+ *    - Mobile: `h-[600px]` - Fixed 600px height
+ *    - Desktop: `md:flex-1` - Fills available space in chat section
+ *    - Desktop: `md:min-h-0` - Allows proper scrolling behavior
+ *    - Contains: Messages container + Prompt box + Voice controls
+ * 
+ * 5. MESSAGES CONTAINER (line 995):
+ *    - Mobile: `h-[600px]` - Fixed 600px height with scroll
+ *    - Desktop: `md:flex-1` - Fills available space
+ *    - Desktop: `md:min-h-0` - Enables overflow scrolling
+ *    - Has `overflow-y-auto` for scrollable content
+ *    - Spacing: `mb-2` (margin-bottom: 0.5rem)
+ * 
+ * 6. PROMPT BOX (line 1068):
+ *    - Contains: Textarea + Send button + Voice controls
+ *    - Height: Auto-growing textarea (max-h-[120px])
+ *    - Behavior: `flex-shrink-0` - Never shrinks, maintains content height
+ *    - Spacing: Voice controls have `mt-4` (margin-top: 1rem)
+ *    - To edit prompt box height: Change textarea `max-h-[120px]` or add padding
+ * 
+ * 7. FOOTER (page.tsx line 26):
+ *    - Contains: Copyright text
+ *    - Height: Content height + padding
+ *    - Padding: `pt-8 pb-9` (top: 2rem, bottom: 2.25rem)
+ *    - Behavior: `flex-shrink-0` - Never shrinks, maintains fixed height
+ *    - To edit footer height: Change `pt-8 pb-9` padding values
+ * 
+ * KEY CONCEPT: `min-h-0` is essential for flexbox scrolling!
+ * Without it, flex items default to `min-height: auto`, which prevents them
+ * from shrinking below their content size, breaking the scroll behavior.
+ * 
+ * HOW TO EDIT HEIGHTS:
+ * - Header height: Change `mb-10` on line 983, or add explicit height class
+ * - Prompt box height: Change textarea `max-h-[120px]` on line 1081
+ * - Footer height: Change `pt-8 pb-9` on page.tsx line 26
+ * - Messages area: Automatically fills remaining space via flex-1
+ * 
+ * BOTTOM SECTION NESTING EXPLANATION (Desktop):
+ * 
+ * The "bottom section" consists of TWO separate parts:
+ * 
+ * PART 1: Inside ChatInterface (lines 1131-1257)
+ * ┌─────────────────────────────────────────────┐
+ * │ Messages Wrapper (line 1057)                │ ← md:flex-1 (flexible)
+ * │   ┌───────────────────────────────────────┐ │
+ * │   │ Messages Container (line 1058)        │ │ ← md:flex-1 (scrollable)
+ * │   │ [Scrollable messages area]            │ │
+ * │   └───────────────────────────────────────┘ │
+ * │   ┌───────────────────────────────────────┐ │
+ * │   │ PROMPT BOX (line 1131)               │ │ ← flex-shrink-0
+ * │   │ - Form wrapper                       │ │   (fixed height)
+ * │   │   - Textarea (max-h-[120px])         │ │
+ * │   │   - Send button                      │ │
+ * │   └───────────────────────────────────────┘ │
+ * │   ┌───────────────────────────────────────┐ │
+ * │   │ VOICE CONTROLS (line 1159)          │ │ ← mt-4 spacing
+ * │   │ - Voice error display (conditional)  │ │   (content-driven)
+ * │   │ - Audio disabled notice (conditional)│ │
+ * │   │ - Voice button                      │ │
+ * │   └───────────────────────────────────────┘ │
+ * └─────────────────────────────────────────────┘
+ * 
+ * PART 2: Outside ChatInterface (page.tsx line 26)
+ * ┌─────────────────────────────────────────────┐
+ * │ FOOTER (page.tsx line 26)                  │ ← flex-shrink-0
+ * │ - Copyright text                           │   pt-8 pb-9
+ * │ - Sibling to ChatInterface                 │   (fixed height)
+ * └─────────────────────────────────────────────┘
+ * 
+ * CURRENT STRUCTURE:
+ * - Messages Wrapper uses `md:flex-1` - fills available space
+ * - Messages Container uses `md:flex-1` - scrollable, fills space
+ * - Prompt Box uses `flex-shrink-0` - fixed height (content-driven)
+ * - Voice Controls use `mt-4` - spacing, content-driven height
+ * - Footer uses `flex-shrink-0 pt-8 pb-9` - fixed height
+ * 
+ * TO MODIFY ENTIRE BOTTOM SECTION HEIGHT ON DESKTOP:
+ * 
+ * Option 1: Wrap prompt box + voice controls in a container
+ *   - Add a wrapper div around lines 1131-1257
+ *   - Give it `md:h-[XXX]` (e.g., `md:h-32` for 128px)
+ *   - This controls prompt box + voice controls together
+ *   - Footer height is separate (modify in page.tsx)
+ * 
+ * Option 2: Set explicit heights on individual components
+ *   - Prompt box: Add `md:h-[XXX]` to form (line 1131)
+ *   - Voice controls: Add `md:h-[XXX]` to voice controls div (line 1159)
+ *   - Footer: Change `pt-8 pb-9` in page.tsx (line 26)
+ * 
+ * Option 3: Control via Messages Wrapper
+ *   - The Messages Wrapper (line 1057) uses `md:flex-1`
+ *   - You could add `md:max-h-[XXX]` to limit its max height
+ *   - This would indirectly control bottom section space
+ * 
+ * RECOMMENDED APPROACH:
+ * To control the entire bottom section (prompt + voice + footer):
+ * 1. Wrap prompt box + voice controls: Add wrapper with `md:h-[XXX]`
+ * 2. Set footer height: Modify `pt-8 pb-9` in page.tsx
+ * 3. Total bottom height = wrapper height + footer height
  */
 import { useState, useRef, useEffect } from "react";
 import MarkdownWithMermaid from "./MarkdownWithMermaid";
@@ -949,20 +1105,24 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
   };
 
   return (
-    <section className="w-full max-w-[28rem] md:max-w-[950px] mx-auto px-4 pt-12 pb-9 h-fit md:flex-1 md:flex md:flex-col md:min-h-0 overflow-x-hidden">
-      <div className="mb-10 text-center flex-shrink-0 flex items-center justify-center gap-4">
-        <p className="text-[0.75rem] font-mono text-gray-500 tracking-wider">FRAM ASSISTANT</p>
-        <button
-          onClick={handleClearChat}
-          className="text-[0.7rem] font-mono text-gray-400 hover:text-gray-600 uppercase tracking-wider transition-colors underline"
-          title="Clear chat history"
-        >
-          Clear
-        </button>
-      </div>
-
+    <section className="w-full max-w-[28rem] md:max-w-[950px] mx-auto px-4 pt-12 md:pt-0 pb-9 md:pb-0 h-fit md:flex-1 md:flex md:flex-col md:min-h-0 overflow-x-hidden">
+      {/* Messages wrapper - extends to top on desktop */}
       <div className="flex flex-col h-[600px] md:flex-1 md:min-h-0 font-mono text-[0.875rem]">
-        <div ref={messagesContainerRef} className="h-[600px] md:flex-1 md:min-h-0 overflow-y-auto overflow-x-hidden mb-2 space-y-6 scrollbar-boxy">
+        <div ref={messagesContainerRef} className="h-[600px] md:flex-1 md:min-h-0 overflow-y-auto overflow-x-hidden mb-2 scrollbar-boxy">
+          {/* Header - sticky at top of scroll area on desktop */}
+          <div className="mb-10 md:mb-0 md:sticky md:top-0 md:z-10 md:bg-white/80 md:backdrop-blur-sm md:py-6 md:-mx-4 md:px-4 text-center flex-shrink-0 flex items-center justify-center gap-4">
+            <p className="text-[0.75rem] font-mono text-gray-500 tracking-wider">FRAM ASSISTANT</p>
+            <button
+              onClick={handleClearChat}
+              className="text-[0.7rem] font-mono text-gray-400 hover:text-gray-600 uppercase tracking-wider transition-colors underline"
+              title="Clear chat history"
+            >
+              Clear
+            </button>
+          </div>
+          
+          {/* Messages content */}
+          <div className="space-y-6">
           {messages.map((message, index) => {
             // Skip rendering empty streaming assistant messages - they'll be shown via loading indicator
             if (message.role === "assistant" && message.streaming && !message.content.trim()) {
@@ -1018,6 +1178,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
              </div>
           )}
           <div ref={messagesEndRef} />
+          </div>
         </div>
 
         {isBlocked ? (
@@ -1035,35 +1196,34 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
             )}
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="relative max-w-[500px] mx-auto w-full flex-shrink-0">
-            <textarea
-              ref={textareaRef}
-              rows={1}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSubmit();
-                }
-              }}
-              disabled={isLoading || isVoiceMode}
-              className="w-full bg-transparent border-b border-gray-300 py-2 pr-12 focus:border-black focus:outline-none transition-colors rounded-none placeholder:text-gray-300 text-black resize-none overflow-y-auto max-h-[120px] disabled:opacity-50 disabled:cursor-not-allowed"
-              placeholder={isVoiceMode ? "Voice mode active..." : "Type your message..."}
-            />
-            <button
-              type="submit"
-              disabled={isLoading || isVoiceMode || !input.trim()}
-              className="absolute right-0 top-2 text-[0.75rem] uppercase tracking-wider text-black disabled:text-gray-300 hover:text-gray-600 transition-colors"
-            >
-              Send
-            </button>
-          </form>
-        )}
-        
-        {/* Voice Mode Controls */}
-        {!isBlocked && (
-          <div className="flex flex-col mt-4 space-y-2">
+          <div className="flex-shrink-0 md:h-32">
+            <form onSubmit={handleSubmit} className="relative max-w-[500px] mx-auto w-full">
+              <textarea
+                ref={textareaRef}
+                rows={1}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSubmit();
+                  }
+                }}
+                disabled={isLoading || isVoiceMode}
+                className="w-full bg-transparent border-b border-gray-300 py-2 pr-12 focus:border-black focus:outline-none transition-colors rounded-none placeholder:text-gray-300 text-black resize-none overflow-y-auto max-h-[120px] disabled:opacity-50 disabled:cursor-not-allowed"
+                placeholder={isVoiceMode ? "Voice mode active..." : "Type your message..."}
+              />
+              <button
+                type="submit"
+                disabled={isLoading || isVoiceMode || !input.trim()}
+                className="absolute right-0 top-2 text-[0.75rem] uppercase tracking-wider text-black disabled:text-gray-300 hover:text-gray-600 transition-colors"
+              >
+                Send
+              </button>
+            </form>
+            
+            {/* Voice Mode Controls */}
+            <div className="flex flex-col mt-4 space-y-2">
             {/* Voice Error Display */}
             {voiceError && (
               <div className={`w-full max-w-[500px] mx-auto px-4 py-2 rounded text-[0.75rem] font-mono ${
@@ -1161,6 +1321,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
                 "VOICE"
               )}
               </button>
+            </div>
             </div>
           </div>
         )}

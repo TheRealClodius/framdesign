@@ -58,6 +58,7 @@ let upsertDocuments: typeof import('../../lib/services/vector-store-service').up
 // Configuration
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const KB_DIR = path.join(process.cwd(), 'kb');
+const ASSETS_MANIFEST_PATH = path.join(process.cwd(), 'kb', 'assets', 'manifest.json');
 const EMBEDDING_MODEL = 'text-embedding-004'; // Gemini's latest embedding model
 const CHUNK_SIZE = 1000; // Characters per chunk
 const CHUNK_OVERLAP = 200; // Overlap between chunks
@@ -268,6 +269,107 @@ async function processMarkdownFile(filePath: string): Promise<Array<{
 }
 
 /**
+ * Process assets from manifest.json
+ */
+async function processAssetManifest(): Promise<Array<{
+  id: string;
+  text: string;
+  embedding: number[];
+  metadata: Record<string, any>;
+}>> {
+  const documents = [];
+
+  // Check if manifest exists
+  try {
+    await fs.access(ASSETS_MANIFEST_PATH);
+  } catch {
+    console.log('ℹ️  No assets manifest found, skipping asset embedding');
+    return documents;
+  }
+
+  // Read and parse manifest
+  const manifestContent = await fs.readFile(ASSETS_MANIFEST_PATH, 'utf-8');
+  const manifest = JSON.parse(manifestContent);
+
+  if (!manifest.assets || !Array.isArray(manifest.assets)) {
+    console.warn('⚠️  Invalid manifest format: missing or invalid assets array');
+    return documents;
+  }
+
+  console.log(`\n🖼️  Processing ${manifest.assets.length} assets from manifest...`);
+
+  for (const asset of manifest.assets) {
+    // Validate required fields
+    if (!asset.id || !asset.description) {
+      console.warn(`⚠️  Skipping asset: missing id or description`, asset);
+      continue;
+    }
+
+    console.log(`   Processing asset: ${asset.id}`);
+
+    // Create text for embedding: title + description + tags
+    const tagsText = asset.tags ? asset.tags.join(', ') : '';
+    const embeddingText = [
+      asset.title || '',
+      asset.description,
+      tagsText
+    ].filter(Boolean).join('\n');
+
+    console.log(`   Generating embedding for asset ${asset.id}...`);
+    const embedding = await generateEmbedding(embeddingText);
+
+    // Prepare metadata - flatten complex types
+    const flattenedMetadata: Record<string, string | number | boolean> = {
+      entity_type: asset.entity_type || 'photo',
+      entity_id: asset.id,
+      title: asset.title || asset.id,
+      path: asset.path,
+      caption: asset.caption || '',
+    };
+
+    // Add tags as JSON string if present
+    if (asset.tags) {
+      flattenedMetadata.tags = JSON.stringify(asset.tags);
+    }
+
+    // Add related_entities as JSON string if present
+    if (asset.related_entities) {
+      flattenedMetadata.related_entities = JSON.stringify(asset.related_entities);
+    }
+
+    // Add other metadata fields
+    if (asset.metadata) {
+      for (const [key, value] of Object.entries(asset.metadata)) {
+        if (value !== undefined && value !== null) {
+          if (typeof value === 'object') {
+            flattenedMetadata[key] = JSON.stringify(value);
+          } else {
+            flattenedMetadata[key] = value as string | number | boolean;
+          }
+        }
+      }
+    }
+
+    // Assets are single chunks (not split like text documents)
+    // Still use _chunk_0 suffix for consistency with document ID format
+    const documentId = `${asset.id}_chunk_0`;
+
+    documents.push({
+      id: documentId,
+      text: embeddingText,
+      embedding,
+      metadata: flattenedMetadata,
+    });
+
+    // Add delay to avoid rate limiting
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+
+  console.log(`✅ Processed ${documents.length} assets`);
+  return documents;
+}
+
+/**
  * Main embedding function
  */
 async function embedKB() {
@@ -292,6 +394,14 @@ async function embedKB() {
     } catch (error: any) {
       console.error(`❌ Error processing ${filePath}:`, error.message);
     }
+  }
+
+  // Process assets from manifest
+  try {
+    const assetDocuments = await processAssetManifest();
+    allDocuments.push(...assetDocuments);
+  } catch (error: any) {
+    console.error(`❌ Error processing assets:`, error.message);
   }
 
   console.log(`\n📊 Total chunks to embed: ${allDocuments.length}`);
@@ -344,9 +454,15 @@ async function embedKB() {
     console.log('✅ Successfully stored all embeddings!');
   }
 
+  // Count markdown vs asset documents
+  const markdownChunks = allDocuments.filter(doc => !doc.id.startsWith('asset:'));
+  const assetChunks = allDocuments.filter(doc => doc.id.startsWith('asset:'));
+
   console.log('\n🎉 KB embedding complete!');
   console.log(`\n📈 Summary:`);
-  console.log(`   Files processed: ${markdownFiles.length}`);
+  console.log(`   Markdown files: ${markdownFiles.length}`);
+  console.log(`   Markdown chunks: ${markdownChunks.length}`);
+  console.log(`   Assets: ${assetChunks.length}`);
   console.log(`   Total chunks: ${allDocuments.length}`);
   console.log(`   Vector dimension: ${allDocuments[0]?.embedding?.length || 'N/A'}`);
 }

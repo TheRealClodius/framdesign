@@ -86,29 +86,53 @@ export async function execute(context) {
       );
     }
 
-    // Sort chunks by chunk_index
-    matchingChunks.sort((a, b) => (a.metadata?.chunk_index || 0) - (b.metadata?.chunk_index || 0));
-
-    // Reconstruct full text
-    const fullText = matchingChunks.map((c) => c.text).join('\n\n');
-
     // Extract metadata from first chunk (frontmatter is same across chunks)
     const metadata = matchingChunks[0].metadata || {};
+    const entityType = metadata.entity_type || 'unknown';
+
+    // Check if this is an asset entity type
+    const isAsset = ['photo', 'video', 'gif', 'diagram'].includes(entityType);
 
     const latency = Date.now() - startTime;
-    console.log(`[kb_get] Retrieved ${matchingChunks.length} chunks in ${latency}ms`);
+    console.log(`[kb_get] Retrieved ${matchingChunks.length} chunks in ${latency}ms (type: ${entityType})`);
 
-    return {
-      ok: true,
-      data: {
-        id: entityId,
-        type: metadata.entity_type || 'unknown',
-        title: metadata.title || entityId,
-        content: fullText,
-        metadata: extractRelevantMetadata(metadata),
-        chunks_count: matchingChunks.length
-      }
-    };
+    if (isAsset) {
+      // Assets are single chunks - return asset-specific data
+      return {
+        ok: true,
+        data: {
+          id: entityId,
+          type: 'asset',
+          entity_type: entityType,
+          title: metadata.title || entityId,
+          description: matchingChunks[0].text || '',
+          path: metadata.path || '',
+          caption: metadata.caption || metadata.title || '',
+          related_entities: tryParseJSON(metadata.related_entities) || [],
+          tags: tryParseJSON(metadata.tags) || [],
+          metadata: extractRelevantMetadata(metadata)
+        }
+      };
+    } else {
+      // Text documents - reconstruct full content from chunks
+      // Sort chunks by chunk_index
+      matchingChunks.sort((a, b) => (a.metadata?.chunk_index || 0) - (b.metadata?.chunk_index || 0));
+
+      // Reconstruct full text
+      const fullText = matchingChunks.map((c) => c.text).join('\n\n');
+
+      return {
+        ok: true,
+        data: {
+          id: entityId,
+          type: entityType,
+          title: metadata.title || entityId,
+          content: fullText,
+          metadata: extractRelevantMetadata(metadata),
+          chunks_count: matchingChunks.length
+        }
+      };
+    }
   } catch (error) {
     // Propagate ToolErrors
     if (error.name === 'ToolError') {
@@ -136,8 +160,24 @@ function extractRelevantMetadata(metadata) {
     entity_type,
     title,
     _distance,
+    path, // Exclude path from generic metadata (it's in main data for assets)
+    caption, // Exclude caption from generic metadata (it's in main data for assets)
+    related_entities, // Exclude related_entities (it's in main data for assets)
+    tags, // Exclude tags (it's in main data for assets)
     ...relevant
   } = metadata;
 
   return relevant;
+}
+
+/**
+ * Safely parse JSON strings, return undefined if invalid
+ */
+function tryParseJSON(jsonString) {
+  if (typeof jsonString !== 'string') return jsonString;
+  try {
+    return JSON.parse(jsonString);
+  } catch {
+    return undefined;
+  }
 }
