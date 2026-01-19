@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import rehypeRaw from "rehype-raw";
 import type { Components } from "react-markdown";
 
 // Lazy load MermaidRenderer to avoid SSR issues
@@ -43,6 +44,48 @@ const ImageModal = dynamic(() => import("./ImageModal"), {
   loading: () => null, // Don't show loading state for modal
 });
 
+// Video component with error handling
+function VideoWithError({ src, children, controls, ...props }: { src?: string; children?: React.ReactNode; controls?: boolean; [key: string]: any }) {
+  const [videoError, setVideoError] = useState(false);
+  const hasControls = controls !== undefined ? controls : true;
+  
+  return (
+    <div className="my-4 rounded-lg border border-gray-200 overflow-hidden bg-black">
+      {videoError ? (
+        <div className="flex flex-col items-center justify-center p-12 text-center min-h-[200px]">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="48"
+            height="48"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="text-gray-400 mb-3"
+          >
+            <polygon points="23 7 16 12 23 17 23 7"></polygon>
+            <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
+          </svg>
+          <p className="text-sm text-gray-400 font-medium">Video unavailable</p>
+          <p className="text-xs text-gray-500 mt-2">The video could not be loaded. It may have expired or been removed.</p>
+        </div>
+      ) : (
+        <video
+          src={src}
+          controls={hasControls}
+          className="w-full max-w-[600px] max-h-96 object-contain"
+          onError={() => setVideoError(true)}
+          {...props}
+        >
+          {children}
+        </video>
+      )}
+    </div>
+  );
+}
+
 // Configuration
 const MAX_MERMAID_BLOCKS_PER_MESSAGE = 10;
 
@@ -62,13 +105,16 @@ export default function MarkdownWithMermaid({ content, className = "", isStreami
   
   // State for image modal
   const [modalImage, setModalImage] = useState<{ src: string; alt: string } | null>(null);
+  
+  // Track failed images to show placeholder instead of broken icon
+  const [failedImages, setFailedImages] = useState<Set<string>>(new Set());
 
   // Custom components for ReactMarkdown
   // Custom components for ReactMarkdown
   const components: Components = useMemo(
     () => ({
       p: ({ children, node }) => {
-        // Check if paragraph only contains an image (or images)
+        // Check if paragraph only contains an image (or images) or video
         // This prevents hydration errors from <div> inside <p>
         if (node && 'children' in node) {
           const nodeChildren = (node as any).children || [];
@@ -76,9 +122,13 @@ export default function MarkdownWithMermaid({ content, className = "", isStreami
             nodeChildren.every((childNode: any) => 
               childNode.type === 'element' && childNode.tagName === 'img'
             );
+          const hasOnlyVideo = nodeChildren.length > 0 && 
+            nodeChildren.every((childNode: any) => 
+              childNode.type === 'element' && childNode.tagName === 'video'
+            );
           
-          // If paragraph only contains images, render without <p> wrapper
-          if (hasOnlyImages) {
+          // If paragraph only contains images or videos, render without <p> wrapper
+          if (hasOnlyImages || hasOnlyVideo) {
             return <>{children}</>;
           }
         }
@@ -224,6 +274,61 @@ export default function MarkdownWithMermaid({ content, className = "", isStreami
       // Handle images - constrain size for chat with expand option
       // Using span instead of div to avoid hydration errors when image is inside <p>
       img: ({ src, alt, ...props }) => {
+        // Extract blob_id and extension from GCS signed URL
+        // Format: https://storage.googleapis.com/{bucket}/assets/{blob_id}.{extension}?...
+        const extractBlobIdFromGcsUrl = (url: string): { blob_id: string; extension: string } | null => {
+          try {
+            // Check if it's a GCS URL
+            if (!url.includes('storage.googleapis.com') || !url.includes('/assets/')) {
+              return null;
+            }
+
+            const urlObj = new URL(url);
+            const pathname = urlObj.pathname;
+            
+            // Extract path after /assets/
+            const assetsIndex = pathname.indexOf('/assets/');
+            if (assetsIndex === -1) return null;
+            
+            const assetPath = pathname.substring(assetsIndex + '/assets/'.length);
+            
+            // Split by . to get blob_id and extension
+            const lastDotIndex = assetPath.lastIndexOf('.');
+            if (lastDotIndex === -1) return null;
+            
+            const blobId = assetPath.substring(0, lastDotIndex);
+            const extension = assetPath.substring(lastDotIndex + 1);
+            
+            if (!blobId || !extension) return null;
+            
+            return { blob_id: blobId, extension };
+          } catch {
+            return null;
+          }
+        };
+
+        // Refresh expired GCS signed URL
+        const refreshGcsUrl = async (blobId: string, extension: string): Promise<string | null> => {
+          try {
+            const response = await fetch('/api/refresh-asset-url', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ blob_id: blobId, extension }),
+            });
+
+            if (!response.ok) {
+              console.warn(`[refreshGcsUrl] Failed to refresh URL: ${response.statusText}`);
+              return null;
+            }
+
+            const data = await response.json();
+            return data.url || null;
+          } catch (error) {
+            console.warn('[refreshGcsUrl] Error refreshing URL:', error);
+            return null;
+          }
+        };
+
         // Normalize image path: ensure proper URL encoding for paths with spaces
         const normalizeImagePath = (path: string | undefined): string => {
           if (!path) return "";
@@ -322,6 +427,39 @@ export default function MarkdownWithMermaid({ content, className = "", isStreami
           normalizedSrc = "";
         }
         
+        // Check if this image has already failed to load
+        const imageHasFailed = failedImages.has(normalizedSrc);
+        
+        // If image failed, show placeholder instead
+        if (imageHasFailed) {
+          return (
+            <div className="relative block my-3 max-w-[600px] max-h-96 rounded-lg border border-gray-200 bg-gray-50 flex items-center justify-center" style={{ minHeight: '200px' }}>
+              <div className="flex flex-col items-center justify-center p-8 text-center">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="48"
+                  height="48"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="text-gray-400 mb-3"
+                >
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                  <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                  <polyline points="21 15 16 10 5 21"></polyline>
+                </svg>
+                <p className="text-sm text-gray-500 font-medium">Image unavailable</p>
+                {alt && (
+                  <p className="text-xs text-gray-400 mt-1">{alt}</p>
+                )}
+              </div>
+            </div>
+          );
+        }
+        
         return (
         <span className="relative block my-3 group">
           <img
@@ -330,13 +468,28 @@ export default function MarkdownWithMermaid({ content, className = "", isStreami
             className="max-w-[600px] max-h-96 rounded-lg border border-gray-200 object-contain cursor-pointer hover:opacity-90 transition-opacity"
             loading="lazy"
             onClick={() => normalizedSrc && setModalImage({ src: normalizedSrc, alt: alt || "" })}
-            onError={(e) => {
+            onError={async (e) => {
               const img = e.target as HTMLImageElement;
               const currentSrc = img.src;
               
               // Check if we've already tried fallbacks (using data attribute)
               const fallbackAttempts = parseInt(img.getAttribute("data-fallback-attempts") || "0", 10);
+              const hasTriedRefresh = img.getAttribute("data-refresh-attempted") === "true";
               
+              // First, try refreshing expired GCS signed URLs
+              if (!hasTriedRefresh && currentSrc.includes("storage.googleapis.com")) {
+                const blobInfo = extractBlobIdFromGcsUrl(currentSrc);
+                if (blobInfo) {
+                  img.setAttribute("data-refresh-attempted", "true");
+                  const freshUrl = await refreshGcsUrl(blobInfo.blob_id, blobInfo.extension);
+                  if (freshUrl) {
+                    img.src = freshUrl;
+                    return; // Successfully refreshed, wait for image to load
+                  }
+                }
+              }
+              
+              // Fallback to existing path-based fallbacks for /kb-assets/ paths
               if (fallbackAttempts < 3 && currentSrc.includes("/kb-assets/")) {
                 try {
                   // Extract pathname from src (handles both absolute URLs and relative paths)
@@ -442,8 +595,8 @@ export default function MarkdownWithMermaid({ content, className = "", isStreami
                 }
               }
               
-              // Only log error if all fallbacks were tried or not applicable
-              // Suppress the error to avoid console spam - the broken image icon is enough feedback
+              // All fallbacks exhausted - mark image as failed and show placeholder
+              setFailedImages((prev) => new Set(prev).add(normalizedSrc));
             }}
             {...props}
           />
@@ -471,14 +624,28 @@ export default function MarkdownWithMermaid({ content, className = "", isStreami
 
       // Horizontal rule
       hr: () => <hr className="my-4 border-gray-200" />,
+
+      // Handle video tags with consistent styling
+      video: ({ src, children, controls, ...props }) => {
+        return <VideoWithError src={src} controls={controls} {...props}>{children}</VideoWithError>;
+      },
+
+      // Handle source tags within video elements
+      source: ({ src, type, ...props }) => {
+        return <source src={src} type={type} {...props} />;
+      },
     }),
-    [isStreaming]
+    [isStreaming, failedImages]
   );
 
   return (
     <>
       <div className={`markdown-content overflow-x-hidden break-words ${className}`}>
-        <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+        <ReactMarkdown 
+          remarkPlugins={[remarkGfm]} 
+          rehypePlugins={[rehypeRaw]}
+          components={components}
+        >
           {content}
         </ReactMarkdown>
       </div>

@@ -13,10 +13,17 @@ describe('BlobStorageService', () => {
   
   beforeEach(() => {
     jest.resetModules();
+    // Preserve GCS credentials from .env files (loaded by setup.ts)
     process.env = {
       ...originalEnv,
-      GCS_PROJECT_ID: 'test-project',
-      GCS_BUCKET_NAME: 'framdesign-assets',
+      // Override with test values if not set, but preserve credentials
+      GCS_PROJECT_ID: originalEnv.GCS_PROJECT_ID || originalEnv.VERTEXAI_PROJECT || 'test-project',
+      GCS_BUCKET_NAME: originalEnv.GCS_BUCKET_NAME || 'framdesign-assets',
+      // Preserve credential-related env vars
+      GCS_KEY_FILE: originalEnv.GCS_KEY_FILE,
+      GCS_SERVICE_ACCOUNT_KEY: originalEnv.GCS_SERVICE_ACCOUNT_KEY,
+      GOOGLE_APPLICATION_CREDENTIALS: originalEnv.GOOGLE_APPLICATION_CREDENTIALS,
+      VERTEXAI_PROJECT: originalEnv.VERTEXAI_PROJECT,
     };
   });
   
@@ -70,6 +77,26 @@ describe('BlobStorageService', () => {
       expect(() => {
         resolveBlobUrl(null as any, 'png');
       }).toThrow();
+    });
+    
+    test('returns cached URL on second call', async () => {
+      // Skip if GCS not configured (for CI/CD)
+      // Need both bucket name and credentials
+      const hasCredentials = process.env.GCS_KEY_FILE || 
+                             process.env.GCS_SERVICE_ACCOUNT_KEY || 
+                             process.env.GOOGLE_APPLICATION_CREDENTIALS;
+      if (!process.env.GCS_BUCKET_NAME || !hasCredentials) {
+        console.log('Skipping cache test - GCS not configured (missing bucket name or credentials)');
+        return;
+      }
+
+      const blobService = await import('@/lib/services/blob-storage-service');
+      const { resolveBlobUrl } = blobService;
+      
+      const url1 = await resolveBlobUrl('test/blob', 'png');
+      const url2 = await resolveBlobUrl('test/blob', 'png');
+      
+      expect(url1).toBe(url2); // Same URL from cache
     });
   });
   

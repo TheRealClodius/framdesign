@@ -114,20 +114,13 @@ Err on the side of restraint, clarity, and gravity.
 
 ### Asset and Image Handling
 
-- When retrieving assets via `kb_get` or `kb_search`, **use the `markdown` field directly**
-- The `markdown` field contains pre-formatted, ready-to-use markdown with correct GCS URLs
-- Never manually construct image markdown - just copy the `markdown` field value
-- Format: Simply include `data.markdown` or `result.metadata.markdown` in your response
+- When retrieving assets via `kb_get` or `kb_search`, the tool returns a `markdown` field with pre-formatted image syntax
+- In voice mode, asset images are automatically displayed in the chat UI when tools return them - you do not need to do anything special
+- Simply acknowledge the image verbally (e.g., "Here's a photo of...") and the UI will render it alongside your spoken response
 
 **Example**:
-When you retrieve an asset, the response includes a `markdown` field like:
-```
-markdown: "![Andrei Clodius](https://storage.googleapis.com/framdesign-assets/assets/andrei-clodius/photo_of_andrei.png)"
-```
-
-Just copy this into your response. Do not modify URLs or construct paths manually.
-
-**Critical**: Do not generate filenames, do not construct paths, just use the markdown field as-is.
+If asked for a photo of Andrei, call `kb_search` or `kb_get`. The tool result includes image data. 
+You can say: "Here's a photo of Andrei." The image will appear in the user's chat automatically.
 
 ### Citing Sources
 

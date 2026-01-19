@@ -12,10 +12,16 @@ interface ImageModalProps {
 
 export default function ImageModal({ src, alt, onClose }: ImageModalProps) {
   const [isClient, setIsClient] = useState(false);
+  const [imageError, setImageError] = useState(false);
 
   useEffect(() => {
     setIsClient(true);
   }, []);
+  
+  // Reset error state when src changes
+  useEffect(() => {
+    setImageError(false);
+  }, [src]);
 
   // Close on ESC
   useEffect(() => {
@@ -99,24 +105,48 @@ export default function ImageModal({ src, alt, onClose }: ImageModalProps) {
         justifyContent: "center",
         overflow: "auto"
       }}>
-        <img
-          src={src}
-          alt={alt}
-          style={{ 
-            maxWidth: "100%",
-            maxHeight: "100%",
-            objectFit: "contain",
-            touchAction: "pan-x pan-y pinch-zoom",
-            borderRadius: "0.5rem"
-          }}
-          onClick={(e) => e.stopPropagation()}
-          onTouchEnd={(e) => e.stopPropagation()}
-          onError={(e) => {
-            // Error handling is done in MarkdownWithMermaid component
-            // Suppress error logging here to avoid console spam
-            // The broken image icon provides visual feedback
-          }}
-        />
+        {imageError ? (
+          <div className="flex flex-col items-center justify-center p-12 text-center max-w-md">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="64"
+              height="64"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="text-gray-400 mb-4"
+            >
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+              <circle cx="8.5" cy="8.5" r="1.5"></circle>
+              <polyline points="21 15 16 10 5 21"></polyline>
+            </svg>
+            <p className="text-lg text-gray-300 font-medium mb-2">Image unavailable</p>
+            {alt && (
+              <p className="text-sm text-gray-400">{alt}</p>
+            )}
+            <p className="text-xs text-gray-500 mt-4">The image could not be loaded. It may have expired or been removed.</p>
+          </div>
+        ) : (
+          <img
+            src={src}
+            alt={alt}
+            style={{ 
+              maxWidth: "100%",
+              maxHeight: "100%",
+              objectFit: "contain",
+              touchAction: "pan-x pan-y pinch-zoom",
+              borderRadius: "0.5rem"
+            }}
+            onClick={(e) => e.stopPropagation()}
+            onTouchEnd={(e) => e.stopPropagation()}
+            onError={() => {
+              setImageError(true);
+            }}
+          />
+        )}
       </div>
     </div>,
     modalRoot

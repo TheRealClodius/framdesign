@@ -166,6 +166,9 @@ wss.on('connection', async (ws, req) => {
   // Track last transcript text to detect and deduplicate overlapping chunks from Gemini
   // Gemini's streaming transcription can send chunks that overlap with previous chunks
   let lastTranscriptText = { user: '', assistant: '' };
+  // Track asset markdown snippets from tool results for voice transcript injection
+  let pendingMarkdownSnippets = [];
+  let markdownInjectedThisTurn = false;
 
   // Initialize state controller for session
   const state = createStateController({
@@ -333,6 +336,32 @@ wss.on('connection', async (ws, req) => {
     
     // No overlap detected, return original
     return newText;
+  }
+
+  function extractMarkdownFromToolResult(result) {
+    const snippets = [];
+    if (!result || !result.ok || !result.data) return snippets;
+
+    const data = result.data;
+    if (typeof data.markdown === 'string' && data.markdown.trim()) {
+      snippets.push(data.markdown.trim());
+    }
+
+    if (Array.isArray(data.results)) {
+      for (const entry of data.results) {
+        const markdown = entry?.metadata?.markdown;
+        if (typeof markdown === 'string' && markdown.trim()) {
+          snippets.push(markdown.trim());
+        }
+      }
+    }
+
+    return snippets;
+  }
+
+  function hasAssetMarkdown(text) {
+    if (!text) return false;
+    return /!\[[^\]]*]\([^)]+\)|<video[\s>]/i.test(text);
   }
 
   async function finalizeUserTurn(source) {
@@ -711,6 +740,13 @@ wss.on('connection', async (ws, req) => {
           recordResponseMetrics(call.name, result.data);
         }
 
+        // Capture asset markdown snippets for voice transcript injection
+        const markdownSnippets = extractMarkdownFromToolResult(result);
+        if (markdownSnippets.length > 0) {
+          pendingMarkdownSnippets.push(...markdownSnippets);
+          console.log(`[${clientId}] Collected ${markdownSnippets.length} asset markdown snippet(s) from ${call.name}`);
+        }
+
         // Record session tool call (NEW)
         recordSessionToolCall(clientId, call.name, call.args, duration, result.ok);
 
@@ -866,9 +902,23 @@ wss.on('connection', async (ws, req) => {
           
           // Text output
           if (part.text) {
-            console.log(`[${clientId}] ✓ TEXT RESPONSE RECEIVED! Sending transcript: ${part.text.substring(0, 50)}...`);
+            const containsAssetMarkdown = hasAssetMarkdown(part.text);
+            let transcriptText = part.text;
+
+            if (!containsAssetMarkdown && pendingMarkdownSnippets.length > 0 && !markdownInjectedThisTurn) {
+              const injectedCount = pendingMarkdownSnippets.length;
+              const injectedMarkdown = pendingMarkdownSnippets.join('\n\n');
+              transcriptText = `${part.text}\n\n${injectedMarkdown}`.trim();
+              markdownInjectedThisTurn = true;
+              pendingMarkdownSnippets = [];
+              console.log(`[${clientId}] Injected ${injectedCount} asset markdown snippet(s) into transcript`);
+            } else if (containsAssetMarkdown) {
+              console.log(`[${clientId}] Transcript already includes asset markdown`);
+            }
+
+            console.log(`[${clientId}] ✓ TEXT RESPONSE RECEIVED! Sending transcript: ${transcriptText.substring(0, 50)}...`);
             conversationTranscripts.assistant.push({
-              text: part.text,
+              text: transcriptText,
               timestamp: Date.now()
             });
             
@@ -876,7 +926,7 @@ wss.on('connection', async (ws, req) => {
               ws.send(JSON.stringify({
                 type: 'transcript',
                 role: 'assistant',
-                text: part.text
+                text: transcriptText
               }));
             });
           }
@@ -952,6 +1002,8 @@ wss.on('connection', async (ws, req) => {
         // Reset transcript deduplication tracking for next turn
         // This prevents cross-turn deduplication from incorrectly filtering valid new transcripts
         lastTranscriptText = { user: '', assistant: '' };
+        pendingMarkdownSnippets = [];
+        markdownInjectedThisTurn = false;
         
         // If end_voice_session tool was called, now is the time to send it (after all audio is generated)
         const pendingEndVoiceSession = state.get('pendingEndVoiceSession');
@@ -1007,6 +1059,8 @@ wss.on('connection', async (ws, req) => {
         // Reset transcript deduplication tracking on interruption
         // The interrupted response is incomplete, so we need fresh deduplication for the next response
         lastTranscriptText = { user: '', assistant: '' };
+        pendingMarkdownSnippets = [];
+        markdownInjectedThisTurn = false;
         
         // Notify client to stop audio playback (if not already sent)
         if (!state.get('interruptionSent')) {
@@ -1423,6 +1477,8 @@ wss.on('connection', async (ws, req) => {
               userTurnCompletionInProgress = false;
               conversationTranscripts = { user: [], assistant: [] };
               lastTranscriptText = { user: '', assistant: '' }; // Reset transcript deduplication tracking
+              pendingMarkdownSnippets = [];
+              markdownInjectedThisTurn = false;
               state.set('pendingEndVoiceSession', null); // Clear any pending end session
               state.set('shouldSuppressAudio', false); // Reset audio suppression flag
               state.set('shouldSuppressTranscript', false); // Reset transcript suppression flag
@@ -1448,6 +1504,8 @@ wss.on('connection', async (ws, req) => {
             userTurnCompletionInProgress = false;
             conversationTranscripts = { user: [], assistant: [] };
             lastTranscriptText = { user: '', assistant: '' }; // Reset transcript deduplication tracking
+            pendingMarkdownSnippets = [];
+            markdownInjectedThisTurn = false;
             state.set('pendingEndVoiceSession', null); // Clear any pending end session
             state.set('shouldSuppressAudio', false); // Reset audio suppression flag
             state.set('shouldSuppressTranscript', false); // Reset transcript suppression flag

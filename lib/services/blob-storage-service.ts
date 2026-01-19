@@ -59,9 +59,73 @@ const storage = createStorageClient();
 const bucketName = process.env.GCS_BUCKET_NAME || 'framdesign-assets';
 const bucket = storage.bucket(bucketName);
 
+// In-memory cache for signed URLs with TTL slightly less than expiration
+// Cache key: `${blobId}:${extension}:${expiresInDays}`
+// Memory consideration: For long-running servers, this cache can grow indefinitely.
+// - Expired entries are cleaned up periodically (every 1 hour)
+// - Optional LRU cache with max size can be enabled via URL_CACHE_MAX_SIZE env var
+// - For serverless/Vercel, cache clears on restart (acceptable)
+const urlCache = new Map<string, { url: string; expiresAt: number; lastAccessed: number }>();
+
+// Optional: Max cache size for LRU eviction (0 = unlimited, suitable for serverless)
+const MAX_CACHE_SIZE = parseInt(process.env.URL_CACHE_MAX_SIZE || '0', 10);
+
+// Cleanup interval: 1 hour (cleans expired entries)
+const CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
+
+/**
+ * Clean up expired cache entries
+ * Runs periodically to prevent memory growth
+ */
+function cleanupExpiredEntries(): void {
+  const now = Date.now();
+  let cleaned = 0;
+  
+  for (const [key, entry] of urlCache.entries()) {
+    if (entry.expiresAt <= now) {
+      urlCache.delete(key);
+      cleaned++;
+    }
+  }
+  
+  if (cleaned > 0) {
+    console.log(`[BlobStorage] Cleaned up ${cleaned} expired URL cache entries`);
+  }
+}
+
+/**
+ * Evict least recently used entries if cache exceeds max size
+ * Only runs if MAX_CACHE_SIZE > 0
+ */
+function evictLRUEntries(): void {
+  if (MAX_CACHE_SIZE === 0 || urlCache.size <= MAX_CACHE_SIZE) {
+    return;
+  }
+  
+  // Sort entries by lastAccessed and remove oldest
+  const entries = Array.from(urlCache.entries())
+    .sort((a, b) => a[1].lastAccessed - b[1].lastAccessed);
+  
+  const toRemove = entries.slice(0, urlCache.size - MAX_CACHE_SIZE);
+  for (const [key] of toRemove) {
+    urlCache.delete(key);
+  }
+  
+  console.log(`[BlobStorage] Evicted ${toRemove.length} LRU cache entries (max size: ${MAX_CACHE_SIZE})`);
+}
+
+// Start periodic cleanup (only in Node.js runtime, not in edge runtime)
+if (typeof setInterval !== 'undefined') {
+  setInterval(cleanupExpiredEntries, CLEANUP_INTERVAL_MS);
+  
+  // Initial cleanup after 5 minutes (allows cache to warm up)
+  setTimeout(cleanupExpiredEntries, 5 * 60 * 1000);
+}
+
 /**
  * Resolve blob ID to signed GCS URL
  * Uses signed URLs since public access prevention is enabled
+ * Caches URLs to avoid regenerating signed URLs for the same asset
  * @param blobId - Stable identifier (e.g., "andrei-clodius/photo_of_andrei")
  * @param extension - File extension (e.g., "png", "jpeg", "mov")
  * @param expiresInDays - Number of days until expiration (default: 7)
@@ -76,12 +140,37 @@ export async function resolveBlobUrl(
     throw new Error('blob_id is required');
   }
 
+  // Create cache key
+  const cacheKey = `${blobId}:${extension}:${expiresInDays}`;
+  
+  // Check cache - use TTL slightly less than expiration (6.9 days for 7-day expiration)
+  const cacheEntry = urlCache.get(cacheKey);
+  const now = Date.now();
+  const cacheTTL = expiresInDays * 24 * 60 * 60 * 1000 * 0.985; // 98.5% of expiration time
+  
+  if (cacheEntry && cacheEntry.expiresAt > now) {
+    // Update lastAccessed for LRU tracking
+    cacheEntry.lastAccessed = now;
+    return cacheEntry.url;
+  }
+
+  // Generate new signed URL
   const fileName = `assets/${blobId}.${extension}`;
   const file = bucket.file(fileName);
 
   const [url] = await file.getSignedUrl({
     action: 'read',
     expires: Date.now() + expiresInDays * 24 * 60 * 60 * 1000,
+  });
+
+  // Evict LRU entries if cache is full (before adding new entry)
+  evictLRUEntries();
+
+  // Cache the URL with expiration slightly less than the signed URL expiration
+  urlCache.set(cacheKey, {
+    url,
+    expiresAt: now + cacheTTL,
+    lastAccessed: now,
   });
 
   return url;
@@ -152,4 +241,31 @@ export async function assetExists(blobId: string, extension: string): Promise<bo
   const file = bucket.file(fileName);
   const [exists] = await file.exists();
   return exists;
+}
+
+/**
+ * Get URL cache statistics (useful for monitoring)
+ * @returns Cache statistics including size, max size, and expired entry count
+ */
+export function getUrlCacheStats(): {
+  size: number;
+  maxSize: number;
+  expiredEntries: number;
+  activeEntries: number;
+} {
+  const now = Date.now();
+  let expiredCount = 0;
+  
+  for (const entry of urlCache.values()) {
+    if (entry.expiresAt <= now) {
+      expiredCount++;
+    }
+  }
+  
+  return {
+    size: urlCache.size,
+    maxSize: MAX_CACHE_SIZE,
+    expiredEntries: expiredCount,
+    activeEntries: urlCache.size - expiredCount,
+  };
 }
