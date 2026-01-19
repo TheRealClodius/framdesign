@@ -627,7 +627,20 @@ export default function MarkdownWithMermaid({ content, className = "", isStreami
 
       // Handle video tags with consistent styling
       video: ({ src, children, controls, ...props }) => {
-        return <VideoWithError src={src} controls={controls} {...props}>{children}</VideoWithError>;
+        // Normalize src to string (handle Blob, MediaStream, MediaSource)
+        let normalizedSrc: string | undefined;
+        if (src instanceof Blob) {
+          normalizedSrc = URL.createObjectURL(src);
+        } else if (src instanceof MediaStream || src instanceof MediaSource) {
+          // MediaStream and MediaSource need to be handled differently
+          // For now, convert to empty string to avoid type error
+          normalizedSrc = undefined;
+        } else if (typeof src === 'string' || src === undefined) {
+          normalizedSrc = src;
+        } else {
+          normalizedSrc = undefined;
+        }
+        return <VideoWithError src={normalizedSrc} controls={controls} {...props}>{children}</VideoWithError>;
       },
 
       // Handle source tags within video elements
