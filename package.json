@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": "20.x"
+    "node": "22.x"
   },
   "scripts": {
     "dev": "NODE_ENV=development next dev --webpack",
@@ -51,7 +51,7 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/jest": "^29.5.14",
-    "@types/node": "^20",
+    "@types/node": "^22",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "concurrently": "^9.2.1",
