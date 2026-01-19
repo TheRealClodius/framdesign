@@ -64,6 +64,30 @@
     "typescript": "^5"
   },
   "overrides": {
-    "glob": "^10.0.0"
+    "glob": "^10.0.0",
+    "jest": {
+      "glob": "^10.0.0"
+    },
+    "@jest/core": {
+      "glob": "^10.0.0"
+    },
+    "@jest/reporters": {
+      "glob": "^10.0.0"
+    },
+    "@jest/transform": {
+      "glob": "^10.0.0"
+    },
+    "jest-config": {
+      "glob": "^10.0.0"
+    },
+    "jest-cli": {
+      "glob": "^10.0.0"
+    },
+    "babel-plugin-istanbul": {
+      "glob": "^10.0.0"
+    },
+    "test-exclude": {
+      "glob": "^10.0.0"
+    }
   }
 }
