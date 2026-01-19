@@ -28,6 +28,7 @@ interface WebSocketMessage {
   role?: 'user' | 'assistant';
   text?: string;
   citations?: Citation[];
+  images?: string[];
   transcripts?: { user: VoiceTranscript[]; assistant: VoiceTranscript[] };
   error?: string;
   durationSeconds?: number;
