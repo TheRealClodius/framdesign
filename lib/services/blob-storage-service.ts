@@ -220,9 +220,10 @@ export async function uploadAsset(
       await file.makePublic();
     } catch (error) {
       // Ignore public access prevention errors - we'll use signed URLs
-      if (!error.message?.includes('public access prevention')) {
+      if (error instanceof Error && !error.message?.includes('public access prevention')) {
         throw error;
       }
+      // If it's not an Error instance or it's a public access prevention error, ignore it
     }
   }
 
