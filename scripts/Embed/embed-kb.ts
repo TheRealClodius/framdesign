@@ -42,12 +42,12 @@
  * - @qdrant/js-client-rest installed
  */
 
-// Load environment variables from .env.local BEFORE any other imports
+// Load environment variables from .env BEFORE any other imports
 // This ensures env vars are available when vector-store-service is imported
 import { config } from 'dotenv';
 import path from 'path';
 // Use override: true to ensure env vars override any existing values
-config({ path: path.join(process.cwd(), '.env.local'), override: true });
+config({ path: path.join(process.cwd(), '.env'), override: true });
 
 import { GoogleGenAI } from '@google/genai';
 import fs from 'fs/promises';
@@ -326,6 +326,17 @@ async function processAssetManifest(): Promise<Array<{
       path: asset.path,
       caption: asset.caption || '',
     };
+
+    // Add GCS blob_id and file_extension if present (for GCS migration)
+    if (asset.blob_id) {
+      flattenedMetadata.blob_id = asset.blob_id;
+    }
+    if (asset.file_extension) {
+      flattenedMetadata.file_extension = asset.file_extension;
+    }
+    if (asset.storage_provider) {
+      flattenedMetadata.storage_provider = asset.storage_provider;
+    }
 
     // Add tags as JSON string if present
     if (asset.tags) {

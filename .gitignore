@@ -49,3 +49,8 @@ tests/e2e/kb-tools-agent-report.json
 
 # vector-search-api dependencies (deprecated - no longer used)
 vector-search-api/node_modules/
+
+# Google Cloud Storage service account key
+gcs-key.json
+gcs-service-account-key.json
+# GCS service account key - DO NOT COMMIT

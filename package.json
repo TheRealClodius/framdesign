@@ -25,6 +25,7 @@
   "dependencies": {
     "@fontsource/google-sans-code": "^5.2.3",
     "@fontsource/google-sans-flex": "^5.2.1",
+    "@google-cloud/storage": "^7.18.0",
     "@google/genai": "^1.35.0",
     "@hookform/resolvers": "^5.2.2",
     "@next/third-parties": "^16.1.1",

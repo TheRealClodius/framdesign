@@ -7,6 +7,27 @@
 
 import { ErrorType, ToolError } from '../_core/error-types.js';
 
+// Import blob storage service for GCS URL resolution
+let resolveBlobUrl;
+async function loadBlobService() {
+  if (!resolveBlobUrl) {
+    try {
+      const blobModule = await import('@/lib/services/blob-storage-service');
+      resolveBlobUrl = blobModule.resolveBlobUrl || blobModule.default?.resolveBlobUrl;
+    } catch (importError) {
+      // Fallback for Node.js runtime (voice server)
+      try {
+        const blobModule = await import('../../lib/services/blob-storage-service.js');
+        resolveBlobUrl = blobModule.resolveBlobUrl || blobModule.default?.resolveBlobUrl;
+      } catch (fallbackError) {
+        console.warn('[kb_get] Failed to load blob storage service:', fallbackError);
+        // Will throw error when trying to use it for assets
+      }
+    }
+  }
+  return resolveBlobUrl;
+}
+
 /**
  * Execute kb_get tool
  *
@@ -153,7 +174,60 @@ export async function execute(context) {
     console.log(`[kb_get] Retrieved ${matchingChunks.length} chunks in ${latency}ms (type: ${entityType})`);
 
     if (isAsset) {
-      // Assets are single chunks - return asset-specific data
+      // Assets are single chunks - return asset-specific data with GCS URL resolution
+      const blobId = metadata.blob_id;
+      const extension = metadata.file_extension;
+      
+      // Resolve blob_id to GCS URL if available
+      let assetUrl = '';
+      let markdown = '';
+      
+      if (blobId && extension) {
+        try {
+          await loadBlobService();
+          if (!resolveBlobUrl) {
+            throw new Error('Blob storage service not available');
+          }
+          assetUrl = await resolveBlobUrl(blobId, extension);
+          const caption = metadata.caption || metadata.title || '';
+          
+          // Handle videos with HTML video tag, images/GIFs with markdown
+          if (entityType === 'video' || extension === 'mov' || extension === 'mp4' || extension === 'webm') {
+            markdown = `<video controls><source src="${assetUrl}" type="video/${extension === 'mov' ? 'quicktime' : extension}">Your browser does not support the video tag.</video>\n\n${caption ? `*${caption}*` : ''}`;
+          } else {
+            // Images and GIFs use markdown image syntax
+            markdown = `![${caption}](${assetUrl})`;
+          }
+        } catch (blobError) {
+          console.warn(`[kb_get] Failed to resolve blob URL for ${entityId}:`, blobError.message);
+          // Fallback to old path if available
+          if (metadata.path) {
+            assetUrl = metadata.path;
+            const caption = metadata.caption || metadata.title || '';
+            // Handle videos with HTML video tag, images/GIFs with markdown
+            if (entityType === 'video' || metadata.path?.match(/\.(mov|mp4|webm)$/i)) {
+              const ext = metadata.path.match(/\.(\w+)$/)?.[1] || 'mp4';
+              markdown = `<video controls><source src="${assetUrl}" type="video/${ext === 'mov' ? 'quicktime' : ext}">Your browser does not support the video tag.</video>\n\n${caption ? `*${caption}*` : ''}`;
+            } else {
+              markdown = `![${caption}](${assetUrl})`;
+            }
+          }
+        }
+      } else {
+        // Missing blob_id or extension - use old path as fallback
+        if (metadata.path) {
+          assetUrl = metadata.path;
+          const caption = metadata.caption || metadata.title || '';
+          markdown = `![${caption}](${metadata.path})`;
+        } else {
+          throw new ToolError(
+            ErrorType.PERMANENT,
+            `Asset ${entityId} missing blob_id/file_extension in metadata. Cannot generate URL.`,
+            { retryable: false }
+          );
+        }
+      }
+      
       return {
         ok: true,
         data: {
@@ -162,11 +236,15 @@ export async function execute(context) {
           entity_type: entityType,
           title: metadata.title || entityId,
           description: matchingChunks[0].text || '',
-          path: metadata.path || '',
+          blob_id: blobId || null,
+          url: assetUrl,
+          markdown: markdown,
+          path: metadata.path || '', // Keep for backward compatibility
           caption: metadata.caption || metadata.title || '',
           related_entities: tryParseJSON(metadata.related_entities) || [],
           tags: tryParseJSON(metadata.tags) || [],
-          metadata: extractRelevantMetadata(metadata)
+          metadata: extractRelevantMetadata(metadata),
+          _instructions: "Use the 'markdown' field directly in your response"
         }
       };
     } else {

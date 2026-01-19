@@ -1,5 +1,5 @@
 {
-  "version": "2.0.0",
+  "version": "1.0.0",
   "assets": [
     {
       "id": "asset:vector_watch_luna_001",
@@ -26,11 +26,7 @@
         "date": "2016",
         "format": "jpeg",
         "source": "FRAM Design portfolio"
-      },
-      "blob_id": "vector/vector-watch-luna",
-      "file_extension": "jpeg",
-      "storage_provider": "gcs",
-      "_old_path": "/kb-assets/vector/vector-watch-luna.jpeg"
+      }
     },
     {
       "id": "asset:andrei_clodius_design_values_001",
@@ -61,11 +57,7 @@
       "metadata": {
         "format": "png",
         "source": "FRAM Design portfolio"
-      },
-      "blob_id": "andrei-clodius/design-values",
-      "file_extension": "png",
-      "storage_provider": "gcs",
-      "_old_path": "/kb-assets/andrei-clodius/design-values.png"
+      }
     },
     {
       "id": "asset:andrei_clodius_photo_001",
@@ -93,11 +85,7 @@
         "format": "png",
         "source": "FRAM Design portfolio",
         "usage": "LinkedIn profile picture"
-      },
-      "blob_id": "andrei-clodius/photo_of_andrei",
-      "file_extension": "png",
-      "storage_provider": "gcs",
-      "_old_path": "/kb-assets/andrei-clodius/photo_of_andrei.png"
+      }
     },
     {
       "id": "asset:andrei_clodius_smiling_001",
@@ -123,11 +111,7 @@
       "metadata": {
         "format": "png",
         "source": "FRAM Design portfolio"
-      },
-      "blob_id": "andrei-clodius/smiling",
-      "file_extension": "png",
-      "storage_provider": "gcs",
-      "_old_path": "/kb-assets/andrei-clodius/smiling.png"
+      }
     },
     {
       "id": "asset:andrei_clodius_sosetuta_001",
@@ -153,11 +137,7 @@
       "metadata": {
         "format": "png",
         "source": "FRAM Design portfolio"
-      },
-      "blob_id": "andrei-clodius/sosetuta",
-      "file_extension": "png",
-      "storage_provider": "gcs",
-      "_old_path": "/kb-assets/andrei-clodius/sosetuta.png"
+      }
     },
     {
       "id": "asset:autopilot_context_structure_sketch_001",
@@ -186,11 +166,7 @@
         "format": "png",
         "source": "FRAM Design portfolio",
         "client": "UiPath"
-      },
-      "blob_id": "autopilot/agent-context-structure-sketch",
-      "file_extension": "png",
-      "storage_provider": "gcs",
-      "_old_path": "/kb-assets/autopilot/agent context structure sketch.png"
+      }
     },
     {
       "id": "asset:autopilot_meeting_followup_001",
@@ -220,11 +196,7 @@
         "format": "png",
         "source": "FRAM Design portfolio",
         "client": "UiPath"
-      },
-      "blob_id": "autopilot/automated-meeting-follow-up",
-      "file_extension": "png",
-      "storage_provider": "gcs",
-      "_old_path": "/kb-assets/autopilot/Automated Meeting Follow-up.png"
+      }
     },
     {
       "id": "asset:autopilot_chatbubble_options_001",
@@ -252,11 +224,7 @@
         "format": "png",
         "source": "FRAM Design portfolio",
         "client": "UiPath"
-      },
-      "blob_id": "autopilot/autopilot-chatbubble-options-analysis",
-      "file_extension": "png",
-      "storage_provider": "gcs",
-      "_old_path": "/kb-assets/autopilot/Autopilot-ChatBubble-Options-Analysis.png"
+      }
     },
     {
       "id": "asset:autopilot_context_nesting_001",
@@ -284,11 +252,7 @@
         "format": "png",
         "source": "FRAM Design portfolio",
         "client": "UiPath"
-      },
-      "blob_id": "autopilot/autopilot-context-nesting",
-      "file_extension": "png",
-      "storage_provider": "gcs",
-      "_old_path": "/kb-assets/autopilot/Autopilot-context-nesting.png"
+      }
     },
     {
       "id": "asset:autopilot_expert_icon_001",
@@ -316,11 +280,7 @@
         "format": "png",
         "source": "FRAM Design portfolio",
         "client": "UiPath"
-      },
-      "blob_id": "autopilot/autopilot-expert-icon-exploration",
-      "file_extension": "png",
-      "storage_provider": "gcs",
-      "_old_path": "/kb-assets/autopilot/Autopilot-Expert-Icon-Exploration.png"
+      }
     },
     {
       "id": "asset:autopilot_modes_exploration_001",
@@ -351,11 +311,7 @@
         "format": "mov",
         "source": "FRAM Design portfolio",
         "client": "UiPath"
-      },
-      "blob_id": "autopilot/autopilot-modes-design-exploration",
-      "file_extension": "mov",
-      "storage_provider": "gcs",
-      "_old_path": "/kb-assets/autopilot/autopilot-modes-design-exploration.mov"
+      }
     },
     {
       "id": "asset:autopilot_structure_sketch_001",
@@ -383,11 +339,7 @@
         "format": "png",
         "source": "FRAM Design portfolio",
         "client": "UiPath"
-      },
-      "blob_id": "autopilot/autopilot-structure-sketch",
-      "file_extension": "png",
-      "storage_provider": "gcs",
-      "_old_path": "/kb-assets/autopilot/Autopilot-structure-sketch.png"
+      }
     },
     {
       "id": "asset:autopilot_tool_calls_dark_001",
@@ -416,11 +368,7 @@
         "format": "png",
         "source": "FRAM Design portfolio",
         "client": "UiPath"
-      },
-      "blob_id": "autopilot/autopilot-tool-calls-dark",
-      "file_extension": "png",
-      "storage_provider": "gcs",
-      "_old_path": "/kb-assets/autopilot/Autopilot-Tool-Calls-Dark.png"
+      }
     },
     {
       "id": "asset:autopilot_self_assessment_001",
@@ -452,11 +400,7 @@
         "format": "png",
         "source": "FRAM Design portfolio",
         "client": "UiPath"
-      },
-      "blob_id": "autopilot/employees-writing-their-annual-self-assessment",
-      "file_extension": "png",
-      "storage_provider": "gcs",
-      "_old_path": "/kb-assets/autopilot/Employees writing their annual Self-assessment.png"
+      }
     },
     {
       "id": "asset:clipboard_ai_first_001",
@@ -485,11 +429,7 @@
         "format": "png",
         "source": "FRAM Design portfolio",
         "client": "UiPath"
-      },
-      "blob_id": "clipboard-ai/first",
-      "file_extension": "png",
-      "storage_provider": "gcs",
-      "_old_path": "/kb-assets/clipboard-ai/first.png"
+      }
     },
     {
       "id": "asset:clipboard_ai_logo_exploration_001",
@@ -516,11 +456,7 @@
         "format": "png",
         "source": "FRAM Design portfolio",
         "client": "UiPath"
-      },
-      "blob_id": "clipboard-ai/logo-exploration",
-      "file_extension": "png",
-      "storage_provider": "gcs",
-      "_old_path": "/kb-assets/clipboard-ai/logo-exploration.png"
+      }
     },
     {
       "id": "asset:clipboard_ai_dynamic_width_001",
@@ -552,11 +488,7 @@
         "source": "FRAM Design portfolio",
         "client": "UiPath",
         "platform": "Windows desktop"
-      },
-      "blob_id": "clipboard-ai/dynamic-width-clipboard-ai",
-      "file_extension": "mov",
-      "storage_provider": "gcs",
-      "_old_path": "/kb-assets/clipboard-ai/Dynamic Width Clipboard AI.mov"
+      }
     },
     {
       "id": "asset:desktop_agent_add_context_button_001",
@@ -585,11 +517,7 @@
         "source": "FRAM Design portfolio",
         "client": "UiPath",
         "code_name": "Delegate"
-      },
-      "blob_id": "desktop-agent-uipath/chat-interface-add-context-button-explorations",
-      "file_extension": "png",
-      "storage_provider": "gcs",
-      "_old_path": "/kb-assets/desktop-agent-uipath/Chat-Interface-Add-Context-Button-Explorations.png"
+      }
     },
     {
       "id": "asset:desktop_agent_delegate_gif_001",
@@ -620,11 +548,7 @@
         "source": "FRAM Design portfolio",
         "client": "UiPath",
         "code_name": "Delegate"
-      },
-      "blob_id": "desktop-agent-uipath/delegate",
-      "file_extension": "gif",
-      "storage_provider": "gcs",
-      "_old_path": "/kb-assets/desktop-agent-uipath/delegate.gif"
+      }
     },
     {
       "id": "asset:desktop_agent_japanese_interface_001",
@@ -656,11 +580,7 @@
         "source": "FRAM Design portfolio",
         "client": "UiPath",
         "code_name": "Delegate"
-      },
-      "blob_id": "desktop-agent-uipath/desktop-agent-japanese-interface-rough-draft",
-      "file_extension": "png",
-      "storage_provider": "gcs",
-      "_old_path": "/kb-assets/desktop-agent-uipath/Desktop Agent japanese interface rough draft.png"
+      }
     },
     {
       "id": "asset:desktop_agent_pink_color_study_001",
@@ -689,11 +609,7 @@
         "source": "FRAM Design portfolio",
         "client": "UiPath",
         "code_name": "Delegate"
-      },
-      "blob_id": "desktop-agent-uipath/desktop-agent-pink-002",
-      "file_extension": "png",
-      "storage_provider": "gcs",
-      "_old_path": "/kb-assets/desktop-agent-uipath/Desktop-Agent-pink-002.png"
+      }
     },
     {
       "id": "asset:desktop_agent_screen_recorder_001",
@@ -723,11 +639,7 @@
         "source": "FRAM Design portfolio",
         "client": "UiPath",
         "code_name": "Delegate"
-      },
-      "blob_id": "desktop-agent-uipath/desktop-agent-screen-recorder",
-      "file_extension": "png",
-      "storage_provider": "gcs",
-      "_old_path": "/kb-assets/desktop-agent-uipath/Desktop-Agent-Screen-Recorder.png"
+      }
     },
     {
       "id": "asset:desktop_agent_subagent_card_001",
@@ -757,11 +669,7 @@
         "source": "FRAM Design portfolio",
         "client": "UiPath",
         "code_name": "Delegate"
-      },
-      "blob_id": "desktop-agent-uipath/desktop-agent-subagent-card",
-      "file_extension": "png",
-      "storage_provider": "gcs",
-      "_old_path": "/kb-assets/desktop-agent-uipath/Desktop-Agent-Subagent-Card.png"
+      }
     },
     {
       "id": "asset:desktop_agent_subagent_toolcall_001",
@@ -792,11 +700,7 @@
         "source": "FRAM Design portfolio",
         "client": "UiPath",
         "code_name": "Delegate"
-      },
-      "blob_id": "desktop-agent-uipath/desktop-agent-subagent-toolcall-details",
-      "file_extension": "png",
-      "storage_provider": "gcs",
-      "_old_path": "/kb-assets/desktop-agent-uipath/Desktop-Agent-subagent-toolcall-details.png"
+      }
     },
     {
       "id": "asset:desktop_agent_flow_automation_001",
@@ -828,11 +732,7 @@
         "client": "UiPath",
         "code_name": "Delegate",
         "platform": "macOS"
-      },
-      "blob_id": "desktop-agent-uipath/screenshot-2025-11-05-at-162335",
-      "file_extension": "png",
-      "storage_provider": "gcs",
-      "_old_path": "/kb-assets/desktop-agent-uipath/Screenshot 2025-11-05 at 16.23.35.png"
+      }
     },
     {
       "id": "asset:fram_photo_001",
@@ -859,11 +759,7 @@
       "metadata": {
         "format": "png",
         "source": "FRAM Design portfolio"
-      },
-      "blob_id": "fram/photo-of-fram",
-      "file_extension": "png",
-      "storage_provider": "gcs",
-      "_old_path": "/kb-assets/fram/photo of fram.png"
+      }
     },
     {
       "id": "asset:semantic_space_document_mobile_001",
@@ -891,11 +787,7 @@
         "format": "png",
         "source": "FRAM Design portfolio",
         "platform": "iOS"
-      },
-      "blob_id": "semantic-space/document-view-mobile-snapshop-with-perplexity-illustration",
-      "file_extension": "png",
-      "storage_provider": "gcs",
-      "_old_path": "/kb-assets/semantic-space/document-view-mobile-snapshop-with-perplexity-illustration.png"
+      }
     },
     {
       "id": "asset:semantic_space_folder_mobile_001",
@@ -923,11 +815,7 @@
         "format": "png",
         "source": "FRAM Design portfolio",
         "platform": "iOS"
-      },
-      "blob_id": "semantic-space/folder-view-mobile-snapshot",
-      "file_extension": "png",
-      "storage_provider": "gcs",
-      "_old_path": "/kb-assets/semantic-space/folder-view-mobile-snapshot.png"
+      }
     },
     {
       "id": "asset:semantic_space_canvas_sketch_001",
@@ -954,11 +842,7 @@
       "metadata": {
         "format": "png",
         "source": "FRAM Design portfolio"
-      },
-      "blob_id": "semantic-space/semantic-space-design-sketch-beginnings",
-      "file_extension": "png",
-      "storage_provider": "gcs",
-      "_old_path": "/kb-assets/semantic-space/Semantic Space design sketch beginnings.png"
+      }
     },
     {
       "id": "asset:semantic_space_chat_bubbles_001",
@@ -985,40 +869,7 @@
       "metadata": {
         "format": "png",
         "source": "FRAM Design portfolio"
-      },
-      "blob_id": "semantic-space/semantic-space-chat-app-bubble-options-design-explorations",
-      "file_extension": "png",
-      "storage_provider": "gcs",
-      "_old_path": "/kb-assets/semantic-space/Semantic-Space-Chat-App-Bubble-Options-Design-Explorations.png"
+      }
     }
-  ],
-  "_schema": {
-    "blob_id": "Stable identifier for GCS storage (category/filename without extension)",
-    "file_extension": "File extension (png, jpeg, mov, gif)",
-    "storage_provider": "Always 'gcs' for Google Cloud Storage"
-  },
-  "_ID_MAPPING_RULES": {
-    "description": "How to maintain ID <> asset mapping when updating assets",
-    "rules": [
-      "1. blob_id format: {category}/{filename-slug} (no extension)",
-      "2. Category matches folder: andrei-clodius/, semantic-space/, etc.",
-      "3. Filename slug: lowercase, hyphens instead of spaces, descriptive",
-      "4. blob_id is STABLE - never change it (URLs will break)",
-      "5. To rename: Keep blob_id, update title/description only",
-      "6. To replace: Upload new file with SAME blob_id (overwrites in GCS)",
-      "7. file_extension must match actual file in GCS"
-    ],
-    "examples": {
-      "good_blob_ids": [
-        "andrei-clodius/photo_of_andrei",
-        "semantic-space/canvas-sketch",
-        "autopilot/context-structure-sketch"
-      ],
-      "bad_blob_ids": [
-        "photo.png",
-        "Semantic Space Sketch",
-        "2024-01-15-image"
-      ]
-    }
-  }
+  ]
 }

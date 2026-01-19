@@ -6,6 +6,27 @@
 
 import { ErrorType, ToolError } from '../_core/error-types.js';
 
+// Import blob storage service for GCS URL resolution
+let resolveBlobUrl;
+async function loadBlobService() {
+  if (!resolveBlobUrl) {
+    try {
+      const blobModule = await import('@/lib/services/blob-storage-service');
+      resolveBlobUrl = blobModule.resolveBlobUrl || blobModule.default?.resolveBlobUrl;
+    } catch (importError) {
+      // Fallback for Node.js runtime (voice server)
+      try {
+        const blobModule = await import('../../lib/services/blob-storage-service.js');
+        resolveBlobUrl = blobModule.resolveBlobUrl || blobModule.default?.resolveBlobUrl;
+      } catch (fallbackError) {
+        console.warn('[kb_search] Failed to load blob storage service:', fallbackError);
+        // Will skip markdown generation for assets if service unavailable
+      }
+    }
+  }
+  return resolveBlobUrl;
+}
+
 /**
  * Execute kb_search tool
  *
@@ -147,15 +168,21 @@ export async function execute(context) {
       };
     }
 
+    // Load blob service for asset URL resolution
+    await loadBlobService();
+    
     // Transform results to standard format
-    const transformedResults = rawResults.map((result) => {
+    const transformedResults = await Promise.all(rawResults.map(async (result) => {
       const snippet = args.include_snippets !== false && result.text
         ? result.text.substring(0, 200) + (result.text.length > 200 ? '...' : '')
         : null;
 
-      return {
+      const entityType = result.metadata?.entity_type || 'unknown';
+      const isAsset = ['photo', 'video', 'gif', 'diagram'].includes(entityType);
+      
+      const baseResult = {
         id: result.metadata?.entity_id || result.id,
-        type: result.metadata?.entity_type || 'unknown',
+        type: entityType,
         title: result.metadata?.title || result.id,
         snippet,
         score: result.score,
@@ -163,7 +190,58 @@ export async function execute(context) {
         last_updated: null, // Not tracked yet
         metadata: extractRelevantMetadata(result.metadata || {})
       };
-    });
+      
+      // For assets, resolve blob_id to URL and generate markdown
+      if (isAsset) {
+        const blobId = result.metadata?.blob_id;
+        const extension = result.metadata?.file_extension;
+        const caption = result.metadata?.caption || result.metadata?.title || '';
+        
+        if (blobId && extension && resolveBlobUrl) {
+          try {
+            const assetUrl = await resolveBlobUrl(blobId, extension);
+            const entityType = result.metadata?.entity_type || '';
+            
+            // Handle videos with HTML video tag, images/GIFs with markdown
+            let markdown;
+            if (entityType === 'video' || extension === 'mov' || extension === 'mp4' || extension === 'webm') {
+              markdown = `<video controls><source src="${assetUrl}" type="video/${extension === 'mov' ? 'quicktime' : extension}">Your browser does not support the video tag.</video>\n\n${caption ? `*${caption}*` : ''}`;
+            } else {
+              // Images and GIFs use markdown image syntax
+              markdown = `![${caption}](${assetUrl})`;
+            }
+            
+            // Add markdown to metadata
+            baseResult.metadata.markdown = markdown;
+            baseResult.metadata.url = assetUrl;
+            baseResult.metadata.blob_id = blobId;
+          } catch (blobError) {
+            console.warn(`[kb_search] Failed to resolve blob URL for ${baseResult.id}:`, blobError.message);
+            // Fallback to old path if available
+            if (result.metadata?.path) {
+              const entityType = result.metadata?.entity_type || '';
+              const path = result.metadata.path;
+              let markdown;
+              if (entityType === 'video' || path.match(/\.(mov|mp4|webm)$/i)) {
+                const ext = path.match(/\.(\w+)$/)?.[1] || 'mp4';
+                markdown = `<video controls><source src="${path}" type="video/${ext === 'mov' ? 'quicktime' : ext}">Your browser does not support the video tag.</video>\n\n${caption ? `*${caption}*` : ''}`;
+              } else {
+                markdown = `![${caption}](${path})`;
+              }
+              baseResult.metadata.markdown = markdown;
+              baseResult.metadata.url = result.metadata.path;
+            }
+          }
+        } else if (result.metadata?.path) {
+          // Fallback to old path if blob_id not available
+          const markdown = `![${caption}](${result.metadata.path})`;
+          baseResult.metadata.markdown = markdown;
+          baseResult.metadata.url = result.metadata.path;
+        }
+      }
+      
+      return baseResult;
+    }));
 
     // Deduplicate by entity_id: keep only the highest-scoring chunk per entity
     // The id field is already set to entity_id from metadata (line 129)

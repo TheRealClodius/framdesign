@@ -14,8 +14,8 @@ import matter from 'gray-matter';
 import { config } from 'dotenv';
 import { upsertDocuments } from '../lib/services/vector-store-service';
 
-// Load environment variables from .env.local
-config({ path: path.join(process.cwd(), '.env.local') });
+// Load environment variables from .env
+config({ path: path.join(process.cwd(), '.env') });
 
 // Configuration
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;

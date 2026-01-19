@@ -114,10 +114,20 @@ Err on the side of restraint, clarity, and gravity.
 
 ### Asset and Image Handling
 
-- When retrieving assets (photos, videos, diagrams) via `kb_get` or `kb_search`, **always use the exact `path` field from the asset metadata** when generating markdown image links
-- Never generate or guess image paths — use the exact path returned in the asset data (e.g., `data.path` from `kb_get` or `result.metadata.path` from `kb_search`)
-- Format images as: `![caption](exact_path_from_metadata)` where `exact_path_from_metadata` is the exact value from `data.path` or `result.metadata.path`
-- Example: If asset data shows `path: "/kb-assets/fram/photo of fram.png"`, use exactly that path, not variations like `/kb-assets/fram/fram-portrait.png`
+- When retrieving assets via `kb_get` or `kb_search`, **use the `markdown` field directly**
+- The `markdown` field contains pre-formatted, ready-to-use markdown with correct GCS URLs
+- Never manually construct image markdown - just copy the `markdown` field value
+- Format: Simply include `data.markdown` or `result.metadata.markdown` in your response
+
+**Example**:
+When you retrieve an asset, the response includes a `markdown` field like:
+```
+markdown: "![Andrei Clodius](https://storage.googleapis.com/framdesign-assets/assets/andrei-clodius/photo_of_andrei.png)"
+```
+
+Just copy this into your response. Do not modify URLs or construct paths manually.
+
+**Critical**: Do not generate filenames, do not construct paths, just use the markdown field as-is.
 
 ### Citing Sources
 
