@@ -336,6 +336,25 @@ function normalizeTextResponse(text: string): string {
   return normalized;
 }
 
+function formatVoiceSessionDuration(startTime: number | null): string | null {
+  if (!startTime) return null;
+
+  const durationMs = Date.now() - startTime;
+  const durationSeconds = Math.max(0, Math.floor(durationMs / 1000));
+  const minutes = Math.floor(durationSeconds / 60);
+  const seconds = durationSeconds % 60;
+
+  return minutes > 0 ? `${minutes}min ${seconds}s` : `${seconds}s`;
+}
+
+function buildEndCallMessage(startTime: number | null): string {
+  const durationMessage = formatVoiceSessionDuration(startTime);
+
+  return durationMessage
+    ? `Ended the call. We talked for ${durationMessage}. Click on the VOICE button anytime you wanna chat again.`
+    : `Ended the call. Click on the VOICE button anytime you wanna chat again.`;
+}
+
 export default function ChatInterface() {
   const [messages, setMessages] = useState<Message[]>([
     { id: "initial-assistant", role: "assistant", content: "HELLO. HOW CAN I HELP YOU TODAY?" }
@@ -360,6 +379,7 @@ export default function ChatInterface() {
   
   // Track voice session start time for duration calculation
   const voiceSessionStartTime = useRef<number | null>(null);
+  const hasShownEndCallSummary = useRef<boolean>(false);
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -491,6 +511,7 @@ export default function ChatInterface() {
       
       // Track session start time for duration calculation
       voiceSessionStartTime.current = Date.now();
+      hasShownEndCallSummary.current = false;
       
       // Note: shouldStartNewTurn flag is already set before voiceService.start() is called
       console.log('Voice session started');
@@ -679,25 +700,8 @@ export default function ChatInterface() {
       
       console.log(`Voice session ended by agent. Reason: ${reason}`);
       
-      // Calculate call duration
-      let durationMessage = '';
-      if (voiceSessionStartTime.current) {
-        const durationMs = Date.now() - voiceSessionStartTime.current;
-        const durationSeconds = Math.floor(durationMs / 1000);
-        const minutes = Math.floor(durationSeconds / 60);
-        const seconds = durationSeconds % 60;
-        
-        if (minutes > 0) {
-          durationMessage = `${minutes}min ${seconds}s`;
-        } else {
-          durationMessage = `${seconds}s`;
-        }
-      }
-      
       // Create friendly end-of-call message with duration
-      const endCallMessage = durationMessage 
-        ? `Ended the call. We talked for ${durationMessage}. Click on the VOICE button anytime you wanna chat again.`
-        : `Ended the call. Click on the VOICE button anytime you wanna chat again.`;
+      const endCallMessage = buildEndCallMessage(voiceSessionStartTime.current);
       
       // Always show messages: closingMessage (if provided) + friendly end-of-call message
       const messagesToAdd: Message[] = [];
@@ -711,12 +715,15 @@ export default function ChatInterface() {
         });
       }
       
-      // Always add the friendly end-of-call message with duration
-      messagesToAdd.push({
-        id: generateMessageId(),
-        role: "assistant",
-        content: endCallMessage
-      });
+      if (!hasShownEndCallSummary.current) {
+        hasShownEndCallSummary.current = true;
+        // Always add the friendly end-of-call message with duration
+        messagesToAdd.push({
+          id: generateMessageId(),
+          role: "assistant",
+          content: endCallMessage
+        });
+      }
       
       setMessages((prev) => [...prev, ...messagesToAdd]);
       
@@ -1361,14 +1368,22 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
                 if (isVoiceMode) {
                   // End voice mode
                   try {
-                    // Reset session start time
-                    voiceSessionStartTime.current = null;
+                    if (!hasShownEndCallSummary.current) {
+                      hasShownEndCallSummary.current = true;
+                      const endCallMessage = buildEndCallMessage(voiceSessionStartTime.current);
+                      setMessages((prev) => [
+                        ...prev,
+                        { id: generateMessageId(), role: "assistant", content: endCallMessage }
+                      ]);
+                    }
                     await voiceService.stop();
                     // Transcripts will be integrated via the 'complete' event handler
                   } catch (error) {
                     console.error('Error stopping voice session:', error);
                     setIsVoiceMode(false);
                     setIsVoiceLoading(false);
+                  } finally {
+                    // Reset session start time
                     voiceSessionStartTime.current = null;
                   }
                 } else {
