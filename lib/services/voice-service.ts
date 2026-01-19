@@ -4,11 +4,13 @@
  */
 
 import { VOICE_CONFIG } from '@/lib/config-voice';
+import type { Citation } from '@/lib/storage';
 
 export interface VoiceTranscript {
   role: 'user' | 'assistant';
   text: string;
   timestamp: number;
+  citations?: Citation[];
 }
 
 export interface VoiceSessionResult {
@@ -25,6 +27,7 @@ interface WebSocketMessage {
   data?: string;
   role?: 'user' | 'assistant';
   text?: string;
+  citations?: Citation[];
   transcripts?: { user: VoiceTranscript[]; assistant: VoiceTranscript[] };
   error?: string;
   durationSeconds?: number;
@@ -57,10 +60,8 @@ export class VoiceService extends EventTarget {
   };
   private audioPlaybackErrors = 0;
   private maxAudioPlaybackErrors = 5;
-  private consecutiveSilentChunks = 0; // Track consecutive silent chunks for silence detection
-  private shouldPauseAudioSending = false; // Pause sending when agent is processing or sustained silence
-  private userHasSpokenThisTurn = false; // Track if user has spoken since last turn complete
-  private SILENCE_PAUSE_THRESHOLD = 10; // Pause after 10 consecutive silent chunks (~1 second)
+  private consecutiveSilentChunks = 0; // Track consecutive silent chunks for diagnostics
+  private shouldPauseAudioSending = false; // Pause sending when agent is processing
   private SILENCE_THRESHOLD = 0.0005; // Threshold for detecting silence
   // Threshold for detecting any speech (for turn detection) - lower to catch normal speaking
   private SPEECH_THRESHOLD = 0.008; // Normal speech level
@@ -417,8 +418,8 @@ export class VoiceService extends EventTarget {
         const interruptThreshold = Math.max(this.SPEECH_INTERRUPT_THRESHOLD, this.noiseFloor * 6);
         
         // Three-tier threshold system:
-        // 1. Silent: below SILENCE_THRESHOLD - counts toward turn_complete
-        // 2. Normal speech: above SPEECH_THRESHOLD - marks user as speaking, resets silence counter
+        // 1. Silent: below SILENCE_THRESHOLD - quiet background
+        // 2. Normal speech: above SPEECH_THRESHOLD - user speaking
         // 3. Loud speech: above SPEECH_INTERRUPT_THRESHOLD - can interrupt agent mid-sentence
         const isSilent = rmsVal < silenceThreshold;
         const isSpeech = rmsVal >= speechThreshold;
@@ -428,10 +429,9 @@ export class VoiceService extends EventTarget {
         if (isSilent) {
           this.consecutiveSilentChunks = (this.consecutiveSilentChunks || 0) + 1;
         } else if (isSpeech) {
-          // User is speaking - reset silence counter and mark as spoken
+          // User is speaking - reset silence counter
           this.consecutiveSilentChunks = 0;
-          this.userHasSpokenThisTurn = true; // Mark that user has spoken
-          
+
           // Only resume sending (interrupt agent) if it's LOUD intentional speech
           if (isIntentionalSpeech && this.shouldPauseAudioSending) {
             console.log(`User interrupting (volume: ${maxVal.toFixed(4)}) - resuming audio sending`);
@@ -439,31 +439,8 @@ export class VoiceService extends EventTarget {
           }
         } else {
           // Ambient noise (above silence but below speech threshold) - don't count as speech
-          // but also don't count as silence (to avoid false turn_complete)
+          // but also don't count as silence
           this.consecutiveSilentChunks = 0;
-        }
-        
-        // Pause sending after sustained silence (user stopped speaking)
-        // CRITICAL: Only send turn_complete if the user has actually spoken this turn
-        // This prevents false turn_complete during silence before user speaks
-        if (this.consecutiveSilentChunks >= this.SILENCE_PAUSE_THRESHOLD) {
-          if (!this.shouldPauseAudioSending && this.userHasSpokenThisTurn) {
-            console.log(`User stopped speaking - signaling turn complete after ${this.consecutiveSilentChunks} consecutive silent chunks`);
-            this.shouldPauseAudioSending = true;
-            this.userHasSpokenThisTurn = false; // Reset for next turn
-            
-            // CRITICAL: Signal to server that user's turn is complete
-            if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-              try {
-                this.ws.send(JSON.stringify({ type: 'turn_complete' }));
-                console.log('✓ Sent turn_complete signal to server');
-              } catch (error) {
-                console.error('Error sending turn_complete signal:', error);
-              }
-            }
-          }
-          // Don't send silent chunks - let Gemini process what it has
-          return;
         }
         
         // NOTE: Removed AUDIO_SEND_THRESHOLD gating as it was causing choppy audio
@@ -621,7 +598,8 @@ export class VoiceService extends EventTarget {
           const transcript: VoiceTranscript = {
             role: message.role,
             text: message.text,
-            timestamp: Date.now()
+            timestamp: Date.now(),
+            citations: message.citations || undefined
           };
           
           if (message.role === 'user') {
@@ -636,11 +614,13 @@ export class VoiceService extends EventTarget {
           
           // Emit transcript for real-time display
           const transcriptPreview = message.text.substring(0, 50);
-          console.log(`Transcript event dispatched: ${message.role} - ${transcriptPreview}...`);
+          const citationCount = message.citations?.length || 0;
+          console.log(`Transcript event dispatched: ${message.role} - ${transcriptPreview}...${citationCount > 0 ? ` (${citationCount} citations)` : ''}`);
           this.dispatchEvent(new CustomEvent('transcript', {
             detail: {
               role: message.role,
-              text: message.text
+              text: message.text,
+              citations: message.citations || undefined
             }
           }));
         }
@@ -817,7 +797,6 @@ export class VoiceService extends EventTarget {
         this.stopThinkingSound();
         this.shouldPauseAudioSending = false;
         this.consecutiveSilentChunks = 0;
-        this.userHasSpokenThisTurn = false; // Reset for next turn - wait for user to speak
         break;
 
       default:

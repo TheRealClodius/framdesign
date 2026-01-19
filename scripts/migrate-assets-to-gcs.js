@@ -27,9 +27,34 @@ const storageConfig = {
   projectId: projectId,
 };
 
-// Use explicit key file if provided, otherwise rely on GOOGLE_APPLICATION_CREDENTIALS (ADC)
+// Priority 1: Explicit key file (for local dev override)
 if (process.env.GCS_KEY_FILE) {
   storageConfig.keyFilename = process.env.GCS_KEY_FILE;
+}
+
+// Priority 2: Base64 encoded service account key (for Vercel)
+if (process.env.GCS_SERVICE_ACCOUNT_KEY) {
+  try {
+    storageConfig.credentials = JSON.parse(
+      Buffer.from(process.env.GCS_SERVICE_ACCOUNT_KEY, 'base64').toString()
+    );
+  } catch (error) {
+    console.error('Failed to parse GCS_SERVICE_ACCOUNT_KEY:', error);
+    process.exit(1);
+  }
+}
+
+// Priority 3: GOOGLE_APPLICATION_CREDENTIALS as JSON string (for Vercel)
+// If it's a JSON string, parse it; otherwise SDK will use it as file path (ADC)
+if (process.env.GOOGLE_APPLICATION_CREDENTIALS && !storageConfig.credentials && !storageConfig.keyFilename) {
+  try {
+    // Try to parse as JSON string (Vercel stores JSON as string in env vars)
+    const credentials = JSON.parse(process.env.GOOGLE_APPLICATION_CREDENTIALS);
+    storageConfig.credentials = credentials;
+  } catch {
+    // Not JSON - it's a file path, SDK will use it via ADC
+    // No explicit config needed - SDK handles it automatically
+  }
 }
 
 const storage = new Storage(storageConfig);

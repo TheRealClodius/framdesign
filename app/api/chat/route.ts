@@ -200,12 +200,98 @@ function hashSystemPrompt(prompt: string): string {
 }
 
 /**
+ * Checks if KB search results are relevant to the query
+ * Returns true if results appear relevant, false if they're clearly irrelevant
+ */
+function areKbResultsRelevant(
+  query: string,
+  results: Array<{ score?: number; title?: string; snippet?: string; id?: string }>
+): boolean {
+  if (!results || results.length === 0) {
+    return false;
+  }
+
+  // Extract query terms (lowercase, simple words)
+  const queryTerms = query.toLowerCase().split(/\s+/).filter(term => term.length > 2);
+  if (queryTerms.length === 0) {
+    return true; // Can't determine, assume relevant
+  }
+
+  // Check if any result has a high enough score and matches query terms
+  const RELEVANCE_THRESHOLD = 0.4; // Scores below this are likely irrelevant
+  const hasRelevantScore = results.some(r => (r.score || 0) >= RELEVANCE_THRESHOLD);
+  
+  // Check if query terms appear in titles or snippets
+  const hasQueryMatch = results.some(result => {
+    const title = (result.title || '').toLowerCase();
+    const snippet = (result.snippet || '').toLowerCase();
+    const id = (result.id || '').toLowerCase();
+    const combined = `${title} ${snippet} ${id}`;
+    
+    // Check if any query term appears in the result
+    return queryTerms.some(term => combined.includes(term));
+  });
+
+  // Results are relevant if they have good scores OR match query terms
+  return hasRelevantScore || hasQueryMatch;
+}
+
+/**
  * Trims text to a maximum word count.
  */
 function trimToWords(text: string, maxWords: number): string {
   const words = text.trim().split(/\s+/);
   if (words.length <= maxWords) return text.trim();
   return words.slice(0, maxWords).join(" ") + "…";
+}
+
+/**
+ * Builds a user-friendly status message for tool execution
+ * @param toolId - Tool identifier
+ * @param args - Tool arguments
+ * @returns Status message string
+ */
+function buildToolStatus(toolId: string, args: Record<string, unknown>): string {
+  // Extract summary from args based on tool type
+  let summary = "";
+  
+  if (toolId === "perplexity_search") {
+    summary = (args.query as string) || "";
+  } else if (toolId === "kb_search") {
+    summary = (args.query as string) || "";
+  } else if (toolId === "kb_get") {
+    summary = (args.id as string) || "";
+  } else {
+    // Fallback: create a compact summary from args
+    const argKeys = Object.keys(args);
+    if (argKeys.length > 0) {
+      const firstKey = argKeys[0];
+      const firstValue = args[firstKey];
+      if (typeof firstValue === "string" && firstValue.length > 0) {
+        summary = firstValue.length > 30 ? firstValue.substring(0, 30) + "..." : firstValue;
+      } else {
+        summary = JSON.stringify(args).substring(0, 30);
+      }
+    }
+  }
+  
+  // Map tool IDs to status messages
+  const statusMap: Record<string, string> = {
+    perplexity_search: `Searching the web for ${summary}`,
+    kb_search: `Looking more into ${summary}`,
+    kb_get: `Fetching details for ${summary}`
+  };
+  
+  return statusMap[toolId] || `Using ${toolId}...`;
+}
+
+/**
+ * Encodes a status event into the stream format
+ * @param status - Status message string
+ * @returns Encoded status event string
+ */
+function encodeStatusEvent(status: string): string {
+  return `\n---STATUS---\n${JSON.stringify({ status })}\n---ENDSTATUS---\n`;
 }
 
 /**
@@ -1318,30 +1404,33 @@ export async function POST(request: Request) {
           mode: 'text'
         }));
 
+        // Handle tool errors by sending them back to the model
+        // The model will interpret the error and respond naturally to the user
         if (!result.ok) {
           console.error(`${toolName} tool failed:`, result.error);
-          const errorResponse = {
-            error: result.error.message
-          };
           
-          // Append observability even on error
-          if (observability) {
-            (errorResponse as { observability?: ObservabilityData }).observability = {
-              contextStack: observability.contextStack,
-              toolCalls: observability.toolCalls,
-              chainedCalls: observability.chainedCalls,
-              totalDuration: observability.totalDuration,
-              finalResponseLength: JSON.stringify(errorResponse).length,
-              requestStartTime: observability.requestStartTime
-            };
-          }
-          
-          return NextResponse.json(errorResponse, { status: 500 });
+          // Don't return an error response - instead, send the error back to the model
+          // as a functionResponse so it can handle it naturally
+          // The error object already contains: type, message, retryable, details
         }
 
-        // Continue conversation with tool result
+        // Check if KB search results are relevant
+        let shouldAddRelevanceGuidance = false;
+        if (toolName === 'kb_search' && result.ok && result.data) {
+          const kbData = result.data as { query?: string; results?: Array<{ score?: number; title?: string; snippet?: string; id?: string }> };
+          const query = kbData.query || '';
+          const results = kbData.results || [];
+          
+          if (!areKbResultsRelevant(query, results)) {
+            console.log(`[KB Search] Results appear irrelevant for query: "${query}"`);
+            shouldAddRelevanceGuidance = true;
+          }
+        }
+
+        // Continue conversation with tool result (success or error)
         // Add the function call and result to the conversation
         // IMPORTANT: Use the full functionCallPart which includes thoughtSignature as sibling (required by Gemini 3)
+        // For errors, send the error information back to the model so it can respond naturally
         const updatedContents = [
           ...contentsToSend,
           {
@@ -1362,12 +1451,29 @@ export async function POST(request: Request) {
               {
                 functionResponse: {
                   name: toolName,
-                  response: result.data
+                  // Send error info back to model if tool failed, otherwise send data
+                  response: result.ok ? result.data : {
+                    error: true,
+                    type: result.error.type,
+                    message: result.error.message,
+                    retryable: result.error.retryable,
+                    details: result.error.details
+                  }
                 }
               }
             ]
           }
         ];
+
+        // Add guidance if KB search results are irrelevant
+        if (shouldAddRelevanceGuidance) {
+          updatedContents.push({
+            role: "user" as const,
+            parts: [{
+              text: "IMPORTANT: The KB search results above do not appear relevant to the query. The scores are low and the results don't match the search terms. If the user is asking about something not in the knowledge base, you should:\n1. Acknowledge that it's not in your records\n2. If appropriate, use perplexity_search to find information on the web\n3. Do NOT keep searching the KB repeatedly - acknowledge the gap and move on"
+            }]
+          });
+        }
 
         console.log("=== Function call conversation ===");
         console.log("Function called:", toolName);
@@ -1441,6 +1547,13 @@ export async function POST(request: Request) {
               let totalBytesSent = 0;
 
               try {
+                // Emit status for the initial tool call
+                if (functionCall) {
+                  const initialStatus = buildToolStatus(toolName, functionCall.args || {});
+                  const statusEvent = encodeStatusEvent(initialStatus);
+                  controller.enqueue(encoder.encode(statusEvent));
+                }
+                
                 // Loop to handle chained function calls
                 while (chainCount < MAX_CHAIN_LENGTH) {
                   // Collect all chunks from current stream
@@ -1523,6 +1636,11 @@ export async function POST(request: Request) {
                     const chainedToolName = nextFunctionCall.name;
                     console.log(`[Chain ${chainCount}/${MAX_CHAIN_LENGTH}] Executing chained function: ${chainedToolName}`);
 
+                    // Emit status for chained tool call
+                    const chainedStatus = buildToolStatus(chainedToolName, nextFunctionCall.args || {});
+                    const chainedStatusEvent = encodeStatusEvent(chainedStatus);
+                    controller.enqueue(encoder.encode(chainedStatusEvent));
+
                     // Execute the chained tool
                     const chainedToolMetadata = toolRegistry.getToolMetadata(chainedToolName) as ToolMetadata | null;
                     if (!chainedToolMetadata) {
@@ -1531,6 +1649,14 @@ export async function POST(request: Request) {
                       controller.enqueue(encoder.encode(errorMsg));
                       break;
                     }
+
+                    // Debug: Check API key availability
+                    const perplexityApiKey = process.env.PERPLEXITY_API_KEY;
+                    console.log(`[Chain ${chainCount}] PERPLEXITY_API_KEY check:`, {
+                      present: !!perplexityApiKey,
+                      length: perplexityApiKey?.length || 0,
+                      startsWith: perplexityApiKey?.substring(0, 4) || 'N/A'
+                    });
 
                     const chainedExecutionContext = {
                       clientId: `text-${Date.now()}`,
@@ -1542,6 +1668,9 @@ export async function POST(request: Request) {
                         isActive: state.get('isActive'),
                         toolsVersion: toolRegistry.getVersion(),
                         state: state.getSnapshot()
+                      },
+                      meta: {
+                        perplexityApiKey: perplexityApiKey
                       }
                     };
 
@@ -1588,14 +1717,14 @@ export async function POST(request: Request) {
                       mode: 'text'
                     }));
 
+                    // Handle chained tool errors by sending them back to the model
+                    // The model will interpret the error and respond naturally
                     if (!chainedResult.ok) {
                       console.error(`Chained tool ${chainedToolName} failed:`, chainedResult.error);
-                      const errorMsg = `Error executing ${chainedToolName}: ${chainedResult.error.message}`;
-                      controller.enqueue(encoder.encode(errorMsg));
-                      break;
+                      // Don't break - let the model handle the error naturally
                     }
 
-                    // Update contents with this function call and result
+                    // Update contents with this function call and result (success or error)
                     currentContents = [
                       ...currentContents,
                       {
@@ -1607,13 +1736,38 @@ export async function POST(request: Request) {
                         parts: [{
                           functionResponse: {
                             name: chainedToolName,
-                            response: chainedResult.data
+                            // Send error info back to model if tool failed, otherwise send data
+                            response: chainedResult.ok ? chainedResult.data : {
+                              error: true,
+                              type: chainedResult.error.type,
+                              message: chainedResult.error.message,
+                              retryable: chainedResult.error.retryable,
+                              details: chainedResult.error.details
+                            }
                           }
                         }]
                       }
                     ];
 
                     console.log(`[Chain ${chainCount}] Tool result received, continuing conversation`);
+
+                    // Check if chained KB search results are irrelevant
+                    if (chainedToolName === 'kb_search' && chainedResult.ok && chainedResult.data) {
+                      const kbData = chainedResult.data as { query?: string; results?: Array<{ score?: number; title?: string; snippet?: string; id?: string }> };
+                      const query = kbData.query || '';
+                      const results = kbData.results || [];
+                      
+                      if (!areKbResultsRelevant(query, results)) {
+                        console.log(`[Chain ${chainCount}] KB Search results appear irrelevant for query: "${query}"`);
+                        // Add guidance to stop chaining and acknowledge gap
+                        currentContents.push({
+                          role: "user" as const,
+                          parts: [{
+                            text: "IMPORTANT: The KB search results above do not appear relevant to the query. The scores are low and the results don't match the search terms. Stop searching the KB and acknowledge that this information is not in your records. If appropriate, use perplexity_search to find information on the web, or simply tell the user it's not documented."
+                          }]
+                        });
+                      }
+                    }
 
                     // Make another API call with the new tool result
                     currentStream = await retryWithBackoff(async () => {

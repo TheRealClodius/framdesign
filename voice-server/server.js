@@ -169,6 +169,8 @@ wss.on('connection', async (ws, req) => {
   // Track asset markdown snippets from tool results for voice transcript injection
   let pendingMarkdownSnippets = [];
   let markdownInjectedThisTurn = false;
+  // Track citations from perplexity_search tool results for voice transcript injection
+  let pendingCitations = [];
 
   // Initialize state controller for session
   const state = createStateController({
@@ -184,8 +186,7 @@ wss.on('connection', async (ws, req) => {
     hasSentGeneratingSignal: false,
     // Counter for audio chunks during model generation - requires sustained speech for barge-in
     userAudioChunkCount: 0,
-    // Buffer audio between agent turn complete and user turn complete
-    // This prevents accumulated audio from triggering false interruptions
+    // Whether we are intentionally buffering user audio (disabled when relying on Gemini VAD)
     awaitingUserTurn: false
   });
 
@@ -357,6 +358,29 @@ wss.on('connection', async (ws, req) => {
     }
 
     return snippets;
+  }
+
+  function extractCitationsFromToolResult(result) {
+    const citations = [];
+    if (!result || !result.ok || !result.data) return citations;
+
+    const data = result.data;
+    // perplexity_search returns citations in data.citations array
+    if (Array.isArray(data.citations) && data.citations.length > 0) {
+      for (const citation of data.citations) {
+        // Citations can be strings (URLs) or objects with url/title
+        if (typeof citation === 'string') {
+          citations.push({ url: citation });
+        } else if (citation && typeof citation === 'object') {
+          citations.push({
+            url: citation.url || citation.link || null,
+            title: citation.title || citation.name || null
+          });
+        }
+      }
+    }
+
+    return citations;
   }
 
   function hasAssetMarkdown(text) {
@@ -747,6 +771,15 @@ wss.on('connection', async (ws, req) => {
           console.log(`[${clientId}] Collected ${markdownSnippets.length} asset markdown snippet(s) from ${call.name}`);
         }
 
+        // Capture citations from perplexity_search for voice transcript injection
+        if (call.name === 'perplexity_search') {
+          const citations = extractCitationsFromToolResult(result);
+          if (citations.length > 0) {
+            pendingCitations.push(...citations);
+            console.log(`[${clientId}] Collected ${citations.length} citation(s) from perplexity_search`);
+          }
+        }
+
         // Record session tool call (NEW)
         recordSessionToolCall(clientId, call.name, call.args, duration, result.ok);
 
@@ -923,11 +956,22 @@ wss.on('connection', async (ws, req) => {
             });
             
             setImmediate(() => {
-              ws.send(JSON.stringify({
+              // Send transcript with citations if available
+              const message = {
                 type: 'transcript',
                 role: 'assistant',
                 text: transcriptText
-              }));
+              };
+              
+              // Attach citations if we have any for this turn
+              if (pendingCitations.length > 0) {
+                message.citations = [...pendingCitations];
+                console.log(`[${clientId}] Sending transcript with ${pendingCitations.length} citation(s)`);
+                // Clear citations after sending (they're associated with this transcript)
+                pendingCitations = [];
+              }
+              
+              ws.send(JSON.stringify(message));
             });
           }
         });
@@ -943,13 +987,7 @@ wss.on('connection', async (ws, req) => {
         const audioChunksThisTurn = state.get('audioChunkCounter');
         console.log(`[${clientId}] Turn complete via ${completionSignal} (sent ${audioChunksThisTurn} audio chunks this turn)${turnCompleteReason ? `, reason: ${turnCompleteReason}` : ''}`);
 
-        // CRITICAL: Block audio forwarding until user's turn_complete is received
-        // This prevents accumulated ambient audio from triggering false interruptions
-        state.set('awaitingUserTurn', true);
-        clearUserTurnTimeout();
-        console.log(`[${clientId}] 🔇 Audio blocked until user turn_complete`);
-
-        // Optional optimization: Send turn complete signal to client
+        // Notify client that the model finished its turn so mic can resume
         if (ws && ws.readyState === WebSocket.OPEN) {
           ws.send(JSON.stringify({ type: 'turn_complete' }));
         }
@@ -1004,6 +1042,7 @@ wss.on('connection', async (ws, req) => {
         lastTranscriptText = { user: '', assistant: '' };
         pendingMarkdownSnippets = [];
         markdownInjectedThisTurn = false;
+        pendingCitations = []; // Clear citations for new turn
         
         // If end_voice_session tool was called, now is the time to send it (after all audio is generated)
         const pendingEndVoiceSession = state.get('pendingEndVoiceSession');
@@ -1061,6 +1100,7 @@ wss.on('connection', async (ws, req) => {
         lastTranscriptText = { user: '', assistant: '' };
         pendingMarkdownSnippets = [];
         markdownInjectedThisTurn = false;
+        pendingCitations = []; // Clear citations on interruption
         
         // Notify client to stop audio playback (if not already sent)
         if (!state.get('interruptionSent')) {
@@ -1127,11 +1167,22 @@ wss.on('connection', async (ws, req) => {
             });
             
             setImmediate(() => {
-              ws.send(JSON.stringify({
+              // Send transcript with citations if available
+              const message = {
                 type: 'transcript',
                 role: 'assistant',
                 text: deduplicatedText
-              }));
+              };
+              
+              // Attach citations if we have any for this turn
+              if (pendingCitations.length > 0) {
+                message.citations = [...pendingCitations];
+                console.log(`[${clientId}] Sending transcript with ${pendingCitations.length} citation(s)`);
+                // Clear citations after sending (they're associated with this transcript)
+                pendingCitations = [];
+              }
+              
+              ws.send(JSON.stringify(message));
             });
           } else {
             console.log(`[${clientId}] ⚠️ OUTPUT TRANSCRIPT SKIPPED - duplicate chunk detected`);
@@ -1190,31 +1241,29 @@ wss.on('connection', async (ws, req) => {
               inputAudioTranscription: {},
               // Enable output audio transcription for debugging
               outputAudioTranscription: {},
-              // Configure Voice Activity Detection (VAD) to reduce false interruptions from background noise
-              // Using LOW sensitivity settings to prevent background noise from cutting off agent speech
-              // ISSUE: Gemini was detecting phantom "user input" and interrupting agent mid-sentence
+              // Configure Voice Activity Detection (VAD) - rely on Gemini VAD (Profile A)
               realtimeInputConfig: {
                 automaticActivityDetection: {
                   // Less sensitive to detecting speech start (reduces false triggers from background noise)
                   startOfSpeechSensitivity: 'START_SENSITIVITY_LOW',
                   // Less likely to detect end of speech prematurely (KEY for preventing cutoffs)
                   endOfSpeechSensitivity: 'END_SENSITIVITY_LOW',
-                  // Silence duration before ending turn - reduced from 1500ms to 1000ms for faster response
-                  silenceDurationMs: 1000,
-                  // Require 300ms of sustained speech before committing to speech start
-                  // This is KEY to prevent brief noise spikes from triggering interruptions
-                  prefixPaddingMs: 300
-                }
-                // NOTE: Removed turnCoverage: 'TURN_INCLUDES_ONLY_ACTIVITY' because it was
-                // causing Gemini to ignore all audio when combined with LOW VAD sensitivity
-                // and client-side audio filtering. Client-side filtering is sufficient.
+                  // Short silence window for responsive turn-taking
+                  silenceDurationMs: 400,
+                  // Minimal prefix padding for low-latency responsiveness
+                  prefixPaddingMs: 30
+                },
+                // Allow barge-in during model speech
+                activityHandling: 'START_OF_ACTIVITY_INTERRUPTS',
+                // Only include detected speech activity in the user's turn
+                turnCoverage: 'TURN_INCLUDES_ONLY_ACTIVITY'
               },
               // Add tool support (all 5 tools from registry)
               tools: [{ functionDeclarations: geminiToolSchemas }]
             };
             
             console.log(`[${clientId}] System instruction injected (${systemInstruction.length} chars, includes tool docs from registry)`);
-            console.log(`[${clientId}] VAD config: startSensitivity=LOW, endSensitivity=LOW, silenceDurationMs=1000, prefixPaddingMs=300`);
+            console.log(`[${clientId}] VAD config: startSensitivity=LOW, endSensitivity=LOW, silenceDurationMs=400, prefixPaddingMs=30, activityHandling=START_OF_ACTIVITY_INTERRUPTS`);
             
             // Log tool declarations explicitly
             const toolDecls = config.tools?.[0]?.functionDeclarations || [];
@@ -1427,19 +1476,6 @@ wss.on('connection', async (ws, req) => {
                 break;
               }
               
-              // Check if we're awaiting user's turn_complete
-              // If so, buffer audio to prevent timing issues with Gemini
-              if (state.get('awaitingUserTurn')) {
-                // Buffer the audio - will be sent when turn_complete is received
-                pendingAudioBuffer.push(data.data);
-                scheduleUserTurnTimeout();
-                // Log periodically to avoid spam
-                if (pendingAudioBuffer.length === 1 || pendingAudioBuffer.length % 20 === 0) {
-                  console.log(`[${clientId}] 📦 Buffering audio (${pendingAudioBuffer.length} chunks buffered)`);
-                }
-                break;
-              }
-              
               // Model not generating - reset counter and send audio normally
               state.set('userAudioChunkCount', 0);
               sendAudioToGemini(data.data);
@@ -1479,6 +1515,7 @@ wss.on('connection', async (ws, req) => {
               lastTranscriptText = { user: '', assistant: '' }; // Reset transcript deduplication tracking
               pendingMarkdownSnippets = [];
               markdownInjectedThisTurn = false;
+              pendingCitations = []; // Clear citations on session end
               state.set('pendingEndVoiceSession', null); // Clear any pending end session
               state.set('shouldSuppressAudio', false); // Reset audio suppression flag
               state.set('shouldSuppressTranscript', false); // Reset transcript suppression flag

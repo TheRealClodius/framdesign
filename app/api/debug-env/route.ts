@@ -17,6 +17,11 @@ export async function GET() {
       present: !!process.env.CONTACT_EMAIL,
       value: process.env.CONTACT_EMAIL || "Not set",
     },
+    PERPLEXITY_API_KEY: {
+      present: !!process.env.PERPLEXITY_API_KEY,
+      length: process.env.PERPLEXITY_API_KEY?.length || 0,
+      startsWith: process.env.PERPLEXITY_API_KEY?.substring(0, 4) || "N/A",
+    },
     nodeEnv: process.env.NODE_ENV,
     vercelEnv: process.env.VERCEL_ENV || "Not set",
   };

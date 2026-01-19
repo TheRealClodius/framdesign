@@ -4,11 +4,18 @@
 
 import { STORAGE_KEYS } from "./constants";
 
+export type Citation = {
+  url: string;
+  title?: string | null;
+};
+
 export type Message = {
   id: string;
   role: "user" | "assistant";
   content: string;
   streaming?: boolean;
+  isVoiceTranscript?: boolean; // Marks messages that originated from voice transcripts
+  citations?: Citation[]; // Citations from web search tools (perplexity_search)
 };
 
 /**

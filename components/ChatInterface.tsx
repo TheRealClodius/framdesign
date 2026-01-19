@@ -342,6 +342,7 @@ export default function ChatInterface() {
   ]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [loadingStatus, setLoadingStatus] = useState<string | null>(null);
   const [timeoutUntil, setTimeoutUntilState] = useState<number | null>(null);
   const [wasBlocked, setWasBlocked] = useState(false);
   const [isVoiceMode, setIsVoiceMode] = useState(false);
@@ -413,8 +414,8 @@ export default function ChatInterface() {
   // Setup voice service event listeners
   useEffect(() => {
     const handleTranscript = (event: Event) => {
-      const customEvent = event as CustomEvent<{ role: 'user' | 'assistant'; text: string }>;
-      const { role, text } = customEvent.detail;
+      const customEvent = event as CustomEvent<{ role: 'user' | 'assistant'; text: string; citations?: Array<{ url: string; title?: string | null }> }>;
+      const { role, text, citations } = customEvent.detail;
       
       const transcriptPreview = text.substring(0, 50);
       console.log('='.repeat(60));
@@ -449,18 +450,25 @@ export default function ChatInterface() {
           const updated = [...prev];
           updated[prev.length - 1] = {
             ...lastMessage,
-            content: lastMessage.content + ' ' + text
+            content: lastMessage.content + ' ' + text,
+            isVoiceTranscript: true, // Mark as voice transcript
+            // Merge citations if present (keep existing, add new)
+            citations: citations && citations.length > 0 
+              ? [...(lastMessage.citations || []), ...citations]
+              : lastMessage.citations
           };
           return updated;
         } else {
           // Create a new message (new turn)
           const newTotal = prev.length + 1;
-          console.log(`✓ Creating new ${role} message (new turn, total: ${newTotal})`);
+          console.log(`✓ Creating new ${role} message (new turn, total: ${newTotal})${citations && citations.length > 0 ? ` with ${citations.length} citation(s)` : ''}`);
           
           return [...prev, {
             id: generateMessageId(),
             role: role,
-            content: text
+            content: text,
+            isVoiceTranscript: true, // Mark as voice transcript
+            citations: citations && citations.length > 0 ? citations : undefined
           }];
         }
       });
@@ -804,6 +812,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
         },
           (error) => {
             console.error("Error fixing diagram:", error);
+            setLoadingStatus(null);
             const errorMessage = error.message;
             setMessages((prev) => {
               const updated = [...prev];
@@ -813,10 +822,14 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
               };
               return updated;
             });
+          },
+          (status) => {
+            setLoadingStatus(status);
           }
       );
 
       // Mark streaming as complete
+      setLoadingStatus(null);
       setMessages((prev) => {
         const updated = [...prev];
         updated[messageIndex] = {
@@ -863,11 +876,9 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
     const expired = timeoutJustExpired;
 
     try {
-      // Count transcripts from voice sessions (messages added during voice mode)
-      // Note: This is a simple heuristic - in production, you might want to track this more explicitly
-      const transcriptCount = messages.filter(m => 
-        m.content && (m.content.includes('You:') || m.content.includes('FRAM:'))
-      ).length;
+      // Count actual voice transcripts (messages marked with isVoiceTranscript flag)
+      const voiceTranscriptMessages = messages.filter(m => m.isVoiceTranscript === true);
+      const transcriptCount = voiceTranscriptMessages.length;
       
       console.log(`Preparing requestMessages: ${messages.length} messages (including ${transcriptCount} from voice session)`);
       
@@ -876,10 +887,13 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
         { id: generateMessageId(), role: "user", content: userMessage }
       ];
       
-      const userTranscripts = requestMessages.filter(m => m.role === 'user').length;
-      const assistantTranscripts = requestMessages.filter(m => m.role === 'assistant').length;
-      console.log(`Sending to text API: ${requestMessages.length} messages with ${transcriptCount} voice transcripts`);
-      console.log(`Voice transcripts included in API call: user=${userTranscripts}, assistant=${assistantTranscripts}`);
+      // Count voice transcripts in the request (excluding the new user message we just added)
+      const voiceTranscriptsInRequest = requestMessages.filter(m => m.isVoiceTranscript === true);
+      const userVoiceTranscripts = voiceTranscriptsInRequest.filter(m => m.role === 'user').length;
+      const assistantVoiceTranscripts = voiceTranscriptsInRequest.filter(m => m.role === 'assistant').length;
+      
+      console.log(`Sending to text API: ${requestMessages.length} messages with ${voiceTranscriptsInRequest.length} voice transcripts`);
+      console.log(`Voice transcripts included in API call: user=${userVoiceTranscripts}, assistant=${assistantVoiceTranscripts}`);
 
       // Create placeholder assistant message for streaming
       const assistantMessageId = generateMessageId();
@@ -913,6 +927,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
           (error) => {
             console.error("Stream error:", error);
             setIsLoading(false);
+            setLoadingStatus(null);
             setMessages((prev) => {
               const updated = [...prev];
               const lastIndex = updated.length - 1;
@@ -925,11 +940,15 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
               }
               return updated;
             });
+          },
+          (status) => {
+            setLoadingStatus(status);
           }
         );
 
         streamCompleted = true;
         setIsLoading(false);
+        setLoadingStatus(null);
 
         // Check if response is JSON (tool call) and handle startVoiceSession
         if (response && response.startVoiceSession) {
@@ -973,6 +992,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
         }
 
         // Mark streaming as complete
+        setLoadingStatus(null);
         setMessages((prev) => {
           const updated = [...prev];
           const lastIndex = updated.length - 1;
@@ -1147,15 +1167,36 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
                     {message.role === "user" ? "You" : "FRAM"}
                   </p>
                   {message.role === "assistant" ? (
-                    <div className="text-black leading-relaxed overflow-x-hidden break-words">
-                      <MarkdownWithMermaid 
-                        content={message.content} 
-                        isStreaming={message.streaming}
-                        onFixDiagram={async (error) => {
-                          await handleFixDiagram(index, error);
-                        }}
-                      />
-                    </div>
+                    <>
+                      <div className="text-black leading-relaxed overflow-x-hidden break-words">
+                        <MarkdownWithMermaid 
+                          content={message.content} 
+                          isStreaming={message.streaming}
+                          onFixDiagram={async (error) => {
+                            await handleFixDiagram(index, error);
+                          }}
+                        />
+                      </div>
+                      {message.citations && message.citations.length > 0 && (
+                        <div className="mt-3 pt-3 border-t border-gray-200">
+                          <p className="text-[0.7rem] text-gray-500 uppercase tracking-wider mb-2">Sources</p>
+                          <ul className="space-y-1">
+                            {message.citations.map((citation, idx) => (
+                              <li key={idx} className="text-[0.75rem]">
+                                <a
+                                  href={citation.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-blue-600 hover:text-blue-800 underline break-all"
+                                >
+                                  {citation.title || citation.url}
+                                </a>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </>
                   ) : (
                     <p className="text-black leading-relaxed break-words overflow-x-hidden">
                       {message.content}
@@ -1169,11 +1210,17 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
              <div className="flex justify-start">
                <div className="max-w-[85%] text-left">
                  <p className="uppercase text-[0.75rem] text-gray-400 mb-1 tracking-wider">FRAM</p>
-                 <div className="flex space-x-1 items-center h-6">
-                   <div className="w-1.5 h-1.5 bg-gray-300 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                   <div className="w-1.5 h-1.5 bg-gray-300 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                   <div className="w-1.5 h-1.5 bg-gray-300 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                 </div>
+                 {loadingStatus ? (
+                   <div className="text-black leading-relaxed">
+                     <span className="tool-status-gradient">{loadingStatus}</span>
+                   </div>
+                 ) : (
+                   <div className="flex space-x-1 items-center h-6">
+                     <div className="w-1.5 h-1.5 bg-gray-300 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                     <div className="w-1.5 h-1.5 bg-gray-300 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                     <div className="w-1.5 h-1.5 bg-gray-300 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                   </div>
+                 )}
                </div>
              </div>
           )}

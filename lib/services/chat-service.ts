@@ -29,7 +29,8 @@ export interface ChatResponse {
 export async function streamChatResponse(
   request: ChatRequest,
   onChunk: (chunk: string) => void,
-  onError?: (error: Error) => void
+  onError?: (error: Error) => void,
+  onStatus?: (status: string) => void
 ): Promise<ChatResponse | void> {
   try {
     const response = await fetch("/api/chat", {
@@ -60,15 +61,79 @@ export async function streamChatResponse(
         throw new Error("No response body");
       }
 
+      // Buffer for parsing status events that may span chunks
+      let buffer = "";
+
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
         const chunk = decoder.decode(value, { stream: true });
-        if (chunk) {
-          onChunk(chunk);
+        if (!chunk) continue;
+
+        // Add chunk to buffer
+        buffer += chunk;
+
+        // Parse status events from buffer
+        const STATUS_START = "---STATUS---\n";
+        const STATUS_END = "\n---ENDSTATUS---";
+        let textToSend = "";
+        let lastProcessedIdx = 0;
+        
+        while (buffer.includes(STATUS_START, lastProcessedIdx)) {
+          const startIdx = buffer.indexOf(STATUS_START, lastProcessedIdx);
+          const afterStart = startIdx + STATUS_START.length;
+          const endIdx = buffer.indexOf(STATUS_END, afterStart);
+          
+          if (endIdx === -1) {
+            // Status event spans multiple chunks, wait for more data
+            // Keep text before the incomplete status event
+            textToSend += buffer.substring(lastProcessedIdx, startIdx);
+            buffer = buffer.substring(startIdx);
+            lastProcessedIdx = 0;
+            break;
+          }
+          
+          // Add text before this status event
+          textToSend += buffer.substring(lastProcessedIdx, startIdx);
+          
+          // Extract status JSON
+          const statusJson = buffer.substring(afterStart, endIdx);
+          try {
+            const statusData = JSON.parse(statusJson);
+            if (statusData.status && onStatus) {
+              onStatus(statusData.status);
+            }
+          } catch (e) {
+            console.warn("Failed to parse status event:", e);
+          }
+          
+          // Move past this status event
+          lastProcessedIdx = endIdx + STATUS_END.length;
+        }
+        
+        // If we processed everything, add remaining text
+        if (lastProcessedIdx === 0 && !buffer.includes(STATUS_START)) {
+          // No incomplete status event, send all buffered text
+          textToSend += buffer;
+          buffer = "";
+        } else if (lastProcessedIdx > 0 && !buffer.includes(STATUS_START, lastProcessedIdx)) {
+          // Processed all complete status events, keep remaining buffer
+          const remaining = buffer.substring(lastProcessedIdx);
+          buffer = remaining;
+        }
+
+        // Send accumulated text (without status events)
+        if (textToSend) {
+          onChunk(textToSend);
         }
       }
+      
+      // Handle any remaining buffer content (shouldn't contain status events at this point)
+      if (buffer) {
+        onChunk(buffer);
+      }
+      
       return; // Streaming complete, return void
     } else {
       // JSON response (timeout, tool call, or error)
