@@ -357,6 +357,9 @@ export default function ChatInterface() {
   // Track if we should start a new message turn (for transcript grouping)
   // Set to true when: user interrupts, session ends, or session restarts
   const shouldStartNewTurn = useRef<boolean>(true);
+  
+  // Track voice session start time for duration calculation
+  const voiceSessionStartTime = useRef<number | null>(null);
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -414,8 +417,8 @@ export default function ChatInterface() {
   // Setup voice service event listeners
   useEffect(() => {
     const handleTranscript = (event: Event) => {
-      const customEvent = event as CustomEvent<{ role: 'user' | 'assistant'; text: string; citations?: Array<{ url: string; title?: string | null }> }>;
-      const { role, text, citations } = customEvent.detail;
+      const customEvent = event as CustomEvent<{ role: 'user' | 'assistant'; text: string; citations?: Array<{ url: string; title?: string | null }>; images?: string[] }>;
+      const { role, text, citations, images } = customEvent.detail;
       
       const transcriptPreview = text.substring(0, 50);
       console.log('='.repeat(60));
@@ -455,20 +458,25 @@ export default function ChatInterface() {
             // Merge citations if present (keep existing, add new)
             citations: citations && citations.length > 0 
               ? [...(lastMessage.citations || []), ...citations]
-              : lastMessage.citations
+              : lastMessage.citations,
+            // Merge images if present (keep existing, add new)
+            images: images && images.length > 0
+              ? [...(lastMessage.images || []), ...images]
+              : lastMessage.images
           };
           return updated;
         } else {
           // Create a new message (new turn)
           const newTotal = prev.length + 1;
-          console.log(`✓ Creating new ${role} message (new turn, total: ${newTotal})${citations && citations.length > 0 ? ` with ${citations.length} citation(s)` : ''}`);
+          console.log(`✓ Creating new ${role} message (new turn, total: ${newTotal})${citations && citations.length > 0 ? ` with ${citations.length} citation(s)` : ''}${images && images.length > 0 ? ` with ${images.length} image(s)` : ''}`);
           
           return [...prev, {
             id: generateMessageId(),
             role: role,
             content: text,
             isVoiceTranscript: true, // Mark as voice transcript
-            citations: citations && citations.length > 0 ? citations : undefined
+            citations: citations && citations.length > 0 ? citations : undefined,
+            images: images && images.length > 0 ? images : undefined
           }];
         }
       });
@@ -480,6 +488,9 @@ export default function ChatInterface() {
       setIsReconnecting(false);
       setVoiceError(null);
       setAudioPlaybackDisabled(false);
+      
+      // Track session start time for duration calculation
+      voiceSessionStartTime.current = Date.now();
       
       // Note: shouldStartNewTurn flag is already set before voiceService.start() is called
       console.log('Voice session started');
@@ -504,6 +515,9 @@ export default function ChatInterface() {
       setIsReconnecting(false);
       setVoiceError(null);
       setAudioPlaybackDisabled(false);
+      
+      // Reset session start time
+      voiceSessionStartTime.current = null;
       
       // Session ended - if it restarts, next transcript should be a new message
       shouldStartNewTurn.current = true;
@@ -647,6 +661,9 @@ export default function ChatInterface() {
       setIsReconnecting(false);
       setVoiceError(null);
       
+      // Reset session start time
+      voiceSessionStartTime.current = null;
+      
       // Session ended due to timeout - if it restarts, next transcript should be a new message
       shouldStartNewTurn.current = true;
       console.log('🔴 FLAG SET: Voice session timed out - shouldStartNewTurn = TRUE');
@@ -662,15 +679,46 @@ export default function ChatInterface() {
       
       console.log(`Voice session ended by agent. Reason: ${reason}`);
       
-      // Add closing message to chat
-      setMessages((prev) => [
-        ...prev,
-        { 
-          id: generateMessageId(), 
-          role: "assistant", 
-          content: closingMessage 
+      // Calculate call duration
+      let durationMessage = '';
+      if (voiceSessionStartTime.current) {
+        const durationMs = Date.now() - voiceSessionStartTime.current;
+        const durationSeconds = Math.floor(durationMs / 1000);
+        const minutes = Math.floor(durationSeconds / 60);
+        const seconds = durationSeconds % 60;
+        
+        if (minutes > 0) {
+          durationMessage = `${minutes}min ${seconds}s`;
+        } else {
+          durationMessage = `${seconds}s`;
         }
-      ]);
+      }
+      
+      // Create friendly end-of-call message with duration
+      const endCallMessage = durationMessage 
+        ? `Ended the call. We talked for ${durationMessage}. Click on the VOICE button anytime you wanna chat again.`
+        : `Ended the call. Click on the VOICE button anytime you wanna chat again.`;
+      
+      // Always show messages: closingMessage (if provided) + friendly end-of-call message
+      const messagesToAdd: Message[] = [];
+      
+      // Add closing message from agent if provided
+      if (closingMessage && closingMessage.trim()) {
+        messagesToAdd.push({
+          id: generateMessageId(),
+          role: "assistant",
+          content: closingMessage
+        });
+      }
+      
+      // Always add the friendly end-of-call message with duration
+      messagesToAdd.push({
+        id: generateMessageId(),
+        role: "assistant",
+        content: endCallMessage
+      });
+      
+      setMessages((prev) => [...prev, ...messagesToAdd]);
       
       // If there's a full text response (agent's actual answer), add it as a separate message
       if (textResponse && textResponse.trim()) {
@@ -686,6 +734,9 @@ export default function ChatInterface() {
           }
         ]);
       }
+      
+      // Reset session start time
+      voiceSessionStartTime.current = null;
       
       // Stop voice session gracefully
       try {
@@ -1120,6 +1171,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
       setIsVoiceMode(false);
       setIsVoiceLoading(false);
       setVoiceError(null);
+      voiceSessionStartTime.current = null;
       shouldStartNewTurn.current = true;
     }
   };
@@ -1177,6 +1229,15 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
                           }}
                         />
                       </div>
+                      {message.images && message.images.length > 0 && (
+                        <div className="mt-3">
+                          {message.images.map((markdown, idx) => (
+                            <div key={idx} className="mb-2">
+                              <MarkdownWithMermaid content={markdown} isStreaming={false} />
+                            </div>
+                          ))}
+                        </div>
+                      )}
                       {message.citations && message.citations.length > 0 && (
                         <div className="mt-3 pt-3 border-t border-gray-200">
                           <p className="text-[0.7rem] text-gray-500 uppercase tracking-wider mb-2">Sources</p>
@@ -1300,12 +1361,15 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
                 if (isVoiceMode) {
                   // End voice mode
                   try {
+                    // Reset session start time
+                    voiceSessionStartTime.current = null;
                     await voiceService.stop();
                     // Transcripts will be integrated via the 'complete' event handler
                   } catch (error) {
                     console.error('Error stopping voice session:', error);
                     setIsVoiceMode(false);
                     setIsVoiceLoading(false);
+                    voiceSessionStartTime.current = null;
                   }
                 } else {
                   // Start voice mode

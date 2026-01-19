@@ -18,8 +18,9 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { GoogleGenAI, Modality } from '@google/genai';
 import { createServer } from 'http';
 import { config } from 'dotenv';
+import { fileURLToPath } from 'url';
 import { writeFileSync } from 'fs';
-import { join } from 'path';
+import { dirname, join } from 'path';
 import { tmpdir } from 'os';
 import { encoding_for_model } from 'tiktoken';
 import { buildSystemInstruction } from './config.js';
@@ -38,8 +39,11 @@ import {
   setContextInitTokens
 } from '../tools/_core/metrics.js';
 
-// Load environment variables from .env file (if present)
-config();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+// Load environment variables from voice-server/.env regardless of cwd
+config({ path: join(__dirname, '.env') });
 
 // Load tool registry at startup
 try {
@@ -168,7 +172,6 @@ wss.on('connection', async (ws, req) => {
   let lastTranscriptText = { user: '', assistant: '' };
   // Track asset markdown snippets from tool results for voice transcript injection
   let pendingMarkdownSnippets = [];
-  let markdownInjectedThisTurn = false;
   // Track citations from perplexity_search tool results for voice transcript injection
   let pendingCitations = [];
 
@@ -381,11 +384,6 @@ wss.on('connection', async (ws, req) => {
     }
 
     return citations;
-  }
-
-  function hasAssetMarkdown(text) {
-    if (!text) return false;
-    return /!\[[^\]]*]\([^)]+\)|<video[\s>]/i.test(text);
   }
 
   async function finalizeUserTurn(source) {
@@ -935,19 +933,7 @@ wss.on('connection', async (ws, req) => {
           
           // Text output
           if (part.text) {
-            const containsAssetMarkdown = hasAssetMarkdown(part.text);
-            let transcriptText = part.text;
-
-            if (!containsAssetMarkdown && pendingMarkdownSnippets.length > 0 && !markdownInjectedThisTurn) {
-              const injectedCount = pendingMarkdownSnippets.length;
-              const injectedMarkdown = pendingMarkdownSnippets.join('\n\n');
-              transcriptText = `${part.text}\n\n${injectedMarkdown}`.trim();
-              markdownInjectedThisTurn = true;
-              pendingMarkdownSnippets = [];
-              console.log(`[${clientId}] Injected ${injectedCount} asset markdown snippet(s) into transcript`);
-            } else if (containsAssetMarkdown) {
-              console.log(`[${clientId}] Transcript already includes asset markdown`);
-            }
+            const transcriptText = part.text;
 
             console.log(`[${clientId}] ✓ TEXT RESPONSE RECEIVED! Sending transcript: ${transcriptText.substring(0, 50)}...`);
             conversationTranscripts.assistant.push({
@@ -956,7 +942,7 @@ wss.on('connection', async (ws, req) => {
             });
             
             setImmediate(() => {
-              // Send transcript with citations if available
+              // Send transcript with citations and images if available
               const message = {
                 type: 'transcript',
                 role: 'assistant',
@@ -969,6 +955,14 @@ wss.on('connection', async (ws, req) => {
                 console.log(`[${clientId}] Sending transcript with ${pendingCitations.length} citation(s)`);
                 // Clear citations after sending (they're associated with this transcript)
                 pendingCitations = [];
+              }
+              
+              // Attach images if we have any for this turn
+              if (pendingMarkdownSnippets.length > 0) {
+                message.images = [...pendingMarkdownSnippets];
+                console.log(`[${clientId}] Sending transcript with ${pendingMarkdownSnippets.length} image(s)`);
+                // Clear images after sending (they're associated with this transcript)
+                pendingMarkdownSnippets = [];
               }
               
               ws.send(JSON.stringify(message));
@@ -1041,7 +1035,6 @@ wss.on('connection', async (ws, req) => {
         // This prevents cross-turn deduplication from incorrectly filtering valid new transcripts
         lastTranscriptText = { user: '', assistant: '' };
         pendingMarkdownSnippets = [];
-        markdownInjectedThisTurn = false;
         pendingCitations = []; // Clear citations for new turn
         
         // If end_voice_session tool was called, now is the time to send it (after all audio is generated)
@@ -1099,7 +1092,6 @@ wss.on('connection', async (ws, req) => {
         // The interrupted response is incomplete, so we need fresh deduplication for the next response
         lastTranscriptText = { user: '', assistant: '' };
         pendingMarkdownSnippets = [];
-        markdownInjectedThisTurn = false;
         pendingCitations = []; // Clear citations on interruption
         
         // Notify client to stop audio playback (if not already sent)
@@ -1167,7 +1159,7 @@ wss.on('connection', async (ws, req) => {
             });
             
             setImmediate(() => {
-              // Send transcript with citations if available
+              // Send transcript with citations and images if available
               const message = {
                 type: 'transcript',
                 role: 'assistant',
@@ -1180,6 +1172,14 @@ wss.on('connection', async (ws, req) => {
                 console.log(`[${clientId}] Sending transcript with ${pendingCitations.length} citation(s)`);
                 // Clear citations after sending (they're associated with this transcript)
                 pendingCitations = [];
+              }
+              
+              // Attach images if we have any for this turn
+              if (pendingMarkdownSnippets.length > 0) {
+                message.images = [...pendingMarkdownSnippets];
+                console.log(`[${clientId}] Sending transcript with ${pendingMarkdownSnippets.length} image(s)`);
+                // Clear images after sending (they're associated with this transcript)
+                pendingMarkdownSnippets = [];
               }
               
               ws.send(JSON.stringify(message));
@@ -1514,7 +1514,6 @@ wss.on('connection', async (ws, req) => {
               conversationTranscripts = { user: [], assistant: [] };
               lastTranscriptText = { user: '', assistant: '' }; // Reset transcript deduplication tracking
               pendingMarkdownSnippets = [];
-              markdownInjectedThisTurn = false;
               pendingCitations = []; // Clear citations on session end
               state.set('pendingEndVoiceSession', null); // Clear any pending end session
               state.set('shouldSuppressAudio', false); // Reset audio suppression flag
@@ -1542,7 +1541,6 @@ wss.on('connection', async (ws, req) => {
             conversationTranscripts = { user: [], assistant: [] };
             lastTranscriptText = { user: '', assistant: '' }; // Reset transcript deduplication tracking
             pendingMarkdownSnippets = [];
-            markdownInjectedThisTurn = false;
             state.set('pendingEndVoiceSession', null); // Clear any pending end session
             state.set('shouldSuppressAudio', false); // Reset audio suppression flag
             state.set('shouldSuppressTranscript', false); // Reset transcript suppression flag

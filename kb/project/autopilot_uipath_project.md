@@ -22,6 +22,18 @@ domains:
 
 UiPath Autopilot is an LLM-powered assistant deeply integrated across all UiPath products, designed for enterprise environments. Autopilot enables users to interact with AI agents through conversational interfaces, specialized agent modes (Chat, Plan, Act), and deep integration with enterprise tools and data sources. The system manifests in two primary experiences: a side-chat assistant integrated throughout UiPath's product catalog, and a standalone desktop application focused on ChatGPT-like interaction with enterprise-grade security. The project focuses on context-aware agent interactions, hierarchical context stacking, and seamless integration with tools like Slack, Zoom, Workday, and other enterprise applications.
 
+## Appearance and Interface
+
+Autopilot typically appears as an AI assistant integrated across UiPath products, often with a chat interface that allows users to input text or images (like screenshots) to generate automations. Think of it as a conversational helper inside the software. The interface features:
+
+- **Chat-based interaction**: A conversational interface similar to ChatGPT, with message bubbles for user inputs and agent responses
+- **Multi-modal input**: Users can input text or upload images/screenshots to generate automations
+- **Agent modes**: Visual mode selector for Chat (conversational interaction), Plan (structured planning), and Act (action execution) modes with smooth animated transitions
+- **Tool execution interface**: When the agent performs actions, it displays tool calls and code editing capabilities with syntax highlighting
+- **Dark and light themes**: The interface supports both dark and light mode themes
+- **Side-chat integration**: When embedded in other UiPath products, Autopilot appears as a side panel or integrated chat component
+- **Standalone desktop app**: As a standalone application, it provides a full-screen ChatGPT-like experience optimized for enterprise workflows
+
 ## Context and problem
 
 Enterprise AI assistants need to operate within complex organizational structures, accessing context at multiple levels: individual user data, project-specific information, team knowledge, and company-wide resources. Autopilot addresses the challenge of providing agents with appropriate context while maintaining security, permissions, and organizational boundaries. The system must enable users to create specialized agents for specific tasks (like meeting summaries, self-assessments, or code editing) while grounding these agents in relevant enterprise data sources.

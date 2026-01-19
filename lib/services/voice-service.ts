@@ -615,12 +615,14 @@ export class VoiceService extends EventTarget {
           // Emit transcript for real-time display
           const transcriptPreview = message.text.substring(0, 50);
           const citationCount = message.citations?.length || 0;
-          console.log(`Transcript event dispatched: ${message.role} - ${transcriptPreview}...${citationCount > 0 ? ` (${citationCount} citations)` : ''}`);
+          const imageCount = message.images?.length || 0;
+          console.log(`Transcript event dispatched: ${message.role} - ${transcriptPreview}...${citationCount > 0 ? ` (${citationCount} citations)` : ''}${imageCount > 0 ? ` (${imageCount} images)` : ''}`);
           this.dispatchEvent(new CustomEvent('transcript', {
             detail: {
               role: message.role,
               text: message.text,
-              citations: message.citations || undefined
+              citations: message.citations || undefined,
+              images: message.images || undefined
             }
           }));
         }
