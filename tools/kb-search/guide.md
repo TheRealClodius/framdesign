@@ -81,6 +81,16 @@ Example response structure for an asset:
 ```
 Simply include `metadata.markdown` in your response to display the image.
 
+## Proactive Visual Search
+
+When users ask about projects, **proactively search for images** to enrich your response:
+
+1. **Project overview query**: `{ "query": "Autopilot interface overview", "filters": { "type": "photo" } }`
+2. **Architecture/diagrams**: `{ "query": "Autopilot architecture", "filters": { "type": "diagram" } }`
+3. **UI explorations**: `{ "query": "Autopilot component design", "filters": { "type": "photo" } }`
+
+This helps you tell the project's story visually, not just verbally.
+
 ## Watch Out
 
 - **Empty results is success**: If no matches found, returns `ok: true` with empty results array. Don't treat as error.
@@ -89,3 +99,4 @@ Simply include `metadata.markdown` in your response to display the image.
 - **Don't retry on empty**: Empty results are deterministic. Reformulate query or adjust filters instead of retrying.
 - **Filter logic is AND**: Multiple filters are combined with AND logic (not OR).
 - **Use kb_search for images first**: Before using perplexity_search for visuals, try kb_search - the knowledge base has extensive visual assets for all projects.
+- **Show, don't just tell**: When discussing projects, search for and include relevant images. Users want to see the work.
