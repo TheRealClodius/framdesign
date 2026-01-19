@@ -49,6 +49,7 @@
     "zod": "^4.2.1"
   },
   "devDependencies": {
+    "@swc/helpers": "^0.5.18",
     "@tailwindcss/postcss": "^4",
     "@types/jest": "^29.5.14",
     "@types/node": "^22",
