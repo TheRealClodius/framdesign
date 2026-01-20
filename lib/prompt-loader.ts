@@ -33,20 +33,3 @@ export function loadTextPrompt(): string {
   }
 }
 
-/**
- * Loads the voice mode system prompt
- * Composition: core + voice-behavior + tools/ignore_user + tools/end_voice_session
- */
-export function loadVoicePrompt(): string {
-  try {
-    const core = readPromptFile('core.md');
-    const voiceBehavior = readPromptFile('voice-behavior.md');
-    const ignoreUserTool = readPromptFile('tools/ignore_user.md');
-    const endVoiceSessionTool = readPromptFile('tools/end_voice_session.md');
-
-    return `${core}\n\n${voiceBehavior}\n\n${ignoreUserTool}\n\n${endVoiceSessionTool}`;
-  } catch (error) {
-    console.error('Error loading voice prompt:', error);
-    throw new Error(`Failed to load voice mode prompt files from ${PROMPTS_DIR}`);
-  }
-}

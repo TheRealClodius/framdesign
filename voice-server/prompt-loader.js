@@ -1,17 +1,15 @@
 /**
- * Prompt Loader - Composes system prompts from markdown files
- * Reads from prompts/ directory and combines core + mode-specific + tools
+ * Prompt Loader - Loads the voice system prompt
+ * Single file approach - core.md contains everything
  */
 
 import { readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
-// Get the directory path of the current module
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Prompts directory is inside voice-server for Railway deployment
 const PROMPTS_DIR = join(__dirname, 'prompts');
 
 /**
@@ -27,15 +25,11 @@ function readPromptFile(filename) {
 
 /**
  * Loads the text mode system prompt
- * Composition: core only
- * NOTE: Tool documentation is now loaded from registry, not prompts/
  * @returns {string}
  */
 export function loadTextPrompt() {
   try {
-    const core = readPromptFile('core.md');
-
-    return core;
+    return readPromptFile('core.md');
   } catch (error) {
     console.error('Error loading text prompt:', error);
     throw new Error(`Failed to load text mode prompt files from ${PROMPTS_DIR}`);
@@ -44,16 +38,12 @@ export function loadTextPrompt() {
 
 /**
  * Loads the voice mode system prompt
- * Composition: core + voice-behavior
- * NOTE: Tool documentation is now loaded from registry, not prompts/
+ * Same as text - core.md now contains all voice-specific instructions
  * @returns {string}
  */
 export function loadVoicePrompt() {
   try {
-    const core = readPromptFile('core.md');
-    const voiceBehavior = readPromptFile('voice-behavior.md');
-
-    return `${core}\n\n${voiceBehavior}`;
+    return readPromptFile('core.md');
   } catch (error) {
     console.error('Error loading voice prompt:', error);
     throw new Error(`Failed to load voice mode prompt files from ${PROMPTS_DIR}`);
