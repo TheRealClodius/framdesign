@@ -171,7 +171,7 @@
  * 2. Set footer height: Modify `pt-8 pb-9` in page.tsx
  * 3. Total bottom height = wrapper height + footer height
  */
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import MarkdownWithMermaid from "./MarkdownWithMermaid";
 import {
   generateMessageId,
@@ -355,25 +355,6 @@ function buildEndCallMessage(startTime: number | null): string {
     : `Ended the call. Click on the VOICE button anytime you wanna chat again.`;
 }
 
-/**
- * Play a sound effect from the /public/sounds directory
- * @param soundPath - Path to sound file relative to /public (e.g., '/sounds/start.mp3')
- */
-function playSoundEffect(soundPath: string): void {
-  try {
-    const audio = new Audio(soundPath);
-    audio.volume = 1.0; // Full volume
-    audio.play().catch((error) => {
-      // Silently handle errors (e.g., user interaction required, file not found)
-      // Don't break the voice flow if sound fails to play
-      console.warn(`Failed to play sound effect ${soundPath}:`, error);
-    });
-  } catch (error) {
-    // Handle errors gracefully without breaking the voice flow
-    console.warn(`Error creating sound effect ${soundPath}:`, error);
-  }
-}
-
 export default function ChatInterface() {
   const [messages, setMessages] = useState<Message[]>([
     { id: "initial-assistant", role: "assistant", content: "HELLO. HOW CAN I HELP YOU TODAY?" }
@@ -400,12 +381,145 @@ export default function ChatInterface() {
   const voiceSessionStartTime = useRef<number | null>(null);
   const hasShownEndCallSummary = useRef<boolean>(false);
 
+  // Audio elements cache for sound effects (preloaded for mobile compatibility)
+  const startAudioRef = useRef<HTMLAudioElement | null>(null);
+  const endAudioRef = useRef<HTMLAudioElement | null>(null);
+  const audioUnlockedRef = useRef<boolean>(false);
+
+  /**
+   * Preload and cache audio elements for mobile compatibility
+   * On mobile devices, audio must be preloaded and unlocked during user interaction
+   */
+  const preloadAudioElements = useCallback(() => {
+    if (startAudioRef.current && endAudioRef.current) {
+      return; // Already preloaded
+    }
+
+    try {
+      // Preload start sound
+      if (!startAudioRef.current) {
+        startAudioRef.current = new Audio('/sounds/start.mp3');
+        startAudioRef.current.preload = 'auto';
+        startAudioRef.current.volume = 1.0;
+        startAudioRef.current.addEventListener('error', (e) => {
+          console.warn('Failed to load start sound:', e);
+          startAudioRef.current = null;
+        });
+      }
+
+      // Preload end sound
+      if (!endAudioRef.current) {
+        endAudioRef.current = new Audio('/sounds/end.mp3');
+        endAudioRef.current.preload = 'auto';
+        endAudioRef.current.volume = 1.0;
+        endAudioRef.current.addEventListener('error', (e) => {
+          console.warn('Failed to load end sound:', e);
+          endAudioRef.current = null;
+        });
+      }
+    } catch (error) {
+      console.warn('Error preloading audio elements:', error);
+    }
+  }, []);
+
+  /**
+   * Unlock audio context for mobile devices
+   * Must be called during a user interaction event
+   */
+  const unlockAudio = useCallback(async () => {
+    if (audioUnlockedRef.current) {
+      return; // Already unlocked
+    }
+
+    try {
+      // Preload audio elements first
+      preloadAudioElements();
+
+      // Play and immediately pause to unlock audio context on mobile
+      // This must happen during a user interaction
+      const unlockPromises: Promise<void>[] = [];
+
+      if (startAudioRef.current) {
+        const promise = startAudioRef.current.play().then(() => {
+          startAudioRef.current?.pause();
+          if (startAudioRef.current) {
+            startAudioRef.current.currentTime = 0;
+          }
+        }).catch(() => {
+          // Ignore errors during unlock attempt
+        });
+        unlockPromises.push(promise);
+      }
+
+      if (endAudioRef.current) {
+        const promise = endAudioRef.current.play().then(() => {
+          endAudioRef.current?.pause();
+          if (endAudioRef.current) {
+            endAudioRef.current.currentTime = 0;
+          }
+        }).catch(() => {
+          // Ignore errors during unlock attempt
+        });
+        unlockPromises.push(promise);
+      }
+
+      await Promise.all(unlockPromises);
+      audioUnlockedRef.current = true;
+    } catch (error) {
+      // Silently handle unlock errors
+      console.warn('Audio unlock attempt failed:', error);
+    }
+  }, [preloadAudioElements]);
+
+  /**
+   * Play a sound effect from the /public/sounds directory
+   * Uses preloaded audio elements for mobile compatibility
+   * @param soundPath - Path to sound file relative to /public (e.g., '/sounds/start.mp3')
+   */
+  const playSoundEffect = useCallback((soundPath: string): void => {
+    try {
+      let audio: HTMLAudioElement | null = null;
+
+      // Use cached audio element based on sound path
+      if (soundPath === '/sounds/start.mp3') {
+        audio = startAudioRef.current;
+      } else if (soundPath === '/sounds/end.mp3') {
+        audio = endAudioRef.current;
+      }
+
+      // Fallback: create new audio if cache miss (shouldn't happen)
+      if (!audio) {
+        console.warn(`Audio not preloaded for ${soundPath}, creating new instance`);
+        audio = new Audio(soundPath);
+        audio.volume = 1.0;
+      }
+
+      // Reset to start and play
+      audio.currentTime = 0;
+      audio.volume = 1.0;
+      
+      audio.play().catch((error) => {
+        // Silently handle errors (e.g., user interaction required, file not found)
+        // Don't break the voice flow if sound fails to play
+        console.warn(`Failed to play sound effect ${soundPath}:`, error);
+      });
+    } catch (error) {
+      // Handle errors gracefully without breaking the voice flow
+      console.warn(`Error playing sound effect ${soundPath}:`, error);
+    }
+  }, []);
+
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
       textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
     }
   }, [input]);
+
+  // Preload audio elements on mount for better mobile compatibility
+  useEffect(() => {
+    preloadAudioElements();
+  }, [preloadAudioElements]);
 
   const scrollToBottom = () => {
     if (messagesContainerRef.current) {
@@ -950,6 +1064,10 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
       return;
     }
 
+    // Unlock audio context during user interaction (required for mobile)
+    // This ensures sounds play if agent starts voice session in response
+    unlockAudio();
+
     const userMessage = input.trim();
     setInput("");
     setMessages((prev) => [...prev, { id: generateMessageId(), role: "user", content: userMessage }]);
@@ -1390,6 +1508,9 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
             <div className="max-w-[500px] mx-auto w-full flex justify-end">
               <button
               onClick={async () => {
+                // Unlock audio context during user interaction (required for mobile)
+                await unlockAudio();
+                
                 if (isVoiceMode) {
                   // End voice mode
                   try {
