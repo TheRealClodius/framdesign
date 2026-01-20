@@ -17,12 +17,12 @@ export const VOICE_CONFIG = {
   // NOTE: Using playbackRate sounds synthetic. For better quality, use a deeper prebuilt voice.
   PITCH_SHIFT_SEMITONES: -4, // -4 semitones for a deeper polar bear voice
   ENABLE_PITCH_SHIFT: false, // Disabled - sounds synthetic. Using deeper prebuilt voice instead.
-  // Thinking sound configuration for tool execution feedback
+  // Tool usage sound configuration for tool execution feedback
   THINKING_SOUND: {
-    PATH: '/sounds/thinking-loop.mp3',
+    PATH: '/sounds/tool-use.mp3',
     FADE_IN_DURATION_MS: 400,
     FADE_OUT_DURATION_MS: 200,
-    VOLUME: 0.3, // Max volume (0.0 - 1.0)
+    VOLUME: 1.0, // Full volume (0.0 - 1.0)
     ENABLED: true
   }
 };

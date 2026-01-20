@@ -8,9 +8,8 @@
     "additionalProperties": false,
     "properties": {
       "pending_request": {
-        "type": "string",
-        "description": "Optional request to address when voice starts (e.g., 'explain X'). Leave empty if just starting voice.",
-        "minLength": 3,
+        "type": ["string", "null"],
+        "description": "Optional request to address when voice starts (e.g., 'explain X'). Leave null or omit if just starting voice without a specific request. If provided, should be at least 3 characters.",
         "maxLength": 200
       }
     }

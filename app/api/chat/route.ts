@@ -1265,7 +1265,12 @@ export async function POST(request: Request) {
         }));
 
         if (result.ok) {
-          const pendingRequest = functionCall.args?.pending_request || null;
+          // Filter out empty or too-short pending_request values
+          // Schema allows null/empty, but we normalize to null for consistency
+          let pendingRequest = functionCall.args?.pending_request || null;
+          if (pendingRequest && typeof pendingRequest === 'string' && pendingRequest.trim().length < 3) {
+            pendingRequest = null;
+          }
 
           // Extract text response from buffered chunks
           let messageText = "";

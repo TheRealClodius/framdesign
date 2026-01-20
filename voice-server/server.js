@@ -464,10 +464,20 @@ wss.on('connection', async (ws, req) => {
         // 1. Inject history if present
         if (conversationHistory.length > 0) {
           try {
-            const historyTurns = conversationHistory.map(turn => ({
-              role: turn.role,
-              parts: turn.parts
-            }));
+            // Add session boundary marker BEFORE history to prevent agent from
+            // interpreting historical "end session" commands as current commands
+            const sessionBoundaryMarker = {
+              role: 'user',
+              parts: [{ text: '[--- NEW VOICE SESSION STARTED ---]\n\nPrevious messages are for context only. Only respond to commands given in THIS voice session, not historical ones.' }]
+            };
+            
+            const historyTurns = [
+              sessionBoundaryMarker,
+              ...conversationHistory.map(turn => ({
+                role: turn.role,
+                parts: turn.parts
+              }))
+            ];
             
             // Determine if voice agent should respond immediately
             // Use explicit pendingRequest from text agent handoff (scalable approach)

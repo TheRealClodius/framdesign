@@ -577,9 +577,9 @@ export class VoiceService extends EventTarget {
         break;
 
       case 'audio':
-        // Fade out thinking sound when agent starts speaking
+        // Stop tool usage sound when agent starts speaking
         if (this.isThinkingSoundActive) {
-          this.fadeOutThinkingSound();
+          this.stopThinkingSound();
         }
         // Immediately pause sending when agent starts speaking
         if (!this.shouldPauseAudioSending) {
@@ -787,10 +787,10 @@ export class VoiceService extends EventTarget {
         break;
 
       case 'tool_call_started':
-        // Tool execution started - fade in thinking sound
+        // Tool execution started - play tool usage sound at full volume
         const toolCallStartedMessage = message as WebSocketMessage & { toolCount?: number };
         console.log(`Tool call started (${toolCallStartedMessage.toolCount || 'unknown'} tools)`);
-        this.fadeInThinkingSound();
+        this.playToolUseSound();
         break;
 
       case 'turn_complete':
@@ -990,7 +990,7 @@ export class VoiceService extends EventTarget {
       // Create audio element if it doesn't exist
       if (!this.thinkingAudio) {
         this.thinkingAudio = new Audio(VOICE_CONFIG.THINKING_SOUND.PATH);
-        this.thinkingAudio.loop = true;
+        this.thinkingAudio.loop = false; // Tool usage sound plays once, not looping
         this.thinkingAudio.volume = 0;
         this.thinkingAudio.preload = 'auto';
         
@@ -1000,7 +1000,7 @@ export class VoiceService extends EventTarget {
           this.thinkingAudio = null;
         });
         
-        console.log('Thinking sound preloaded');
+        console.log('Tool usage sound preloaded');
       }
     } catch (error) {
       console.warn('Failed to preload thinking sound:', error);
@@ -1009,16 +1009,16 @@ export class VoiceService extends EventTarget {
   }
 
   /**
-   * Fade in thinking sound (400ms transition)
+   * Play tool usage sound at full volume (no fade effects)
    */
-  private fadeInThinkingSound(): void {
+  private playToolUseSound(): void {
     if (!VOICE_CONFIG.THINKING_SOUND.ENABLED || !this.thinkingAudio) {
       return;
     }
 
-    // If already active, don't restart
+    // If already active, restart it
     if (this.isThinkingSoundActive) {
-      return;
+      this.stopThinkingSound();
     }
 
     try {
@@ -1028,96 +1028,30 @@ export class VoiceService extends EventTarget {
         this.thinkingFadeInterval = null;
       }
 
-      // Start audio at volume 0
-      this.thinkingAudio.volume = 0;
+      // Set volume to full immediately
+      this.thinkingAudio.volume = VOICE_CONFIG.THINKING_SOUND.VOLUME;
+      this.thinkingAudio.currentTime = 0; // Reset to start
+      
+      // Handle sound completion (for one-shot sounds)
+      this.thinkingAudio.onended = () => {
+        this.isThinkingSoundActive = false;
+        console.log('Tool usage sound finished playing');
+      };
+      
       this.thinkingAudio.play().catch((error) => {
-        console.warn('Failed to play thinking sound:', error);
+        console.warn('Failed to play tool usage sound:', error);
+        this.isThinkingSoundActive = false;
         return;
       });
 
       this.isThinkingSoundActive = true;
-
-      // Fade in over specified duration
-      const targetVolume = VOICE_CONFIG.THINKING_SOUND.VOLUME;
-      const fadeDuration = VOICE_CONFIG.THINKING_SOUND.FADE_IN_DURATION_MS;
-      const steps = 20; // Number of fade steps
-      const stepDuration = fadeDuration / steps;
-      const volumeStep = targetVolume / steps;
-
-      let currentStep = 0;
-      this.thinkingFadeInterval = window.setInterval(() => {
-        currentStep++;
-        const newVolume = Math.min(volumeStep * currentStep, targetVolume);
-        if (this.thinkingAudio) {
-          this.thinkingAudio.volume = newVolume;
-        }
-
-        if (currentStep >= steps || (this.thinkingAudio && this.thinkingAudio.volume >= targetVolume)) {
-          if (this.thinkingAudio) {
-            this.thinkingAudio.volume = targetVolume;
-          }
-          if (this.thinkingFadeInterval) {
-            clearInterval(this.thinkingFadeInterval);
-            this.thinkingFadeInterval = null;
-          }
-        }
-      }, stepDuration);
-
-      console.log('Thinking sound fading in');
+      console.log('Tool usage sound playing at full volume');
     } catch (error) {
-      console.warn('Failed to fade in thinking sound:', error);
+      console.warn('Failed to play tool usage sound:', error);
       this.isThinkingSoundActive = false;
     }
   }
 
-  /**
-   * Fade out thinking sound (200ms transition)
-   */
-  private fadeOutThinkingSound(): void {
-    if (!this.isThinkingSoundActive || !this.thinkingAudio) {
-      return;
-    }
-
-    try {
-      // Clear any existing fade interval
-      if (this.thinkingFadeInterval) {
-        clearInterval(this.thinkingFadeInterval);
-        this.thinkingFadeInterval = null;
-      }
-
-      const startVolume = this.thinkingAudio.volume;
-      const fadeDuration = VOICE_CONFIG.THINKING_SOUND.FADE_OUT_DURATION_MS;
-      const steps = 20; // Number of fade steps
-      const stepDuration = fadeDuration / steps;
-      const volumeStep = startVolume / steps;
-
-      let currentStep = 0;
-      this.thinkingFadeInterval = window.setInterval(() => {
-        currentStep++;
-        const newVolume = Math.max(startVolume - (volumeStep * currentStep), 0);
-        if (this.thinkingAudio) {
-          this.thinkingAudio.volume = newVolume;
-        }
-
-        if (currentStep >= steps || (this.thinkingAudio && this.thinkingAudio.volume <= 0)) {
-          if (this.thinkingAudio) {
-            this.thinkingAudio.volume = 0;
-            this.thinkingAudio.pause();
-            this.thinkingAudio.currentTime = 0; // Reset to start for next play
-          }
-          if (this.thinkingFadeInterval) {
-            clearInterval(this.thinkingFadeInterval);
-            this.thinkingFadeInterval = null;
-          }
-          this.isThinkingSoundActive = false;
-          console.log('Thinking sound faded out');
-        }
-      }, stepDuration);
-    } catch (error) {
-      console.warn('Failed to fade out thinking sound:', error);
-      this.isThinkingSoundActive = false;
-    }
-  }
 
   /**
    * Stop thinking sound immediately (for cleanup/interruptions)

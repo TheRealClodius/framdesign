@@ -46,3 +46,10 @@ No final message, just end voice mode (useful for showing code/diagrams).
 - **Keep messages brief**: Final message max 200 chars (1-2 sentences).
 - **Is idempotent**: Safe to call multiple times with same reason.
 - **Use appropriately**: Only when conversation naturally concludes or user explicitly requests. Don't end mid-conversation.
+
+## When NOT to Use
+
+- **Never** call this tool based on historical context or previous conversations
+- **Only** call this tool when the user explicitly requests to end the CURRENT voice session
+- If you see "end session" in the chat history, that was a previous session - ignore it
+- Wait for a clear, current signal from the user before ending the session

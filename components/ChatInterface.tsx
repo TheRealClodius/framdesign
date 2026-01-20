@@ -355,6 +355,25 @@ function buildEndCallMessage(startTime: number | null): string {
     : `Ended the call. Click on the VOICE button anytime you wanna chat again.`;
 }
 
+/**
+ * Play a sound effect from the /public/sounds directory
+ * @param soundPath - Path to sound file relative to /public (e.g., '/sounds/start.mp3')
+ */
+function playSoundEffect(soundPath: string): void {
+  try {
+    const audio = new Audio(soundPath);
+    audio.volume = 1.0; // Full volume
+    audio.play().catch((error) => {
+      // Silently handle errors (e.g., user interaction required, file not found)
+      // Don't break the voice flow if sound fails to play
+      console.warn(`Failed to play sound effect ${soundPath}:`, error);
+    });
+  } catch (error) {
+    // Handle errors gracefully without breaking the voice flow
+    console.warn(`Error creating sound effect ${soundPath}:`, error);
+  }
+}
+
 export default function ChatInterface() {
   const [messages, setMessages] = useState<Message[]>([
     { id: "initial-assistant", role: "assistant", content: "HELLO. HOW CAN I HELP YOU TODAY?" }
@@ -512,6 +531,9 @@ export default function ChatInterface() {
       // Track session start time for duration calculation
       voiceSessionStartTime.current = Date.now();
       hasShownEndCallSummary.current = false;
+      
+      // Play start sound effect
+      playSoundEffect('/sounds/start.mp3');
       
       // Note: shouldStartNewTurn flag is already set before voiceService.start() is called
       console.log('Voice session started');
@@ -744,6 +766,9 @@ export default function ChatInterface() {
       
       // Reset session start time
       voiceSessionStartTime.current = null;
+      
+      // Play end sound effect
+      playSoundEffect('/sounds/end.mp3');
       
       // Stop voice session gracefully
       try {
@@ -1376,6 +1401,13 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
                         { id: generateMessageId(), role: "assistant", content: endCallMessage }
                       ]);
                     }
+                    
+                    // Play end sound effect
+                    playSoundEffect('/sounds/end.mp3');
+                    
+                    // Reset session start time
+                    voiceSessionStartTime.current = null;
+                    
                     await voiceService.stop();
                     // Transcripts will be integrated via the 'complete' event handler
                   } catch (error) {

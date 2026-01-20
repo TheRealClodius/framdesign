@@ -28,7 +28,12 @@ export async function execute(context) {
     );
   }
 
-  const pendingRequest = args.pending_request || null;
+  // Filter out empty or too-short pending_request values
+  // Schema requires minLength: 3, so if provided but invalid, treat as null
+  let pendingRequest = args.pending_request || null;
+  if (pendingRequest && typeof pendingRequest === 'string' && pendingRequest.trim().length < 3) {
+    pendingRequest = null;
+  }
 
   console.log(
     `[start_voice_session] Client ${clientId} requesting voice mode`,
