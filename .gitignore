@@ -53,4 +53,5 @@ vector-search-api/node_modules/
 # Google Cloud Storage service account key
 gcs-key.json
 gcs-service-account-key.json
-# GCS service account key - DO NOT COMMITtest-run.log
+# GCS service account key - DO NOT COMMIT
+test-run.log
