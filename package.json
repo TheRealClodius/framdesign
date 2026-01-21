@@ -7,7 +7,7 @@
     "node": "22.x"
   },
   "scripts": {
-    "dev": "NODE_ENV=development next dev --webpack",
+    "dev": "NODE_ENV=development next dev",
     "dev:clean": "pkill -9 -f 'next dev' 2>/dev/null || true; lsof -ti:3000 | xargs kill -9 2>/dev/null || true; lsof -ti:8080 | xargs kill -9 2>/dev/null || true; sleep 1; echo '✓ Cleaned up existing dev servers'",
     "dev:all": "npm run dev:clean && concurrently \"npm run dev\" \"npm run dev:voice\" --names \"FRONTEND,VOICE\" --prefix-colors \"cyan,yellow\"",
     "dev:voice": "cd voice-server && npm start",

@@ -15,8 +15,11 @@ async function loadBlobService() {
       resolveBlobUrl = blobModule.resolveBlobUrl || blobModule.default?.resolveBlobUrl;
     } catch (importError) {
       // Fallback for Node.js runtime (voice server)
+      // Use a function to create the import path dynamically so webpack doesn't analyze it
       try {
-        const blobModule = await import('../../lib/services/blob-storage-service.js');
+        const getImportPath = (base) => `../../lib/services/${base}`;
+        const blobPath = getImportPath('blob-storage-service');
+        const blobModule = await import(/* webpackIgnore: true */ blobPath);
         resolveBlobUrl = blobModule.resolveBlobUrl || blobModule.default?.resolveBlobUrl;
       } catch (fallbackError) {
         console.warn('[kb_search] Failed to load blob storage service:', fallbackError);

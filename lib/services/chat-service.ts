@@ -20,6 +20,7 @@ export interface ChatResponse {
   };
   startVoiceSession?: boolean;
   pendingRequest?: string | null; // Pending user request to address when voice starts
+  suggestions?: string[]; // AI-generated suggestions for this response
 }
 
 /**

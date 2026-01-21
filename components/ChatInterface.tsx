@@ -336,6 +336,126 @@ function normalizeTextResponse(text: string): string {
   return normalized;
 }
 
+/**
+ * Extract suggestions from message content
+ * Returns the last set of suggestions found, or undefined if none
+ */
+function extractSuggestionsFromContent(content: string): string[] | undefined {
+  if (!content || !content.includes('---SUGGESTIONS---')) {
+    return undefined;
+  }
+  
+  const marker = '---SUGGESTIONS---';
+  let searchFrom = 0;
+  const allSuggestions: string[][] = [];
+  
+  while (true) {
+    const markerIndex = content.indexOf(marker, searchFrom);
+    if (markerIndex === -1) break;
+    
+    const jsonStart = content.indexOf('{', markerIndex + marker.length);
+    if (jsonStart === -1) {
+      searchFrom = markerIndex + marker.length;
+      continue;
+    }
+    
+    let braceCount = 0;
+    let jsonEnd = -1;
+    for (let i = jsonStart; i < content.length; i++) {
+      if (content[i] === '{') braceCount++;
+      else if (content[i] === '}') {
+        braceCount--;
+        if (braceCount === 0) {
+          jsonEnd = i + 1;
+          break;
+        }
+      }
+    }
+    
+    if (jsonEnd === -1) {
+      searchFrom = markerIndex + marker.length;
+      continue;
+    }
+    
+    const jsonStr = content.substring(jsonStart, jsonEnd);
+    try {
+      const parsed = JSON.parse(jsonStr);
+      if (parsed.suggestions && Array.isArray(parsed.suggestions)) {
+        allSuggestions.push(parsed.suggestions);
+      }
+    } catch {
+      // Ignore parse errors
+    }
+    
+    searchFrom = jsonEnd;
+  }
+  
+  // Return the last set of suggestions
+  return allSuggestions.length > 0 ? allSuggestions[allSuggestions.length - 1] : undefined;
+}
+
+/**
+ * Strip suggestions metadata from message content for display
+ * This is a safety net to ensure raw suggestions never appear in the UI
+ */
+function stripSuggestionsFromContent(content: string): string {
+  if (!content || !content.includes('---SUGGESTIONS---')) {
+    return content;
+  }
+  
+  // Remove all ---SUGGESTIONS--- markers and their JSON payloads
+  let result = content;
+  const marker = '---SUGGESTIONS---';
+  
+  while (result.includes(marker)) {
+    const markerIndex = result.indexOf(marker);
+    
+    // Find the JSON that follows
+    const jsonStart = result.indexOf('{', markerIndex + marker.length);
+    if (jsonStart === -1) {
+      // No JSON found, just remove the marker and everything after
+      result = result.substring(0, markerIndex).trimEnd();
+      break;
+    }
+    
+    // Find matching closing brace
+    let braceCount = 0;
+    let jsonEnd = -1;
+    for (let i = jsonStart; i < result.length; i++) {
+      if (result[i] === '{') braceCount++;
+      else if (result[i] === '}') {
+        braceCount--;
+        if (braceCount === 0) {
+          jsonEnd = i + 1;
+          break;
+        }
+      }
+    }
+    
+    if (jsonEnd === -1) {
+      // Malformed JSON, remove everything from marker onwards
+      result = result.substring(0, markerIndex).trimEnd();
+      break;
+    }
+    
+    // Remove the marker and JSON, including leading whitespace
+    let removeStart = markerIndex;
+    while (removeStart > 0 && /\s/.test(result[removeStart - 1])) {
+      removeStart--;
+    }
+    
+    result = result.substring(0, removeStart) + result.substring(jsonEnd);
+  }
+  
+  // Also remove observability metadata
+  const obsMarker = '---OBSERVABILITY---';
+  if (result.includes(obsMarker)) {
+    result = result.substring(0, result.indexOf(obsMarker)).trimEnd();
+  }
+  
+  return result.trimEnd();
+}
+
 function formatVoiceSessionDuration(startTime: number | null): string | null {
   if (!startTime) return null;
 
@@ -355,10 +475,50 @@ function buildEndCallMessage(startTime: number | null): string {
     : `Ended the call. Click on the VOICE button anytime you wanna chat again.`;
 }
 
+/**
+ * Projects available for the "Tell me about..." suggestion
+ * Cycles randomly on each page refresh
+ */
+const PROJECTS = [
+  "UiPath Autopilot",
+  "Vector Watch",
+  "Fitbit OS",
+  "Clipboard AI",
+  "Desktop Agent",
+  "Semantic Space",
+];
+
+/**
+ * Get a random project name for the suggestion
+ * Uses Math.random() so it changes on each page refresh
+ */
+function getRandomProject(): string {
+  return PROJECTS[Math.floor(Math.random() * PROJECTS.length)];
+}
+
 export default function ChatInterface() {
+  // Generate conversation starters with random project on client-side only to avoid hydration mismatch
+  // Start with a default (first project) to ensure server/client match, then update on mount
+  const [conversationStarters, setConversationStarters] = useState([
+    "What does FRAM Design do?",
+    "I have a design challenge I'm thinking through",
+    `Tell me about ${PROJECTS[0]}`, // Default to first project for SSR
+    "How would you approach a new product?",
+  ]);
+
   const [messages, setMessages] = useState<Message[]>([
     { id: "initial-assistant", role: "assistant", content: "HELLO. HOW CAN I HELP YOU TODAY?" }
   ]);
+
+  // Set random project only after component mounts on client (avoid hydration mismatch)
+  useEffect(() => {
+    setConversationStarters([
+      "What does FRAM Design do?",
+      "I have a design challenge I'm thinking through",
+      `Tell me about ${getRandomProject()}`,
+      "How would you approach a new product?",
+    ]);
+  }, []);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [loadingStatus, setLoadingStatus] = useState<string | null>(null);
@@ -946,10 +1106,94 @@ export default function ChatInterface() {
 
   // Check if currently blocked by timeout
   const isBlocked = timeoutUntil !== null && Date.now() < timeoutUntil;
-  
+
   // Detect if timeout just expired (was blocked, now not blocked)
   // This happens when wasBlocked is true but isBlocked is false
   const timeoutJustExpired = wasBlocked && !isBlocked;
+
+  // Show conversation starters only when chat is in initial state
+  const showSuggestions =
+    messages.length === 1 &&
+    messages[0].id === "initial-assistant" &&
+    !isVoiceMode &&
+    !isLoading;
+
+  // Handle clicking a conversation starter - directly submits the message
+  const handleStarterClick = (text: string) => {
+    if (isLoading || isVoiceMode || isBlocked) return;
+
+    // Directly submit the starter text (bypass input state)
+    setMessages((prev) => [...prev, { id: generateMessageId(), role: "user", content: text }]);
+    setIsLoading(true);
+
+    // Trigger the chat request
+    const submitStarter = async () => {
+      try {
+        const requestMessages: Message[] = [
+          ...messages,
+          { id: generateMessageId(), role: "user", content: text }
+        ];
+
+        const assistantMessageId = generateMessageId();
+        setMessages((prev) => [...prev, { id: assistantMessageId, role: "assistant", content: "", streaming: true }]);
+
+        let streamedContent = "";
+
+        await streamChatResponse(
+          { messages: requestMessages, timeoutExpired: false },
+          (chunk) => {
+            streamedContent += chunk;
+            setMessages((prev) => {
+              const updated = [...prev];
+              const lastIndex = updated.length - 1;
+              if (lastIndex >= 0 && updated[lastIndex].id === assistantMessageId) {
+                updated[lastIndex] = {
+                  ...updated[lastIndex],
+                  content: streamedContent,
+                  streaming: true,
+                };
+              }
+              return updated;
+            });
+            scrollToBottom();
+          },
+          (error) => {
+            console.error("Stream error:", error);
+            setIsLoading(false);
+            setLoadingStatus(null);
+          },
+          (status) => {
+            setLoadingStatus(status);
+          }
+        );
+
+        setLoadingStatus(null);
+        setMessages((prev) => {
+          const updated = [...prev];
+          const lastIndex = updated.length - 1;
+          if (lastIndex >= 0 && updated[lastIndex].id === assistantMessageId) {
+            updated[lastIndex] = {
+              ...updated[lastIndex],
+              content: streamedContent,
+              streaming: false,
+            };
+          }
+          return updated;
+        });
+      } catch (error) {
+        console.error("Chat error:", error);
+        const errorMessage = error instanceof Error ? error.message : "Unknown error";
+        setMessages((prev) => [
+          ...prev,
+          { id: generateMessageId(), role: "assistant", content: `ERROR: ${errorMessage}. PLEASE TRY AGAIN.` }
+        ]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    submitStarter();
+  };
 
   const resetTimeout = () => {
     clearTimeoutStorage();
@@ -1194,14 +1438,20 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
 
         // Mark streaming as complete
         setLoadingStatus(null);
+        
+        // Extract suggestions and clean content using helper functions
+        const parsedSuggestions = extractSuggestionsFromContent(streamedContent);
+        const cleanContent = stripSuggestionsFromContent(streamedContent);
+        
         setMessages((prev) => {
           const updated = [...prev];
           const lastIndex = updated.length - 1;
           if (lastIndex >= 0 && updated[lastIndex].id === assistantMessageId) {
             updated[lastIndex] = {
               ...updated[lastIndex],
-              content: streamedContent,
+              content: cleanContent,
               streaming: false,
+              suggestions: parsedSuggestions
             };
           }
           return updated;
@@ -1372,7 +1622,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
                     <>
                       <div className="text-black leading-relaxed overflow-x-hidden break-words">
                         <MarkdownWithMermaid 
-                          content={message.content} 
+                          content={stripSuggestionsFromContent(message.content)} 
                           isStreaming={message.streaming}
                           onFixDiagram={async (error) => {
                             await handleFixDiagram(index, error);
@@ -1407,6 +1657,46 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
                           </ul>
                         </div>
                       )}
+                      {/* Only show suggestions on the last message */}
+                      {(() => {
+                        // Get suggestions from message or extract from content as fallback
+                        const suggestions = message.suggestions || extractSuggestionsFromContent(message.content);
+                        if (!suggestions || suggestions.length === 0 || message.streaming || index !== messages.length - 1) {
+                          return null;
+                        }
+                        return (
+                          <div className="mt-4 flex flex-col gap-2 items-start">
+                            {suggestions.map((suggestion, idx) => (
+                              <button
+                                key={idx}
+                                type="button"
+                                onClick={() => {
+                                  if (isLoading || isVoiceMode || isBlocked) return;
+                                  // Clear suggestions from this message before submitting
+                                  setMessages((prev) => {
+                                    const updated = [...prev];
+                                    const msgIndex = updated.findIndex(m => m.id === message.id);
+                                    if (msgIndex !== -1) {
+                                      // Strip suggestions from content and clear the suggestions property
+                                      updated[msgIndex] = { 
+                                        ...updated[msgIndex], 
+                                        content: stripSuggestionsFromContent(updated[msgIndex].content),
+                                        suggestions: undefined 
+                                      };
+                                    }
+                                    return updated;
+                                  });
+                                  handleStarterClick(suggestion);
+                                }}
+                                disabled={isLoading || isVoiceMode || isBlocked}
+                                className="text-[0.75rem] font-mono uppercase tracking-wider text-gray-400 hover:text-black transition-colors px-3 py-1.5 border border-gray-300 rounded hover:border-black disabled:opacity-50 disabled:cursor-not-allowed text-left"
+                              >
+                                {suggestion}
+                              </button>
+                            ))}
+                          </div>
+                        );
+                      })()}
                     </>
                   ) : (
                     <p className="text-black leading-relaxed break-words overflow-x-hidden">
@@ -1455,6 +1745,22 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
           </div>
         ) : (
           <div className="flex-shrink-0 md:h-32">
+            {/* Conversation Starters - vertically stacked, left-aligned, above prompt input */}
+            {showSuggestions && (
+              <div className="max-w-[500px] mx-auto w-full mb-4">
+                <div className="flex flex-col gap-y-4 md:gap-y-2 items-start">
+                  {conversationStarters.map((starter, index) => (
+                    <button
+                      key={index}
+                      onClick={() => handleStarterClick(starter)}
+                      className="text-[0.75rem] font-mono uppercase tracking-wider text-gray-400 hover:text-black transition-colors text-left"
+                    >
+                      {starter}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             <form onSubmit={handleSubmit} className="relative max-w-[500px] mx-auto w-full">
               <textarea
                 ref={textareaRef}
@@ -1467,7 +1773,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
                     handleSubmit();
                   }
                 }}
-                disabled={isLoading || isVoiceMode}
+                disabled={isVoiceMode}
                 className="w-full bg-transparent border-b border-gray-300 py-2 pr-12 focus:border-black focus:outline-none transition-colors rounded-none placeholder:text-gray-300 text-black resize-none overflow-y-auto max-h-[120px] disabled:opacity-50 disabled:cursor-not-allowed"
                 placeholder={isVoiceMode ? "Voice mode active..." : "Type your message..."}
               />
