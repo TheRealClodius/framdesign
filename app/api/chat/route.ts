@@ -919,24 +919,25 @@ export async function POST(request: Request) {
         if (cached) {
           const age = Date.now() - cached.createdAt;
           const ageSeconds = age / 1000;
-          
+
           if (ageSeconds < CACHE_CONFIG.TTL_SECONDS) {
             // Use existing cache immediately, don't wait for updates
             if (cached.summary) {
               contentsToSend = recentMessages;
               cachedContent = cached.cacheName;
-              console.log(`Fast path: Using existing summary cache (age: ${ageSeconds.toFixed(1)}s)`);
+              console.log(`✓ Cache HIT: Using existing summary cache (age: ${ageSeconds.toFixed(1)}s)`);
             } else {
-              // Try to get system cache (fast operation)
-              const systemCache = await Promise.race([
-                getSystemPromptCache(ai, providerSchemas),
-                new Promise<null>((resolve) => setTimeout(() => resolve(null), 100)) // 100ms timeout
-              ]);
+              // Get system cache (no timeout - wait for completion)
+              const systemCache = await getSystemPromptCache(ai, providerSchemas);
               contentsToSend = recentMessages;
               cachedContent = systemCache || undefined;
-              console.log(`Fast path: Using system cache, no summary yet`);
+              if (systemCache) {
+                console.log(`✓ Cache HIT: Using system cache (no summary yet)`);
+              } else {
+                console.log(`⚠️  Cache MISS: System cache creation failed, proceeding without cache`);
+              }
             }
-            
+
             // Background: Update cache if needed (don't await)
             if (summaryPromise) {
               console.log("Background: Will update cache with new summary after streaming");
@@ -947,15 +948,14 @@ export async function POST(request: Request) {
             throw new Error("Cache expired");
           }
         } else {
-          // No existing cache, use slow path (but make it faster with timeouts)
+          // No existing cache, create one (no timeout - wait for completion)
           console.log("No existing cache, initializing...");
-          
-          // Get system prompt cache with timeout
-          const systemCache = await Promise.race([
-            getSystemPromptCache(ai, providerSchemas),
-            new Promise<null>((resolve) => setTimeout(() => resolve(null), 200)) // 200ms timeout
-          ]);
-          
+          const cacheStartTime = Date.now();
+
+          // Get system prompt cache without timeout
+          const systemCache = await getSystemPromptCache(ai, providerSchemas);
+          const cacheDuration = Date.now() - cacheStartTime;
+
           if (summary) {
             contentsToSend = [
               {
@@ -972,8 +972,14 @@ export async function POST(request: Request) {
             contentsToSend = recentMessages;
           }
           cachedContent = systemCache || undefined;
+
+          if (systemCache) {
+            console.log(`✓ Cache CREATED: System cache initialized in ${cacheDuration}ms`);
+          } else {
+            console.log(`⚠️  Cache MISS: System cache creation failed after ${cacheDuration}ms, proceeding without cache`);
+          }
           console.log(`Initialized cache, sending ${contentsToSend.length} messages`);
-          
+
           // Background: Create conversation cache for next time (don't await)
           if (summary) {
             getConversationCache(ai, conversationHash, summary, recentMessages, summaryUpToIndex, providerSchemas)
@@ -981,9 +987,20 @@ export async function POST(request: Request) {
           }
         }
 
-        // Log token estimates
+        // Log token estimates with cache stats
         const estimatedTokens = estimateMessageTokens(contentsToSend);
-        console.log(`Estimated tokens: ~${estimatedTokens} (limit: ${TOKEN_CONFIG.MAX_TOKENS})`);
+        let cachedTokens = 0;
+        if (cachedContent) {
+          // System prompt tokens
+          cachedTokens += estimateTokens(FRAM_SYSTEM_PROMPT);
+          // Tool schemas are also cached - estimate based on JSON size
+          const toolSchemasJson = JSON.stringify(providerSchemas);
+          cachedTokens += estimateTokens(toolSchemasJson);
+        }
+
+        console.log(`Token usage: ${estimatedTokens} request tokens${cachedContent ? ` + ${cachedTokens} cached tokens (${(cachedTokens / (estimatedTokens + cachedTokens) * 100).toFixed(1)}% cached)` : ' + 0 cached tokens (cache disabled/failed)'}`);
+        console.log(`Total context: ~${estimatedTokens + cachedTokens} tokens (limit: ${TOKEN_CONFIG.MAX_TOKENS})`);
+
         if (estimatedTokens > TOKEN_CONFIG.MAX_TOKENS) {
           console.warn(`WARNING: Estimated tokens (${estimatedTokens}) exceed safety limit (${TOKEN_CONFIG.MAX_TOKENS})`);
         }
