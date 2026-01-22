@@ -16,14 +16,14 @@ class ToolMemoryDedup {
     this.RETRIEVAL_CATEGORIES = ['retrieval']; // Tool categories to check
   }
 
-  /**
-   * Checks if a tool execution is a duplicate of a past call
-   * @param {string} sessionId - Session identifier
-   * @param {string} toolId - Tool ID
-   * @param {object} args - Tool arguments
-   * @returns {Promise<object>} - Dedup check result
-   */
-  async checkForDuplicate(sessionId, toolId, args) {
+    /**
+     * Checks if a tool execution is a duplicate of a past call
+     * @param {string} sessionId - Session identifier
+     * @param {string} toolId - Tool ID
+     * @param {object} args - Tool arguments
+     * @returns {{isDuplicate: boolean, cachedResult?: any, guidance?: string, originalCallId?: string, originalTurn?: number, similarity?: number}} - Dedup check result
+     */
+    checkForDuplicate(sessionId, toolId, args) {
     // Get tool metadata
     const metadata = toolRegistry.getToolMetadata(toolId);
 

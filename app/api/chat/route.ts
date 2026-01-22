@@ -1385,7 +1385,7 @@ export async function POST(request: Request) {
         }
 
         // Build execution context
-        const sessionId = userId || `text-session-${Date.now()}`;
+        const sessionId = userId || 'anonymous-text-session';
         const executionContext = {
           clientId: `text-${Date.now()}`,
           ws: null,
@@ -1403,7 +1403,7 @@ export async function POST(request: Request) {
         };
 
         // Pre-execution deduplication check (tool memory)
-        const dedupCheck = await toolMemoryDedup.checkForDuplicate(
+        const dedupCheck = toolMemoryDedup.checkForDuplicate(
           sessionId,
           toolName,
           functionCall.args || {}
@@ -1951,9 +1951,8 @@ export async function POST(request: Request) {
                 }
 
                 // Trigger background summarization for this turn (tool memory)
-                const sessionId = userId || `text-session-${Date.now()}`;
-                toolMemorySummarizer.enqueueSummarization(sessionId)
-                  .catch(err => console.warn(`[ToolMemory] Summarization failed for ${sessionId}:`, err));
+                toolMemorySummarizer.enqueueSummarization(userId || 'anonymous-text-session')
+                  .catch(err => console.warn(`[ToolMemory] Summarization failed:`, err));
 
                 controller.close();
               } catch (error) {
@@ -2064,9 +2063,8 @@ export async function POST(request: Request) {
               }
 
               // Trigger background summarization for this turn (tool memory)
-              const sessionId = userId || `text-session-${Date.now()}`;
-              toolMemorySummarizer.enqueueSummarization(sessionId)
-                .catch(err => console.warn(`[ToolMemory] Summarization failed for ${sessionId}:`, err));
+              toolMemorySummarizer.enqueueSummarization(userId || 'anonymous-text-session')
+                .catch(err => console.warn(`[ToolMemory] Summarization failed:`, err));
 
               controller.close();
             } catch (error) {

@@ -756,7 +756,7 @@ wss.on('connection', async (ws, req) => {
         };
 
         // Pre-execution deduplication check (tool memory)
-        const dedupCheck = await toolMemoryDedup.checkForDuplicate(
+        const dedupCheck = toolMemoryDedup.checkForDuplicate(
           clientId,
           call.name,
           call.args || {}
