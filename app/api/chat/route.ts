@@ -1380,8 +1380,11 @@ export async function POST(request: Request) {
       }
 
       // Handle all other function calls (kb_search, kb_get, end_voice_session, etc.)
-      if (functionCall && functionCall.name) {
-        const toolName = functionCall.name;
+      const otherFunctionCall = functionCalls.find(c => c.name !== "ignore_user" && c.name !== "start_voice_session");
+      const otherFunctionPart = functionCallParts.find(p => p.functionCall.name !== "ignore_user" && p.functionCall.name !== "start_voice_session");
+      
+      if (otherFunctionCall && otherFunctionCall.name) {
+        const toolName = otherFunctionCall.name;
         console.log(`Handling function call: ${toolName}`);
         
         // Initialize state controller
@@ -1407,7 +1410,7 @@ export async function POST(request: Request) {
           clientId: `text-${Date.now()}`,
           ws: null,
           geminiSession: null,
-          args: functionCall.args || {},
+          args: otherFunctionCall.args || {},
           capabilities: { voice: false },
           session: {
             isActive: state.get('isActive'),
@@ -1423,7 +1426,7 @@ export async function POST(request: Request) {
         const dedupCheck = toolMemoryDedup.checkForDuplicate(
           sessionId,
           toolName,
-          functionCall.args || {}
+          otherFunctionCall.args || {}
         );
 
         let result;
@@ -1436,7 +1439,7 @@ export async function POST(request: Request) {
           duration = Date.now() - startTime; // Should be ~0ms (instant)
         } else {
         // Check for loop before execution
-        const loopCheck = loopDetector.detectLoop(sessionId, turnNumber, toolName, functionCall.args || {});
+        const loopCheck = loopDetector.detectLoop(sessionId, turnNumber, toolName, otherFunctionCall.args || {});
         if (loopCheck.detected) {
           console.warn(`[Loop Detection] Loop detected for ${toolName}: ${loopCheck.message}`);
           result = {
@@ -1449,7 +1452,7 @@ export async function POST(request: Request) {
           };
         } else {
           // Record call
-          loopDetector.recordCall(sessionId, turnNumber, toolName, functionCall.args || {}, null);
+          loopDetector.recordCall(sessionId, turnNumber, toolName, otherFunctionCall.args || {}, null);
 
           // Execute tool through registry with retry logic
           result = await retryToolExecution(
@@ -1478,8 +1481,8 @@ export async function POST(request: Request) {
           toolMemoryStore.recordToolCall(sessionId, {
             id: callId,
             toolId: toolName,
-            args: functionCall.args || {},
-            argsHash: hashArgs(functionCall.args || {}),
+            args: otherFunctionCall.args || {},
+            argsHash: hashArgs(otherFunctionCall.args || {}),
             timestamp: Date.now(),
             turn: 1, // TODO: Track actual turn number
             duration: duration,
@@ -1497,8 +1500,8 @@ export async function POST(request: Request) {
             position: observability.toolCalls.length + 1,
             chainPosition: 0,
             toolId: toolName,
-            args: functionCall.args || {},
-            thoughtSignature: functionCallPart?.thoughtSignature,
+            args: otherFunctionCall.args || {},
+            thoughtSignature: otherFunctionPart?.thoughtSignature,
             startTime: startTime,
             duration: duration,
             ok: result.ok,
@@ -1566,10 +1569,10 @@ export async function POST(request: Request) {
             role: "model" as const,
             parts: [
               // Use the preserved functionCallPart which includes thoughtSignature
-              (functionCallPart as FunctionCallPart) || {
+              (otherFunctionPart as FunctionCallPart) || {
                 functionCall: {
                   name: toolName,
-                  args: functionCall.args || {}
+                  args: otherFunctionCall.args || {}
                 }
               }
             ]
@@ -1678,8 +1681,8 @@ export async function POST(request: Request) {
 
               try {
                 // Emit status for the initial tool call
-                if (functionCall) {
-                  const initialStatus = buildToolStatus(toolName, functionCall.args || {});
+                if (otherFunctionCall) {
+                  const initialStatus = buildToolStatus(toolName, otherFunctionCall.args || {});
                   const statusEvent = encodeStatusEvent(initialStatus);
                   controller.enqueue(encoder.encode(statusEvent));
                 }
