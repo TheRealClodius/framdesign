@@ -157,7 +157,7 @@ class ToolMemoryStore {
     }
 
     // Only check calls with the same tool ID
-    const sameTool Calls = session.toolCalls.filter(call =>
+    const sameToolCalls = session.toolCalls.filter(call =>
       call.toolId === toolId && call.ok
     );
 
