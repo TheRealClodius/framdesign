@@ -1,0 +1,36 @@
+{
+  "toolId": "query_tool_memory",
+  "version": "1.0.0",
+  "category": "utility",
+  "description": "Query past tool executions in this conversation. Returns summaries of previous tool calls to avoid redundant queries. Use this BEFORE calling expensive tools like kb_search or perplexity_search to check if the information was already retrieved. Helps make conversations faster by reusing past results.",
+  "parameters": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "filter_tool": {
+        "type": "string",
+        "description": "Filter by specific tool ID (e.g., 'kb_search', 'perplexity_search', 'kb_get')"
+      },
+      "filter_time_range": {
+        "type": "string",
+        "enum": ["last_turn", "last_3_turns", "all"],
+        "description": "Time range to query. 'last_turn' for most recent turn, 'last_3_turns' for recent history, 'all' for entire conversation (default: 'all')",
+        "default": "all"
+      },
+      "include_errors": {
+        "type": "boolean",
+        "description": "Include failed tool calls in results (default: false)",
+        "default": false
+      },
+      "get_full_response_for": {
+        "type": "string",
+        "description": "Call ID to retrieve full response for (get call_id from initial query results)"
+      }
+    }
+  },
+  "sideEffects": "read_only",
+  "idempotent": true,
+  "requiresConfirmation": false,
+  "allowedModes": ["voice", "text"],
+  "latencyBudgetMs": 300
+}

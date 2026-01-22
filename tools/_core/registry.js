@@ -45,6 +45,7 @@ const HANDLER_IMPORTS = {
   'kb_get': () => import('../kb-get/handler.js'),
   'kb_search': () => import('../kb-search/handler.js'),
   'perplexity_search': () => import('../perplexity-search/handler.js'),
+  'query_tool_memory': () => import('../query-tool-memory/handler.js'),
   'start_voice_session': () => import('../start-voice-session/handler.js'),
 };
 

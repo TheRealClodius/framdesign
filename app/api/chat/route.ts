@@ -24,6 +24,11 @@ import { toolRegistry } from '@/tools/_core/registry';
 import { createStateController } from '@/tools/_core/state-controller';
 import { retryWithBackoff as retryToolExecution } from '@/tools/_core/retry-handler';
 import { UsageService } from '@/lib/services/usage-service';
+import { toolMemoryStore } from '@/tools/_core/tool-memory-store';
+import { toolMemoryDedup } from '@/tools/_core/tool-memory-dedup';
+import { toolMemorySummarizer } from '@/tools/_core/tool-memory-summarizer';
+import { hashArgs } from '@/tools/_core/utils/hash-args';
+import { estimateTokens as estimateTokensForJson } from '@/tools/_core/utils/estimate-tokens';
 
 // Type definitions
 type ProviderSchema = {
@@ -763,8 +768,8 @@ export async function POST(request: Request) {
       parametersJsonSchema: tool.jsonSchema  // Canonical JSON Schema from registry
     }));
 
-    // Enable caching
-    const ENABLE_CACHING = true;
+    // Caching disabled due to instability with gemini-3-flash-preview (Internal Errors)
+    const ENABLE_CACHING = false;
 
     // Get conversation hash for cache tracking
     const conversationHash = hashConversation(messages, timeoutExpired);
@@ -1380,6 +1385,7 @@ export async function POST(request: Request) {
         }
 
         // Build execution context
+        const sessionId = userId || `text-session-${Date.now()}`;
         const executionContext = {
           clientId: `text-${Date.now()}`,
           ws: null,
@@ -1396,19 +1402,52 @@ export async function POST(request: Request) {
           }
         };
 
-        // Execute tool through registry with retry logic
-        const startTime = Date.now();
-        const result = await retryToolExecution(
-          () => toolRegistry.executeTool(toolName, executionContext),
-          {
-            mode: 'text',
-            maxRetries: 3,
-            toolId: toolName,
-            toolMetadata: toolMetadata ? (toolMetadata as object) : {},
-            clientId: `text-${Date.now()}`
-          }
+        // Pre-execution deduplication check (tool memory)
+        const dedupCheck = await toolMemoryDedup.checkForDuplicate(
+          sessionId,
+          toolName,
+          functionCall.args || {}
         );
-        const duration = Date.now() - startTime;
+
+        let result;
+        let duration;
+        const startTime = Date.now();
+
+        if (dedupCheck.isDuplicate) {
+          console.log(`[ToolMemory] Reusing cached result for ${toolName} (call: ${dedupCheck.originalCallId})`);
+          result = dedupCheck.cachedResult;
+          duration = Date.now() - startTime; // Should be ~0ms (instant)
+        } else {
+          // Execute tool through registry with retry logic
+          result = await retryToolExecution(
+            () => toolRegistry.executeTool(toolName, executionContext),
+            {
+              mode: 'text',
+              maxRetries: 3,
+              toolId: toolName,
+              toolMetadata: toolMetadata ? (toolMetadata as object) : {},
+              clientId: `text-${Date.now()}`
+            }
+          );
+          duration = Date.now() - startTime;
+
+          // Record in tool memory store (post-execution)
+          const callId = `call-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+          toolMemoryStore.recordToolCall(sessionId, {
+            id: callId,
+            toolId: toolName,
+            args: functionCall.args || {},
+            argsHash: hashArgs(functionCall.args || {}),
+            timestamp: Date.now(),
+            turn: 1, // TODO: Track actual turn number
+            duration: duration,
+            fullResponse: result,
+            summary: null, // Will be generated async
+            ok: result.ok,
+            error: result.ok ? null : result.error,
+            tokens: estimateTokensForJson(JSON.stringify(result))
+          });
+        }
 
         // Collect observability data
         if (observability) {
@@ -1910,7 +1949,12 @@ export async function POST(request: Request) {
                     .then(usage => console.log(`[Usage] Recorded ${generatedTokens} tokens for ${userId}. Total: ${usage.totalTokens}`))
                     .catch(err => console.warn(`[Usage] Failed to record usage for ${userId}:`, err));
                 }
-                
+
+                // Trigger background summarization for this turn (tool memory)
+                const sessionId = userId || `text-session-${Date.now()}`;
+                toolMemorySummarizer.enqueueSummarization(sessionId)
+                  .catch(err => console.warn(`[ToolMemory] Summarization failed for ${sessionId}:`, err));
+
                 controller.close();
               } catch (error) {
                 console.error("Error in chained tool execution:", error);
@@ -2018,6 +2062,11 @@ export async function POST(request: Request) {
                   .then(usage => console.log(`[Usage] Recorded ${generatedTokens} tokens for ${userId}. Total: ${usage.totalTokens}`))
                   .catch(err => console.warn(`[Usage] Failed to record usage for ${userId}:`, err));
               }
+
+              // Trigger background summarization for this turn (tool memory)
+              const sessionId = userId || `text-session-${Date.now()}`;
+              toolMemorySummarizer.enqueueSummarization(sessionId)
+                .catch(err => console.warn(`[ToolMemory] Summarization failed for ${sessionId}:`, err));
 
               controller.close();
             } catch (error) {

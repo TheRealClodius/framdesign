@@ -31,6 +31,11 @@ import { ErrorType } from '../tools/_core/error-types.js';
 import { retryWithBackoff } from '../tools/_core/retry-handler.js';
 import { loopDetector } from '../tools/_core/loop-detector.js';
 import { UsageService } from '../lib/services/usage-service.ts';
+import { toolMemoryStore } from '../tools/_core/tool-memory-store.js';
+import { toolMemoryDedup } from '../tools/_core/tool-memory-dedup.js';
+import { toolMemorySummarizer } from '../tools/_core/tool-memory-summarizer.js';
+import { hashArgs } from '../tools/_core/utils/hash-args.js';
+import { estimateTokensForObject } from '../tools/_core/utils/estimate-tokens.js';
 import {
   startSession,
   endSession,
@@ -750,23 +755,40 @@ wss.on('connection', async (ws, req) => {
           }
         };
 
-        // Execute tool through registry with retry logic (text mode only)
-        const startTime = Date.now();
-        console.log(`[${clientId}] Executing tool: ${call.name} (mode: ${currentMode})`);
-        const result = await retryWithBackoff(
-          () => {
-            console.log(`[${clientId}] Calling executeTool for ${call.name}...`);
-            return toolRegistry.executeTool(call.name, executionContext);
-          },
-          {
-            mode: currentMode,
-            maxRetries: 3,
-            toolId: call.name,
-            toolMetadata: toolMetadata,
-            clientId: clientId
-          }
+        // Pre-execution deduplication check (tool memory)
+        const dedupCheck = await toolMemoryDedup.checkForDuplicate(
+          clientId,
+          call.name,
+          call.args || {}
         );
-        const duration = Date.now() - startTime;
+
+        let result;
+        let duration;
+        const startTime = Date.now();
+
+        if (dedupCheck.isDuplicate) {
+          console.log(`[${clientId}] [ToolMemory] Reusing cached result for ${call.name} (call: ${dedupCheck.originalCallId})`);
+          result = dedupCheck.cachedResult;
+          duration = Date.now() - startTime; // Should be ~0ms (instant)
+        } else {
+          // Execute tool through registry with retry logic (text mode only)
+          console.log(`[${clientId}] Executing tool: ${call.name} (mode: ${currentMode})`);
+          result = await retryWithBackoff(
+            () => {
+              console.log(`[${clientId}] Calling executeTool for ${call.name}...`);
+              return toolRegistry.executeTool(call.name, executionContext);
+            },
+            {
+              mode: currentMode,
+              maxRetries: 3,
+              toolId: call.name,
+              toolMetadata: toolMetadata,
+              clientId: clientId
+            }
+          );
+          duration = Date.now() - startTime;
+        }
+
         console.log(`[${clientId}] Tool ${call.name} completed in ${duration}ms (ok: ${result.ok})`);
 
         // Record response metrics (NEW)
@@ -792,6 +814,25 @@ wss.on('connection', async (ws, req) => {
 
         // Record session tool call (NEW)
         recordSessionToolCall(clientId, call.name, call.args, duration, result.ok);
+
+        // Record in tool memory store (NEW - Tool Memory)
+        if (!dedupCheck.isDuplicate) {
+          const callId = `call-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+          toolMemoryStore.recordToolCall(clientId, {
+            id: callId,
+            toolId: call.name,
+            args: call.args || {},
+            argsHash: hashArgs(call.args || {}),
+            timestamp: Date.now(),
+            turn: currentTurn,
+            duration: duration,
+            fullResponse: result,
+            summary: null, // Will be generated async
+            ok: result.ok,
+            error: result.ok ? null : result.error,
+            tokens: estimateTokensForObject(result)
+          });
+        }
 
         // Record call for loop detection (NEW)
         const recordKey = loopCheckKey;
@@ -998,6 +1039,10 @@ wss.on('connection', async (ws, req) => {
           ws.send(JSON.stringify({ type: 'turn_complete' }));
         }
         state.set('hasSentGeneratingSignal', false);
+
+        // Trigger background summarization for completed turn (tool memory)
+        toolMemorySummarizer.enqueueSummarization(clientId)
+          .catch(err => console.warn(`[${clientId}] [ToolMemory] Summarization failed:`, err));
 
         // Start new turn for loop detection and metrics (NEW)
         currentTurn++;
