@@ -787,6 +787,14 @@ wss.on('connection', async (ws, req) => {
             }
           );
           duration = Date.now() - startTime;
+          
+          // Enhanced timing log for slow tool calls
+          if (duration > 500) {
+            console.log(`[${clientId}] ⏱️ SLOW TOOL CALL: ${call.name} took ${duration}ms`);
+            if (result.meta?._timing) {
+              console.log(`[${clientId}] ⏱️ Breakdown: ${JSON.stringify(result.meta._timing)}`);
+            }
+          }
         }
 
         console.log(`[${clientId}] Tool ${call.name} completed in ${duration}ms (ok: ${result.ok})`);

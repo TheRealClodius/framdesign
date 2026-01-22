@@ -52,6 +52,7 @@ export class VoiceService extends EventTarget {
   private heartbeatTimer: NodeJS.Timeout | null = null;
   private conversationHistory: Array<{ role: string; content: string }> = [];
   private pendingRequest: string | null = null;
+  private currentUserId: string | undefined = undefined;
   private isIntentionallyStopping = false;
   private startPromiseResolve: ((value: void) => void) | null = null;
   private startPromiseReject: ((reason?: unknown) => void) | null = null;
@@ -93,11 +94,11 @@ export class VoiceService extends EventTarget {
     }
     
     this.pendingRequest = pendingRequest;
+    this.currentUserId = userId || (typeof window !== 'undefined' ? localStorage.getItem('fram_user_id') : undefined) || undefined;
+    
     if (pendingRequest) {
       console.log(`📌 Voice session will address pending request: "${pendingRequest}"`);
     }
-
-    const currentUserId = userId || (typeof window !== 'undefined' ? localStorage.getItem('fram_user_id') : undefined);
 
     // Ensure any previous session is fully cleaned up before starting
     // This is critical for proper reinitialization after stopping
@@ -222,7 +223,7 @@ export class VoiceService extends EventTarget {
             type: 'start',
             conversationHistory: this.conversationHistory,
             pendingRequest: this.pendingRequest,
-            userId: currentUserId
+            userId: this.currentUserId
           }));
 
           // Start heartbeat to detect disconnections

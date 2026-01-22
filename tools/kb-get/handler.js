@@ -86,14 +86,18 @@ export async function execute(context) {
     }
 
     // Generate a generic embedding (Qdrant accepts vectors directly)
+    const embeddingStart = Date.now();
     const dummyEmbedding = await generateQueryEmbedding('document');
+    const embeddingDuration = Date.now() - embeddingStart;
 
     // Get all chunks for this entity (filtered by entity_id in search)
+    const searchStart = Date.now();
     const allResults = await searchSimilar(
       dummyEmbedding,
       100,
       { entity_id: entityId } // Filter by entity_id directly in Qdrant
     );
+    const searchDuration = Date.now() - searchStart;
 
     // Map results to chunks (already filtered by entity_id)
     const matchingChunks = allResults.map((result) => ({
@@ -192,6 +196,14 @@ export async function execute(context) {
     const latency = Date.now() - startTime;
     console.log(`[kb_get] Retrieved ${matchingChunks.length} chunks in ${latency}ms (type: ${entityType})`);
 
+    // Add detailed timing for observability
+    const finalTiming = {
+      total: latency,
+      embedding: embeddingDuration,
+      search: searchDuration,
+      processing: latency - (embeddingDuration + searchDuration)
+    };
+
     if (isAsset) {
       // Assets are single chunks - return asset-specific data with GCS URL resolution
       const blobId = metadata.blob_id;
@@ -263,7 +275,11 @@ export async function execute(context) {
           related_entities: tryParseJSON(metadata.related_entities) || [],
           tags: tryParseJSON(metadata.tags) || [],
           metadata: extractRelevantMetadata(metadata),
-          _instructions: "Use the 'markdown' field directly in your response"
+          _instructions: "Use the 'markdown' field directly in your response",
+          _timing: finalTiming
+        },
+        meta: {
+          _timing: finalTiming
         }
       };
     } else {
@@ -282,7 +298,11 @@ export async function execute(context) {
           title: metadata.title || entityId,
           content: fullText,
           metadata: extractRelevantMetadata(metadata),
-          chunks_count: matchingChunks.length
+          chunks_count: matchingChunks.length,
+          _timing: finalTiming
+        },
+        meta: {
+          _timing: finalTiming
         }
       };
     }

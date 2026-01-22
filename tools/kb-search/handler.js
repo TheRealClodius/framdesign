@@ -268,7 +268,16 @@ export async function execute(context) {
     const latency = Date.now() - startTime;
     const chunksSearched = rawResults.length;
     const uniqueEntities = deduplicatedResults.length;
-    console.log(`[kb_search] Found ${uniqueEntities} unique entities (from ${chunksSearched} chunks) in ${latency}ms`);
+    
+    // Add detailed timing to the result for observability
+    const finalTiming = {
+      total: latency,
+      embedding: embeddingDuration,
+      search: searchDuration,
+      processing: latency - (embeddingDuration + searchDuration)
+    };
+    
+    console.log(`[kb_search] Found ${uniqueEntities} unique entities (from ${chunksSearched} chunks) in ${latency}ms`, finalTiming);
 
     return {
       ok: true,
@@ -278,14 +287,10 @@ export async function execute(context) {
         query: args.query,
         filters_applied: args.filters || null,
         clamped: topK !== originalTopK,
-        _timing: {
-          embeddingDuration,
-          searchDuration
-        }
+        _timing: finalTiming
       },
       meta: {
-        embeddingDuration,
-        searchDuration
+        _timing: finalTiming
       }
     };
   } catch (error) {
