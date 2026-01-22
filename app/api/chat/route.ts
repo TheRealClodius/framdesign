@@ -246,6 +246,93 @@ function trimToWords(text: string, maxWords: number): string {
 }
 
 /**
+ * Detects if the assistant's message contains an explicit question
+ * Returns true if message ends with "?" or contains common question patterns
+ */
+function containsQuestion(text: string): boolean {
+  if (!text?.trim()) return false;
+
+  const normalized = text.trim();
+
+  // Check for question mark (primary indicator)
+  if (normalized.includes('?')) return true;
+
+  // Check for question patterns (case-insensitive)
+  const questionPatterns = [
+    /\b(what|how|why|when|where|which|who|can|could|would|should|do|does|did|is|are|was|were)\b.+\?/i,
+    /\b(tell me|let me know|wondering|curious about)\b/i
+  ];
+
+  return questionPatterns.some(pattern => pattern.test(normalized));
+}
+
+/**
+ * Generates 2 contextual suggestions for the user based on the agent's question
+ * Uses a lightweight, fast Gemini call
+ */
+async function generateSuggestions(
+  ai: GoogleGenAI,
+  agentQuestion: string,
+  conversationContext: Array<{ role: string; content: string }>
+): Promise<string[]> {
+  try {
+    // Build a concise context from last 3 messages
+    const recentContext = conversationContext.slice(-3)
+      .map(m => `${m.role === 'user' ? 'User' : 'Fram'}: ${m.content.substring(0, 200)}`)
+      .join('\n');
+
+    const prompt = `Based on this conversation and the agent's question, generate exactly 2 brief, relevant suggestions the user might want to say.
+
+CONTEXT:
+${recentContext}
+
+AGENT'S QUESTION:
+${agentQuestion}
+
+REQUIREMENTS:
+- Each suggestion: 5-10 words maximum
+- Natural, conversational responses
+- Distinct from each other (different angles)
+- No quotation marks, no numbering
+- One suggestion per line
+
+Generate 2 suggestions now:`;
+
+    const result = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: [{
+        role: "user" as const,
+        parts: [{ text: prompt }],
+      }],
+    });
+
+    const responseText = result.candidates?.[0]?.content?.parts?.[0]?.text || "";
+
+    // Parse suggestions (one per line)
+    const suggestions = responseText
+      .split('\n')
+      .map(s => s.trim())
+      .filter(s => s.length > 0 && s.length <= 150) // Safety: max 150 chars per suggestion
+      .slice(0, 2); // Ensure exactly 2
+
+    // Return suggestions if we got 2
+    if (suggestions.length === 2) {
+      console.log('Generated suggestions:', suggestions);
+      return suggestions;
+    }
+
+    // Fail silently if generation unsuccessful
+    console.warn('Failed to generate 2 suggestions, returning empty array');
+    return [];
+
+  } catch (error) {
+    console.error('Error generating suggestions:', error);
+    // Return empty array on failure (graceful degradation)
+    return [];
+  }
+}
+
+/**
  * Builds a user-friendly status message for tool execution
  * @param toolId - Tool identifier
  * @param args - Tool arguments
@@ -1550,6 +1637,7 @@ export async function POST(request: Request) {
             async start(controller) {
               const encoder = new TextEncoder();
               let totalBytesSent = 0;
+              let finalResponseText = ""; // Track accumulated response text across all chain iterations
 
               try {
                 // Emit status for the initial tool call
@@ -1558,7 +1646,7 @@ export async function POST(request: Request) {
                   const statusEvent = encodeStatusEvent(initialStatus);
                   controller.enqueue(encoder.encode(statusEvent));
                 }
-                
+
                 // Loop to handle chained function calls
                 while (chainCount < MAX_CHAIN_LENGTH) {
                   // Collect all chunks from current stream
@@ -1820,6 +1908,7 @@ export async function POST(request: Request) {
 
                   // No more function calls, stream the text response
                   if (responseText) {
+                    finalResponseText = responseText; // Store for suggestion generation
                     const encoded = encoder.encode(responseText);
                     totalBytesSent += encoded.length;
                     controller.enqueue(encoded);
@@ -1847,7 +1936,22 @@ export async function POST(request: Request) {
                     }
                   }).catch((err) => console.warn("Background summarization failed:", err));
                 }
-                
+
+                // Check if final response contains question and generate suggestions
+                if (finalResponseText && containsQuestion(finalResponseText)) {
+                  console.log('Question detected in chained tool response, generating suggestions...');
+                  const contextMessages = messages.slice(-5).map((m: { role: string; content: string }) => ({
+                    role: m.role,
+                    content: m.content
+                  }));
+                  const generatedSuggestions = await generateSuggestions(ai, finalResponseText, contextMessages);
+
+                  if (generatedSuggestions && generatedSuggestions.length > 0) {
+                    const suggestionsMetadata = `\n---SUGGESTIONS---\n${JSON.stringify({ suggestions: generatedSuggestions })}`;
+                    controller.enqueue(encoder.encode(suggestionsMetadata));
+                  }
+                }
+
                   // Append observability data if enabled
                   if (observability) {
                     try {
@@ -1955,7 +2059,35 @@ export async function POST(request: Request) {
                   }
                 }).catch((err) => console.warn("Background summarization failed:", err));
               }
-              
+
+              // Check if response contains question and generate suggestions
+              let generatedSuggestions: string[] | undefined;
+              if (bufferedChunks.length > 0 || chunksProcessed > 0) {
+                let fullResponseText = '';
+                for (const chunk of bufferedChunks) {
+                  const typed = chunk as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
+                  const parts = typed.candidates?.[0]?.content?.parts || [];
+                  for (const part of parts) {
+                    if (part.text) fullResponseText += part.text;
+                  }
+                }
+
+                if (containsQuestion(fullResponseText)) {
+                  console.log('Question detected, generating suggestions...');
+                  const contextMessages = messages.slice(-5).map((m: { role: string; content: string }) => ({
+                    role: m.role,
+                    content: m.content
+                  }));
+                  generatedSuggestions = await generateSuggestions(ai, fullResponseText, contextMessages);
+                }
+              }
+
+              // Append suggestions metadata if generated
+              if (generatedSuggestions && generatedSuggestions.length > 0) {
+                const suggestionsMetadata = `\n---SUGGESTIONS---\n${JSON.stringify({ suggestions: generatedSuggestions })}`;
+                controller.enqueue(encoder.encode(suggestionsMetadata));
+              }
+
               // Append observability data if enabled
               if (observability) {
                 observability.finalResponseLength = bytesSent;

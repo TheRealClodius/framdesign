@@ -93,48 +93,6 @@ const nextConfig: NextConfig = {
         moduleIds: 'deterministic',
       };
       
-      // Ensure tool handlers are treated as external or handled correctly
-      config.externals = config.externals || [];
-      // Don't externalize tool handlers - we want them bundled but with correct exports
-      
-      // Externalize native .node modules - they should be loaded at runtime, not bundled
-      // This prevents Webpack from trying to parse binary files
-      const originalExternals = config.externals;
-      const externalizeNativeModules = ({ request, context }: { request?: string; context?: string }, callback: (err?: Error | null, result?: string) => void) => {
-        // Externalize LanceDB and its native platform-specific packages
-        if (request && typeof request === 'string') {
-          // Externalize the main @lancedb/lancedb package entirely
-          // This ensures all native binary loading happens at runtime via Node.js
-          if (request === '@lancedb/lancedb' || request.startsWith('@lancedb/lancedb/')) {
-            return callback(null, `commonjs ${request}`);
-          }
-          // Match platform-specific LanceDB packages
-          if (request.match(/^@lancedb\/lancedb-(darwin|linux|win32)-(arm64|x64)/)) {
-            return callback(null, `commonjs ${request}`);
-          }
-          // Externalize any .node file imports
-          if (request.endsWith('.node')) {
-            return callback(null, `commonjs ${request}`);
-          }
-          // Also check if the request is for a file path ending in .node
-          if (context && context.endsWith('.node')) {
-            return callback(null, `commonjs ${request}`);
-          }
-        }
-        callback();
-      };
-      
-      if (Array.isArray(originalExternals)) {
-        config.externals = [...originalExternals, externalizeNativeModules];
-      } else if (typeof originalExternals === 'function') {
-        config.externals = [originalExternals, externalizeNativeModules];
-      } else {
-        config.externals = [originalExternals, externalizeNativeModules];
-      }
-      
-      // Note: .node files are handled via externals configuration above
-      // Webpack will skip bundling them and they'll be loaded at runtime by Node.js
-      
       // Configure webpack to handle dynamic imports with computed paths
       // This allows the tool registry to dynamically import handlers
       // Note: Webpack will try to bundle all possible handler imports
@@ -182,12 +140,62 @@ const nextConfig: NextConfig = {
 
     // Optimize compilation performance in development
     if (dev) {
-      // DISABLED: filesystem cache causes hangs on iCloud Drive
-      // Use memory cache instead for better performance on slow file systems
-      config.cache = false;
+      // Use memory cache instead of filesystem cache to avoid hangs on iCloud Drive
+      // Memory cache is faster and doesn't require slow file system operations
+      config.cache = {
+        type: 'memory',
+        maxGenerations: 1, // Keep only one generation to reduce memory usage
+      };
       
       // Optimize module resolution
       config.resolve.symlinks = false;
+      
+      // Reduce file system scanning by ignoring large directories
+      config.watchOptions = {
+        ignored: [
+          '**/node_modules/**',
+          '**/.git/**',
+          '**/.next/**',
+          '**/public/kb-assets/**', // Large asset directory
+          '**/voice-server/node_modules/**',
+          '**/tests/**',
+          '**/scripts/**',
+          '**/.cursor/**',
+        ],
+        aggregateTimeout: 300, // Delay rebuild after first change
+        poll: false, // Disable polling on iCloud Drive (causes hangs)
+      };
+      
+      // Reduce module resolution attempts - use simpler resolution
+      config.resolve.unsafeCache = true; // Cache module resolution (faster)
+      
+      // Tell webpack to not try to resolve certain paths eagerly
+      // This prevents webpack from scanning the entire tools directory on startup
+      config.resolve.modules = [
+        'node_modules',
+        ...(config.resolve.modules || []).filter((m: string) => m !== __dirname),
+      ];
+      
+      // Limit the number of files webpack processes
+      config.optimization = {
+        ...config.optimization,
+        removeAvailableModules: false, // Don't remove modules (faster on slow FS)
+        removeEmptyChunks: false, // Don't remove empty chunks (faster)
+        moduleIds: 'deterministic', // Use deterministic IDs (faster)
+        chunkIds: 'deterministic', // Use deterministic chunk IDs (faster)
+      };
+      
+      // Reduce webpack's file system operations
+      // Skip parsing for certain large modules that don't need it
+      if (!config.module) config.module = {};
+      if (!Array.isArray(config.module.noParse)) {
+        config.module.noParse = [];
+      }
+      // Add patterns to skip parsing (webpack won't analyze these files)
+      config.module.noParse.push(
+        /node_modules\/mermaid/,
+        /node_modules\/@google\/genai/,
+      );
       
       // Reduce logging overhead
       config.infrastructureLogging = {

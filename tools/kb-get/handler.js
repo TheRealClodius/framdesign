@@ -16,8 +16,11 @@ async function loadBlobService() {
       resolveBlobUrl = blobModule.resolveBlobUrl || blobModule.default?.resolveBlobUrl;
     } catch (importError) {
       // Fallback for Node.js runtime (voice server)
+      // Use a function to create the import path dynamically so webpack doesn't analyze it
       try {
-        const blobModule = await import('../../lib/services/blob-storage-service.js');
+        const getImportPath = (base) => `../../lib/services/${base}`;
+        const blobPath = getImportPath('blob-storage-service');
+        const blobModule = await import(/* webpackIgnore: true */ blobPath);
         resolveBlobUrl = blobModule.resolveBlobUrl || blobModule.default?.resolveBlobUrl;
       } catch (fallbackError) {
         console.warn('[kb_get] Failed to load blob storage service:', fallbackError);
@@ -107,8 +110,10 @@ export async function execute(context) {
       if (parts.length === 2) {
         const [type, name] = parts;
         
-        // Special case: uipath_delegate -> desktop_agent_uipath
+        // Special cases for common ID mismatches
         if (name === 'uipath_delegate' && type === 'project') {
+          suggestion = ' Did you mean "project:desktop_agent_uipath"?';
+        } else if (name === 'uipath_desktop_agent' && type === 'project') {
           suggestion = ' Did you mean "project:desktop_agent_uipath"?';
         } else {
           // Try to find similar entity IDs by searching for entities of the same type
@@ -129,17 +134,31 @@ export async function execute(context) {
               }
             }
             
-            // Find similar names (simple string similarity)
+            // Find similar names (improved string similarity with word order tolerance)
             const similarIds = Array.from(entityIds).filter(id => {
               const idName = id.split(':')[1];
               if (!idName) return false;
-              // Check if names share common words or are similar
-              const nameWords = name.toLowerCase().split('_');
-              const idWords = idName.toLowerCase().split('_');
-              const commonWords = nameWords.filter(w => idWords.includes(w));
-              return commonWords.length > 0 || 
-                     idName.toLowerCase().includes(name.toLowerCase()) ||
-                     name.toLowerCase().includes(idName.toLowerCase());
+              
+              // Normalize names for comparison
+              const nameWords = new Set(name.toLowerCase().split('_').filter(w => w.length > 0));
+              const idWords = new Set(idName.toLowerCase().split('_').filter(w => w.length > 0));
+              
+              // Check if names share common words (order-independent)
+              const commonWords = [...nameWords].filter(w => idWords.has(w));
+              const allWords = new Set([...nameWords, ...idWords]);
+              
+              // Calculate similarity: common words / total unique words
+              // If they share most words (even in different order), they're similar
+              const similarity = commonWords.length / Math.max(allWords.size, 1);
+              
+              // Also check substring matches for partial matches
+              const nameLower = name.toLowerCase();
+              const idNameLower = idName.toLowerCase();
+              
+              return similarity >= 0.5 || // At least 50% word overlap
+                     commonWords.length >= 2 || // At least 2 common words
+                     idNameLower.includes(nameLower) ||
+                     nameLower.includes(idNameLower);
             });
             
             if (similarIds.length > 0) {

@@ -1,15 +1,15 @@
 /**
  * Gemini Native Provider Adapter
  *
- * Converts canonical JSON Schema to Gemini Live API format.
+ * Converts canonical JSON Schema to Gemini SDK format (Type.* enums).
  *
- * IMPORTANT: Gemini Live API requires LOWERCASE type strings in JSON schemas.
- * Using uppercase (STRING, OBJECT) causes silent failures where tools are ignored.
- * See: https://ai.google.dev/gemini-api/docs/function-calling
+ * Used for Gemini Live API which requires Type.STRING, Type.OBJECT, etc.
  */
 
+import { Type } from '@google/genai';
+
 /**
- * Convert tool definition to Gemini Live API format
+ * Convert tool definition to Gemini SDK format
  *
  * @param {object} toolDefinition - Tool from schema.json
  * @returns {object} - Gemini functionDeclarations format
@@ -40,30 +40,29 @@ export function convertAllTools(tools) {
 }
 
 /**
- * Recursively convert JSON Schema to Gemini Live API format
+ * Recursively convert JSON Schema to Gemini SDK format
  *
  * @param {object} jsonSchema - JSON Schema object
- * @returns {object} - Gemini schema with lowercase type strings
+ * @returns {object} - Gemini schema with Type.* enums
  *
- * Type mapping (all lowercase for Gemini Live API compatibility):
- * - 'string' -> 'string'
- * - 'number' | 'integer' -> 'number'
- * - 'boolean' -> 'boolean'
- * - 'object' -> 'object' (recursively convert properties)
- * - 'array' -> 'array' (recursively convert items)
+ * Type mapping:
+ * - 'string' -> Type.STRING
+ * - 'number' | 'integer' -> Type.NUMBER
+ * - 'boolean' -> Type.BOOLEAN
+ * - 'object' -> Type.OBJECT (recursively convert properties)
+ * - 'array' -> Type.ARRAY (recursively convert items)
  */
 function convertToGeminiSchema(jsonSchema) {
-  // Gemini Live API requires lowercase type strings
   const TYPE_MAP = {
-    'string': 'string',
-    'number': 'number',
-    'integer': 'number',
-    'boolean': 'boolean',
-    'object': 'object',
-    'array': 'array'
+    'string': Type.STRING,
+    'number': Type.NUMBER,
+    'integer': Type.NUMBER,
+    'boolean': Type.BOOLEAN,
+    'object': Type.OBJECT,
+    'array': Type.ARRAY
   };
 
-  const geminiSchema = { type: TYPE_MAP[jsonSchema.type] || 'string' };
+  const geminiSchema = { type: TYPE_MAP[jsonSchema.type] || Type.STRING };
 
   if (jsonSchema.type === 'object' && jsonSchema.properties) {
     geminiSchema.properties = {};

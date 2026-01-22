@@ -17,6 +17,7 @@ export type Message = {
   isVoiceTranscript?: boolean; // Marks messages that originated from voice transcripts
   citations?: Citation[]; // Citations from web search tools (perplexity_search)
   images?: string[]; // Image markdown from kb_get/kb_search tools (voice mode)
+  suggestions?: string[]; // AI-generated suggestions for this message
 };
 
 /**
