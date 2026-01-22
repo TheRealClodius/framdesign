@@ -1561,6 +1561,18 @@ export async function POST(request: Request) {
               }
             });
           }
+          
+          // Truncate large kb_get content field to reduce API latency
+          if (toolName === 'kb_get' && cleanedResultData.content) {
+            const maxLength = 2000; // ~500 tokens
+            if (cleanedResultData.content.length > maxLength) {
+              const originalLength = cleanedResultData.content.length;
+              const truncated = cleanedResultData.content.substring(0, maxLength);
+              cleanedResultData.content = truncated + '\n\n... [Content truncated for performance. Full content available in chunks.]';
+              cleanedResultData._truncated = true;
+              console.log(`[Performance] Truncated kb_get content from ${originalLength} to ${maxLength} chars`);
+            }
+          }
         }
 
         const updatedContents = [
@@ -1891,6 +1903,18 @@ export async function POST(request: Request) {
                             delete r.metadata.vector;
                           }
                         });
+                      }
+                      
+                      // Truncate large kb_get content field to reduce API latency
+                      if (chainedToolName === 'kb_get' && cleanedChainedResultData.content) {
+                        const maxLength = 2000; // ~500 tokens
+                        if (cleanedChainedResultData.content.length > maxLength) {
+                          const originalLength = cleanedChainedResultData.content.length;
+                          const truncated = cleanedChainedResultData.content.substring(0, maxLength);
+                          cleanedChainedResultData.content = truncated + '\n\n... [Content truncated for performance. Full content available in chunks.]';
+                          cleanedChainedResultData._truncated = true;
+                          console.log(`[Performance] Truncated chained kb_get content from ${originalLength} to ${maxLength} chars`);
+                        }
                       }
                     }
 
