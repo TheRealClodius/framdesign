@@ -86,7 +86,7 @@ export class VoiceService extends EventTarget {
    * @param conversationHistory - Previous chat messages for context
    * @param pendingRequest - Optional pending user request to address immediately (from text agent handoff)
    */
-  async start(conversationHistory: Array<{ role: string; content: string }>, pendingRequest: string | null = null): Promise<void> {
+  async start(conversationHistory: Array<{ role: string; content: string }>, pendingRequest: string | null = null, userId?: string): Promise<void> {
     if (this.isActive) {
       console.warn('Attempted to start voice session while already active');
       throw new Error('Voice session already active');
@@ -96,6 +96,8 @@ export class VoiceService extends EventTarget {
     if (pendingRequest) {
       console.log(`📌 Voice session will address pending request: "${pendingRequest}"`);
     }
+
+    const currentUserId = userId || (typeof window !== 'undefined' ? localStorage.getItem('fram_user_id') : undefined);
 
     // Ensure any previous session is fully cleaned up before starting
     // This is critical for proper reinitialization after stopping
@@ -219,7 +221,8 @@ export class VoiceService extends EventTarget {
           this.ws!.send(JSON.stringify({
             type: 'start',
             conversationHistory: this.conversationHistory,
-            pendingRequest: this.pendingRequest
+            pendingRequest: this.pendingRequest,
+            userId: currentUserId
           }));
 
           // Start heartbeat to detect disconnections

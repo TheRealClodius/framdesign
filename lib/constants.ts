@@ -6,6 +6,7 @@
 export const STORAGE_KEYS = {
   TIMEOUT: "fram_timeout_until",
   CONVERSATION: "fram_conversation",
+  USER_ID: "fram_user_id",
 } as const;
 
 // Message limits
@@ -28,6 +29,7 @@ export const CACHE_CONFIG = {
 export const TOKEN_CONFIG = {
   TOKENS_PER_CHAR: 0.25,
   MAX_TOKENS: 30000,
+  MAX_GLOBAL_TOKENS_PER_USER: 100000, // Global limit across all sessions
   SUMMARY_WORD_LIMIT: 80,
 } as const;
 

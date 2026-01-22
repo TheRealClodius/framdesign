@@ -181,6 +181,7 @@ import {
   loadMessagesFromStorage,
   saveMessagesToStorage,
   clearChatHistory,
+  getUserId,
   type Message,
 } from "@/lib/storage";
 import {
@@ -338,121 +339,96 @@ function normalizeTextResponse(text: string): string {
 
 /**
  * Extract suggestions from message content
- * Returns the last set of suggestions found, or undefined if none
+ * Supports inline format: <suggestions>["suggestion 1", "suggestion 2"]</suggestions>
+ * Also supports legacy format: ---SUGGESTIONS---{"suggestions": [...]}
  */
 function extractSuggestionsFromContent(content: string): string[] | undefined {
-  if (!content || !content.includes('---SUGGESTIONS---')) {
-    return undefined;
-  }
-  
-  const marker = '---SUGGESTIONS---';
-  let searchFrom = 0;
-  const allSuggestions: string[][] = [];
-  
-  while (true) {
-    const markerIndex = content.indexOf(marker, searchFrom);
-    if (markerIndex === -1) break;
-    
-    const jsonStart = content.indexOf('{', markerIndex + marker.length);
-    if (jsonStart === -1) {
-      searchFrom = markerIndex + marker.length;
-      continue;
-    }
-    
-    let braceCount = 0;
-    let jsonEnd = -1;
-    for (let i = jsonStart; i < content.length; i++) {
-      if (content[i] === '{') braceCount++;
-      else if (content[i] === '}') {
-        braceCount--;
-        if (braceCount === 0) {
-          jsonEnd = i + 1;
-          break;
-        }
-      }
-    }
-    
-    if (jsonEnd === -1) {
-      searchFrom = markerIndex + marker.length;
-      continue;
-    }
-    
-    const jsonStr = content.substring(jsonStart, jsonEnd);
+  if (!content) return undefined;
+
+  // Try inline format first: <suggestions>["...", "..."]</suggestions>
+  const inlineMatch = content.match(/<suggestions>\s*(\[[\s\S]*?\])\s*<\/suggestions>/);
+  if (inlineMatch) {
     try {
-      const parsed = JSON.parse(jsonStr);
-      if (parsed.suggestions && Array.isArray(parsed.suggestions)) {
-        allSuggestions.push(parsed.suggestions);
+      const parsed = JSON.parse(inlineMatch[1]);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed.slice(0, 2); // Max 2 suggestions
       }
     } catch {
       // Ignore parse errors
     }
-    
-    searchFrom = jsonEnd;
   }
-  
-  // Return the last set of suggestions
-  return allSuggestions.length > 0 ? allSuggestions[allSuggestions.length - 1] : undefined;
+
+  // Fallback to legacy format: ---SUGGESTIONS---{"suggestions": [...]}
+  if (!content.includes('---SUGGESTIONS---')) {
+    return undefined;
+  }
+
+  const marker = '---SUGGESTIONS---';
+  const markerIndex = content.lastIndexOf(marker);
+  if (markerIndex === -1) return undefined;
+
+  const jsonStart = content.indexOf('{', markerIndex + marker.length);
+  if (jsonStart === -1) return undefined;
+
+  // Find matching closing brace
+  let braceCount = 0;
+  let jsonEnd = -1;
+  for (let i = jsonStart; i < content.length; i++) {
+    if (content[i] === '{') braceCount++;
+    else if (content[i] === '}') {
+      braceCount--;
+      if (braceCount === 0) {
+        jsonEnd = i + 1;
+        break;
+      }
+    }
+  }
+
+  if (jsonEnd === -1) return undefined;
+
+  try {
+    const parsed = JSON.parse(content.substring(jsonStart, jsonEnd));
+    if (parsed.suggestions && Array.isArray(parsed.suggestions)) {
+      return parsed.suggestions;
+    }
+  } catch {
+    // Ignore parse errors
+  }
+
+  return undefined;
 }
 
 /**
- * Strip suggestions metadata from message content for display
- * This is a safety net to ensure raw suggestions never appear in the UI
+ * Strip suggestions and metadata from message content for display
+ * Handles inline format: <suggestions>[...]</suggestions>
+ * Also handles legacy formats: ---SUGGESTIONS---, ---OBSERVABILITY---, ---HAS_QUESTION---
  */
 function stripSuggestionsFromContent(content: string): string {
-  if (!content || !content.includes('---SUGGESTIONS---')) {
-    return content;
-  }
-  
-  // Remove all ---SUGGESTIONS--- markers and their JSON payloads
+  if (!content) return content;
+
   let result = content;
-  const marker = '---SUGGESTIONS---';
-  
-  while (result.includes(marker)) {
-    const markerIndex = result.indexOf(marker);
-    
-    // Find the JSON that follows
-    const jsonStart = result.indexOf('{', markerIndex + marker.length);
-    if (jsonStart === -1) {
-      // No JSON found, just remove the marker and everything after
-      result = result.substring(0, markerIndex).trimEnd();
-      break;
-    }
-    
-    // Find matching closing brace
-    let braceCount = 0;
-    let jsonEnd = -1;
-    for (let i = jsonStart; i < result.length; i++) {
-      if (result[i] === '{') braceCount++;
-      else if (result[i] === '}') {
-        braceCount--;
-        if (braceCount === 0) {
-          jsonEnd = i + 1;
-          break;
-        }
-      }
-    }
-    
-    if (jsonEnd === -1) {
-      // Malformed JSON, remove everything from marker onwards
-      result = result.substring(0, markerIndex).trimEnd();
-      break;
-    }
-    
-    // Remove the marker and JSON, including leading whitespace
-    let removeStart = markerIndex;
-    while (removeStart > 0 && /\s/.test(result[removeStart - 1])) {
-      removeStart--;
-    }
-    
-    result = result.substring(0, removeStart) + result.substring(jsonEnd);
+
+  // Remove inline suggestions: <suggestions>[...]</suggestions>
+  result = result.replace(/<suggestions>[\s\S]*?<\/suggestions>/g, '').trimEnd();
+
+  // Remove legacy ---SUGGESTIONS--- markers and their JSON payloads
+  const suggestionsMarker = '---SUGGESTIONS---';
+  if (result.includes(suggestionsMarker)) {
+    result = result.substring(0, result.indexOf(suggestionsMarker)).trimEnd();
   }
-  
-  // Also remove observability metadata
+
+  // Remove observability metadata
   const obsMarker = '---OBSERVABILITY---';
   if (result.includes(obsMarker)) {
     result = result.substring(0, result.indexOf(obsMarker)).trimEnd();
   }
-  
+
+  // Remove HAS_QUESTION marker (legacy)
+  const questionMarker = '---HAS_QUESTION---';
+  if (result.includes(questionMarker)) {
+    result = result.substring(0, result.indexOf(questionMarker)).trimEnd();
+  }
+
   return result.trimEnd();
 }
 
@@ -1139,17 +1115,23 @@ export default function ChatInterface() {
 
         let streamedContent = "";
 
-        await streamChatResponse(
-          { messages: requestMessages, timeoutExpired: false },
+      await streamChatResponse(
+        { 
+          messages: requestMessages, 
+          timeoutExpired: false,
+          userId: getUserId()
+        },
           (chunk) => {
             streamedContent += chunk;
+            // Strip metadata markers during streaming so they don't appear in UI
+            const displayContent = stripSuggestionsFromContent(streamedContent);
             setMessages((prev) => {
               const updated = [...prev];
               const lastIndex = updated.length - 1;
               if (lastIndex >= 0 && updated[lastIndex].id === assistantMessageId) {
                 updated[lastIndex] = {
                   ...updated[lastIndex],
-                  content: streamedContent,
+                  content: displayContent,
                   streaming: true,
                 };
               }
@@ -1237,7 +1219,11 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
       let fixedContent = "";
 
       await streamChatResponse(
-        { messages: fixMessages, timeoutExpired: false },
+        { 
+          messages: fixMessages, 
+          timeoutExpired: false,
+          userId: getUserId()
+        },
         (chunk) => {
           fixedContent += chunk;
           setMessages((prev) => {
@@ -1354,13 +1340,15 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
           (chunk) => {
             if (!streamCompleted) {
               streamedContent += chunk;
+              // Strip metadata markers during streaming so they don't appear in UI
+              const displayContent = stripSuggestionsFromContent(streamedContent);
               setMessages((prev) => {
                 const updated = [...prev];
                 const lastIndex = updated.length - 1;
                 if (lastIndex >= 0 && updated[lastIndex].id === assistantMessageId) {
                   updated[lastIndex] = {
                     ...updated[lastIndex],
-                    content: streamedContent,
+                    content: displayContent,
                     streaming: true,
                   };
                 }
@@ -1416,7 +1404,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
             if (pendingRequest) {
               console.log(`📌 Voice session starting with pending request: "${pendingRequest}"`);
             }
-            await voiceService.start(conversationHistory, pendingRequest);
+            await voiceService.start(conversationHistory, pendingRequest, getUserId());
             // Session started event will update state
           } catch (error) {
             console.error('Error starting voice session:', error);
@@ -1438,11 +1426,12 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
 
         // Mark streaming as complete
         setLoadingStatus(null);
-        
-        // Extract suggestions and clean content using helper functions
+
+        // Extract suggestions and clean content
         const parsedSuggestions = extractSuggestionsFromContent(streamedContent);
         const cleanContent = stripSuggestionsFromContent(streamedContent);
-        
+
+        // Update message with clean content and suggestions
         setMessages((prev) => {
           const updated = [...prev];
           const lastIndex = updated.length - 1;
@@ -1475,7 +1464,11 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
         }
 
         // Fallback to JSON request
-        const data = await sendChatRequest({ messages: requestMessages, timeoutExpired: expired || false });
+        const data = await sendChatRequest({ 
+          messages: requestMessages, 
+          timeoutExpired: expired || false,
+          userId: getUserId()
+        });
 
         // Check if Fram decided to timeout the user
         if (data.timeout) {
@@ -1509,7 +1502,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
             if (pendingRequest) {
               console.log(`📌 Voice session starting with pending request: "${pendingRequest}"`);
             }
-            await voiceService.start(conversationHistory, pendingRequest);
+            await voiceService.start(conversationHistory, pendingRequest, getUserId());
             // Session started event will update state
           } catch (error) {
             console.error('Error starting voice session:', error);

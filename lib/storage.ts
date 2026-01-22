@@ -28,6 +28,20 @@ export function generateMessageId(): string {
 }
 
 /**
+ * Get or generate a persistent user ID for global budget tracking
+ */
+export function getUserId(): string {
+  if (typeof window === "undefined") return "server-side";
+  
+  let userId = localStorage.getItem(STORAGE_KEYS.USER_ID);
+  if (!userId) {
+    userId = `user-${Math.random().toString(36).slice(2, 11)}-${Date.now().toString(36)}`;
+    localStorage.setItem(STORAGE_KEYS.USER_ID, userId);
+  }
+  return userId;
+}
+
+/**
  * Get timeout expiration timestamp from storage
  */
 export function getTimeoutUntil(): number | null {

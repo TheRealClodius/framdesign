@@ -30,6 +30,7 @@ import { GeminiLiveTransport } from './providers/gemini-live-transport.js';
 import { ErrorType } from '../tools/_core/error-types.js';
 import { retryWithBackoff } from '../tools/_core/retry-handler.js';
 import { loopDetector } from '../tools/_core/loop-detector.js';
+import { UsageService } from '../lib/services/usage-service.ts';
 import {
   startSession,
   endSession,
@@ -165,6 +166,7 @@ wss.on('connection', async (ws, req) => {
   let conversationTranscripts = { user: [], assistant: [] };
   let conversationHistory = []; // Store for context injection
   let pendingRequest = null; // Store pending user request from text agent handoff
+  let currentUserId = null; // Store userId for usage tracking
   let currentTurn = 1; // Track conversation turns for loop detection (NEW)
   
   // Track last transcript text to detect and deduplicate overlapping chunks from Gemini
@@ -1163,6 +1165,14 @@ wss.on('connection', async (ws, req) => {
             // Update last transcript for future deduplication
             lastTranscriptText.assistant = rawText;
             
+            // Record token usage for assistant transcript
+            if (currentUserId) {
+              // Note: approximate token count for voice (could use tiktoken if needed)
+              const tokens = Math.ceil(deduplicatedText.length / 4);
+              UsageService.recordUsage(currentUserId, tokens)
+                .catch(err => console.warn(`[${clientId}] Failed to record voice usage:`, err));
+            }
+
             conversationTranscripts.assistant.push({
               text: deduplicatedText,
               timestamp: Date.now()
@@ -1215,8 +1225,26 @@ wss.on('connection', async (ws, req) => {
 
       switch (data.type) {
         case 'start':
-          console.log(`[${clientId}] Starting Gemini Live session`);
+          console.log(`[${clientId}] Starting Gemini Live session for user: ${data.userId || 'anonymous'}`);
+          currentUserId = data.userId || null;
           
+          // Check global budget if userId is provided
+          if (data.userId) {
+            const isOverBudget = await UsageService.isOverBudget(data.userId);
+            if (isOverBudget) {
+              console.warn(`[${clientId}] Rejecting session - user ${data.userId} over budget`);
+              ws.send(JSON.stringify({
+                type: 'error',
+                error: 'USER_BUDGET_EXHAUSTED',
+                details: {
+                  type: 'budget_exhausted',
+                  suggestion: 'You have reached your global token limit for voice interactions. Please contact support.'
+                }
+              }));
+              return;
+            }
+          }
+
           // Store conversation history for context injection
           conversationHistory = (data.conversationHistory || []).map(msg => ({
             role: msg.role === 'assistant' ? 'model' : 'user',

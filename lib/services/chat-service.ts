@@ -9,6 +9,7 @@ import type { Message } from "../storage";
 export interface ChatRequest {
   messages: Message[];
   timeoutExpired?: boolean;
+  userId?: string;
 }
 
 export interface ChatResponse {
@@ -42,6 +43,7 @@ export async function streamChatResponse(
       body: JSON.stringify({
         messages: prepareMessagesForSend(request.messages),
         timeoutExpired: request.timeoutExpired || false,
+        userId: request.userId,
       }),
     });
 
