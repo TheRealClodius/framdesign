@@ -194,6 +194,7 @@ import {
 } from "@/lib/services/chat-service";
 import { OverloadedError } from "@/lib/errors";
 import { voiceService } from "@/lib/services/voice-service";
+import { useTheme } from "@/lib/hooks/useTheme";
 
 /**
  * Normalize text response from voice agent, especially fixing mermaid diagram formatting
@@ -473,6 +474,10 @@ function getRandomProject(): string {
 }
 
 export default function ChatInterface() {
+  // Get current theme (dark mode during night time or based on system preference)
+  const theme = useTheme();
+  const isDark = theme === 'dark';
+
   // Generate conversation starters with random project on client-side only to avoid hydration mismatch
   // Start with a default (first project) to ensure server/client match, then update on mount
   const [conversationStarters, setConversationStarters] = useState([
@@ -1570,16 +1575,16 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
   };
 
   return (
-    <section className="w-full max-w-[28rem] md:max-w-[950px] mx-auto px-4 pt-12 md:pt-0 pb-0 md:pb-0 h-fit md:flex-1 md:flex md:flex-col md:min-h-0 overflow-x-hidden">
+    <section className={`w-full max-w-[28rem] md:max-w-[950px] mx-auto px-4 pt-12 md:pt-0 pb-0 md:pb-0 h-fit md:flex-1 md:flex md:flex-col md:min-h-0 overflow-x-hidden transition-colors duration-300 ${isDark ? 'bg-gray-900' : 'bg-white'}`}>
       {/* Messages wrapper - extends to top on desktop */}
       <div className="flex flex-col h-[600px] md:flex-1 md:min-h-0 font-mono text-[0.875rem]">
-        <div ref={messagesContainerRef} className="h-[600px] md:flex-1 md:min-h-0 overflow-y-auto overflow-x-hidden mb-2 scrollbar-boxy">
+        <div ref={messagesContainerRef} className={`h-[600px] md:flex-1 md:min-h-0 overflow-y-auto overflow-x-hidden mb-2 scrollbar-boxy ${isDark ? 'scrollbar-dark' : ''}`}>
           {/* Header - sticky at top of scroll area on desktop */}
-          <div className="mb-10 md:mb-0 md:sticky md:top-0 md:z-10 md:bg-white/80 md:backdrop-blur-sm md:py-6 md:-mx-4 md:px-4 text-center flex-shrink-0 flex items-center justify-center gap-4">
-            <p className="text-[0.75rem] font-mono text-gray-500 tracking-wider">FRAM ASSISTANT</p>
+          <div className={`mb-10 md:mb-0 md:sticky md:top-0 md:z-10 md:backdrop-blur-sm md:py-6 md:-mx-4 md:px-4 text-center flex-shrink-0 flex items-center justify-center gap-4 transition-colors duration-300 ${isDark ? 'md:bg-gray-900/80' : 'md:bg-white/80'}`}>
+            <p className={`text-[0.75rem] font-mono tracking-wider transition-colors duration-300 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>FRAM ASSISTANT</p>
             <button
               onClick={handleClearChat}
-              className="text-[0.7rem] font-mono text-gray-400 hover:text-gray-600 uppercase tracking-wider transition-colors underline"
+              className={`text-[0.7rem] font-mono uppercase tracking-wider transition-colors underline ${isDark ? 'text-gray-500 hover:text-gray-300' : 'text-gray-400 hover:text-gray-600'}`}
               title="Clear chat history"
             >
               Clear
@@ -1608,14 +1613,14 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
                       : "text-left"
                   }`}
                 >
-                  <p className="uppercase text-[0.75rem] text-gray-400 mb-1 tracking-wider">
+                  <p className={`uppercase text-[0.75rem] mb-1 tracking-wider transition-colors duration-300 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
                     {message.role === "user" ? "You" : "FRAM"}
                   </p>
                   {message.role === "assistant" ? (
                     <>
-                      <div className="text-black leading-relaxed overflow-x-hidden break-words">
-                        <MarkdownWithMermaid 
-                          content={stripSuggestionsFromContent(message.content)} 
+                      <div className={`leading-relaxed overflow-x-hidden break-words transition-colors duration-300 ${isDark ? 'text-gray-100' : 'text-black'}`}>
+                        <MarkdownWithMermaid
+                          content={stripSuggestionsFromContent(message.content)}
                           isStreaming={message.streaming}
                           onFixDiagram={async (error) => {
                             await handleFixDiagram(index, error);
@@ -1632,8 +1637,8 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
                         </div>
                       )}
                       {message.citations && message.citations.length > 0 && (
-                        <div className="mt-3 pt-3 border-t border-gray-200">
-                          <p className="text-[0.7rem] text-gray-500 uppercase tracking-wider mb-2">Sources</p>
+                        <div className={`mt-3 pt-3 transition-colors duration-300 ${isDark ? 'border-t border-gray-700' : 'border-t border-gray-200'}`}>
+                          <p className={`text-[0.7rem] uppercase tracking-wider mb-2 transition-colors duration-300 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Sources</p>
                           <ul className="space-y-1">
                             {message.citations.map((citation, idx) => (
                               <li key={idx} className="text-[0.75rem]">
@@ -1641,7 +1646,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
                                   href={citation.url}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  className="text-blue-600 hover:text-blue-800 underline break-all"
+                                  className={`underline break-all transition-colors duration-300 ${isDark ? 'text-blue-400 hover:text-blue-300' : 'text-blue-600 hover:text-blue-800'}`}
                                 >
                                   {citation.title || citation.url}
                                 </a>
@@ -1682,7 +1687,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
                                   handleStarterClick(suggestion);
                                 }}
                                 disabled={isLoading || isVoiceMode || isBlocked}
-                                className="text-[0.75rem] font-mono uppercase tracking-wider text-gray-400 hover:text-black transition-colors px-3 py-1.5 border border-gray-300 rounded hover:border-black disabled:opacity-50 disabled:cursor-not-allowed text-left"
+                                className={`text-[0.75rem] font-mono uppercase tracking-wider transition-colors px-3 py-1.5 border rounded disabled:opacity-50 disabled:cursor-not-allowed text-left ${isDark ? 'text-gray-400 hover:text-gray-100 border-gray-600 hover:border-gray-400' : 'text-gray-400 hover:text-black border-gray-300 hover:border-black'}`}
                               >
                                 {suggestion}
                               </button>
@@ -1692,7 +1697,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
                       })()}
                     </>
                   ) : (
-                    <p className="text-black leading-relaxed break-words overflow-x-hidden">
+                    <p className={`leading-relaxed break-words overflow-x-hidden transition-colors duration-300 ${isDark ? 'text-gray-100' : 'text-black'}`}>
                       {message.content}
                     </p>
                   )}
@@ -1703,16 +1708,16 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
           {isLoading && (
              <div className="flex justify-start">
                <div className="max-w-[85%] text-left">
-                 <p className="uppercase text-[0.75rem] text-gray-400 mb-1 tracking-wider">FRAM</p>
+                 <p className={`uppercase text-[0.75rem] mb-1 tracking-wider transition-colors duration-300 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>FRAM</p>
                  {loadingStatus ? (
-                   <div className="text-black leading-relaxed">
-                     <span className="tool-status-gradient">{loadingStatus}</span>
+                   <div className={`leading-relaxed transition-colors duration-300 ${isDark ? 'text-gray-100' : 'text-black'}`}>
+                     <span className={isDark ? 'tool-status-gradient-dark' : 'tool-status-gradient'}>{loadingStatus}</span>
                    </div>
                  ) : (
                    <div className="flex space-x-1 items-center h-6">
-                     <div className="w-1.5 h-1.5 bg-gray-300 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                     <div className="w-1.5 h-1.5 bg-gray-300 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                     <div className="w-1.5 h-1.5 bg-gray-300 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                     <div className={`w-1.5 h-1.5 rounded-full animate-bounce transition-colors duration-300 ${isDark ? 'bg-gray-600' : 'bg-gray-300'}`} style={{ animationDelay: '0ms' }} />
+                     <div className={`w-1.5 h-1.5 rounded-full animate-bounce transition-colors duration-300 ${isDark ? 'bg-gray-600' : 'bg-gray-300'}`} style={{ animationDelay: '150ms' }} />
+                     <div className={`w-1.5 h-1.5 rounded-full animate-bounce transition-colors duration-300 ${isDark ? 'bg-gray-600' : 'bg-gray-300'}`} style={{ animationDelay: '300ms' }} />
                    </div>
                  )}
                </div>
@@ -1723,14 +1728,14 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
         </div>
 
         {isBlocked ? (
-          <div className="text-center py-4 border-t border-gray-200 flex-shrink-0">
-            <p className="text-gray-500 text-[0.8rem] leading-relaxed mb-3">
+          <div className={`text-center py-4 flex-shrink-0 transition-colors duration-300 ${isDark ? 'border-t border-gray-700' : 'border-t border-gray-200'}`}>
+            <p className={`text-[0.8rem] leading-relaxed mb-3 transition-colors duration-300 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
               {BLOCKED_MESSAGE}
             </p>
             {process.env.NODE_ENV === 'development' && (
               <button
                 onClick={resetTimeout}
-                className="text-[0.7rem] uppercase tracking-wider text-gray-400 hover:text-gray-600 underline"
+                className={`text-[0.7rem] uppercase tracking-wider underline transition-colors duration-300 ${isDark ? 'text-gray-500 hover:text-gray-300' : 'text-gray-400 hover:text-gray-600'}`}
               >
                 Reset timeout (dev)
               </button>
@@ -1746,7 +1751,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
                     <button
                       key={index}
                       onClick={() => handleStarterClick(starter)}
-                      className="text-[0.75rem] font-mono uppercase tracking-wider text-gray-400 hover:text-black transition-colors text-left"
+                      className={`text-[0.75rem] font-mono uppercase tracking-wider transition-colors text-left ${isDark ? 'text-gray-400 hover:text-gray-100' : 'text-gray-400 hover:text-black'}`}
                     >
                       {starter}
                     </button>
@@ -1767,13 +1772,13 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
                   }
                 }}
                 disabled={isVoiceMode}
-                className="w-full bg-transparent border-b border-gray-300 py-2 pr-12 focus:border-black focus:outline-none transition-colors rounded-none placeholder:text-gray-300 text-black resize-none overflow-y-auto max-h-[120px] disabled:opacity-50 disabled:cursor-not-allowed"
+                className={`w-full bg-transparent py-2 pr-12 focus:outline-none transition-colors rounded-none resize-none overflow-y-auto max-h-[120px] disabled:opacity-50 disabled:cursor-not-allowed ${isDark ? 'border-b border-gray-600 focus:border-gray-400 placeholder:text-gray-600 text-gray-100' : 'border-b border-gray-300 focus:border-black placeholder:text-gray-300 text-black'}`}
                 placeholder={isVoiceMode ? "Voice mode active..." : "Type your message..."}
               />
               <button
                 type="submit"
                 disabled={isLoading || isVoiceMode || !input.trim()}
-                className="absolute right-0 top-2 text-[0.75rem] uppercase tracking-wider text-black disabled:text-gray-300 hover:text-gray-600 transition-colors"
+                className={`absolute right-0 top-2 text-[0.75rem] uppercase tracking-wider transition-colors ${isDark ? 'text-gray-100 disabled:text-gray-600 hover:text-gray-300' : 'text-black disabled:text-gray-300 hover:text-gray-600'}`}
               >
                 Send
               </button>
@@ -1784,9 +1789,13 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
             {/* Voice Error Display */}
             {voiceError && (
               <div className={`w-full max-w-[500px] mx-auto px-4 py-2 rounded text-[0.75rem] font-mono ${
-                isReconnecting 
-                  ? 'bg-yellow-50 border border-yellow-200 text-yellow-700' 
-                  : 'bg-red-50 border border-red-200 text-red-700'
+                isReconnecting
+                  ? isDark
+                    ? 'bg-yellow-900/30 border border-yellow-700/50 text-yellow-300'
+                    : 'bg-yellow-50 border border-yellow-200 text-yellow-700'
+                  : isDark
+                    ? 'bg-red-900/30 border border-red-700/50 text-red-300'
+                    : 'bg-red-50 border border-red-200 text-red-700'
               }`}>
                 <p className="uppercase text-[0.7rem] mb-1 tracking-wider">
                   {isReconnecting ? 'Reconnecting' : 'Error'}
@@ -1794,10 +1803,10 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
                 <div>{voiceError}</div>
               </div>
             )}
-            
+
             {/* Audio Playback Disabled Notice */}
             {audioPlaybackDisabled && isVoiceMode && (
-              <div className="w-full max-w-[500px] mx-auto px-4 py-2 bg-yellow-50 border border-yellow-200 rounded text-[0.75rem] font-mono text-yellow-700">
+              <div className={`w-full max-w-[500px] mx-auto px-4 py-2 rounded text-[0.75rem] font-mono ${isDark ? 'bg-yellow-900/30 border border-yellow-700/50 text-yellow-300' : 'bg-yellow-50 border border-yellow-200 text-yellow-700'}`}>
                 <p className="uppercase text-[0.7rem] mb-1 tracking-wider">Audio Disabled</p>
                 <div>Audio playback unavailable. Transcripts will still be displayed.</div>
               </div>
@@ -1887,8 +1896,12 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
               disabled={isVoiceLoading || isLoading}
               className={`text-[0.75rem] uppercase tracking-wider transition-colors ${
                 isVoiceMode
-                  ? "text-red-600 hover:text-red-700"
-                  : "text-black hover:text-gray-600"
+                  ? isDark
+                    ? "text-red-400 hover:text-red-300"
+                    : "text-red-600 hover:text-red-700"
+                  : isDark
+                    ? "text-gray-100 hover:text-gray-300"
+                    : "text-black hover:text-gray-600"
               } ${isVoiceLoading || isLoading ? "opacity-50 cursor-not-allowed" : ""}`}
             >
               {isVoiceLoading ? (

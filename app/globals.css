@@ -207,6 +207,23 @@ div[data-mermaid-diagram="true"] {
   animation: gradient-shift 2s ease-in-out infinite;
 }
 
+/* Dark mode tool status gradient animation */
+.tool-status-gradient-dark {
+  background: linear-gradient(
+    90deg,
+    #f3f4f6 0%,
+    #d1d5db 25%,
+    #9ca3af 50%,
+    #d1d5db 75%,
+    #f3f4f6 100%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: gradient-shift 2s ease-in-out infinite;
+}
+
 @keyframes gradient-shift {
   0% {
     background-position: 0% 50%;
@@ -275,4 +292,26 @@ div[data-mermaid-diagram="true"] {
 .scrollbar-boxy {
   scrollbar-width: thin;
   scrollbar-color: #000000 #ffffff;
+}
+
+/* Dark mode scrollbar styling */
+.scrollbar-boxy.scrollbar-dark::-webkit-scrollbar-track {
+  background: #1f2937;
+  border-left: 1px solid #374151;
+}
+
+.scrollbar-boxy.scrollbar-dark::-webkit-scrollbar-thumb {
+  background: #9ca3af;
+  border: none;
+  border-radius: 0;
+}
+
+.scrollbar-boxy.scrollbar-dark::-webkit-scrollbar-thumb:hover {
+  background: #d1d5db;
+}
+
+/* Firefox dark mode scrollbar styling */
+.scrollbar-boxy.scrollbar-dark {
+  scrollbar-width: thin;
+  scrollbar-color: #9ca3af #1f2937;
 }
