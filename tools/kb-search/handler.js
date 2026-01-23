@@ -6,13 +6,15 @@
 
 import { ErrorType, ToolError } from '../_core/error-types.js';
 
-// Import blob storage service for GCS URL resolution
+// Import blob storage service for GCS URL resolution and optional image fetch
 let resolveBlobUrl;
+let fetchAssetBuffer;
 async function loadBlobService() {
-  if (!resolveBlobUrl) {
+  if (!resolveBlobUrl || !fetchAssetBuffer) {
     try {
       const blobModule = await import('@/lib/services/blob-storage-service');
       resolveBlobUrl = blobModule.resolveBlobUrl || blobModule.default?.resolveBlobUrl;
+      fetchAssetBuffer = blobModule.fetchAssetBuffer || blobModule.default?.fetchAssetBuffer;
     } catch (importError) {
       // Fallback for Node.js runtime (voice server)
       // Use a function to create the import path dynamically so webpack doesn't analyze it
@@ -21,13 +23,34 @@ async function loadBlobService() {
         const blobPath = getImportPath('blob-storage-service');
         const blobModule = await import(/* webpackIgnore: true */ blobPath);
         resolveBlobUrl = blobModule.resolveBlobUrl || blobModule.default?.resolveBlobUrl;
+        fetchAssetBuffer = blobModule.fetchAssetBuffer || blobModule.default?.fetchAssetBuffer;
       } catch (fallbackError) {
         console.warn('[kb_search] Failed to load blob storage service:', fallbackError);
         // Will skip markdown generation for assets if service unavailable
       }
     }
   }
-  return resolveBlobUrl;
+  return { resolveBlobUrl, fetchAssetBuffer };
+}
+
+function extractHttpStatus(error) {
+  if (!error || typeof error !== 'object') return undefined;
+  return (
+    error.status ||
+    error.statusCode ||
+    error.code ||
+    error.response?.status ||
+    error.response?.statusCode ||
+    error.data?.status ||
+    error.data?.statusCode
+  );
+}
+
+function isServiceUnavailable(error) {
+  const status = extractHttpStatus(error);
+  if (status === 503) return true;
+  const message = (error?.message || String(error || '')).toLowerCase();
+  return message.includes('service unavailable') || message.includes('503');
 }
 
 /**
@@ -46,6 +69,7 @@ export async function execute(context) {
 
   // Check capabilities.voice or fallback to checking meta/context for voice mode
   const isVoiceMode = capabilities?.voice === true;
+  const includeImageData = Boolean(args.include_image_data) && !isVoiceMode;
 
   if (topK > 3) {
     topK = 3; // Clamp for stability
@@ -144,6 +168,21 @@ export async function execute(context) {
       );
     } catch (error) {
       const errorMessage = error.message || String(error);
+      if (isServiceUnavailable(error)) {
+        const status = extractHttpStatus(error) || 503;
+        throw new ToolError(
+          ErrorType.TRANSIENT,
+          `Vector store unavailable (Qdrant ${status}). Please try again later.`,
+          {
+            retryable: false,
+            details: {
+              service: 'qdrant',
+              httpStatus: status,
+              message: errorMessage
+            }
+          }
+        );
+      }
       throw new ToolError(ErrorType.TRANSIENT, `Vector search failed: ${errorMessage}`, {
         retryable: true
       });
@@ -172,7 +211,7 @@ export async function execute(context) {
     }
 
     // Load blob service for asset URL resolution
-    await loadBlobService();
+    const blobService = await loadBlobService();
     
     // Transform results to standard format
     const transformedResults = await Promise.all(rawResults.map(async (result) => {
@@ -200,9 +239,9 @@ export async function execute(context) {
         const extension = result.metadata?.file_extension;
         const caption = result.metadata?.caption || result.metadata?.title || '';
         
-        if (blobId && extension && resolveBlobUrl) {
+        if (blobId && extension && blobService?.resolveBlobUrl) {
           try {
-            const assetUrl = await resolveBlobUrl(blobId, extension);
+            const assetUrl = await blobService.resolveBlobUrl(blobId, extension);
             const entityType = result.metadata?.entity_type || '';
             
             // Handle videos with HTML video tag, images/GIFs with markdown
@@ -268,24 +307,77 @@ export async function execute(context) {
     const latency = Date.now() - startTime;
     const chunksSearched = rawResults.length;
     const uniqueEntities = deduplicatedResults.length;
-    console.log(`[kb_search] Found ${uniqueEntities} unique entities (from ${chunksSearched} chunks) in ${latency}ms`);
+    
+    // Add detailed timing to the result for observability
+    const finalTiming = {
+      total: latency,
+      embedding: embeddingDuration,
+      search: searchDuration,
+      processing: latency - (embeddingDuration + searchDuration)
+    };
+    
+    console.log(`[kb_search] Found ${uniqueEntities} unique entities (from ${chunksSearched} chunks) in ${latency}ms`, finalTiming);
+
+    // Optionally attach image data for the top result (text mode only)
+    let imageData = null;
+    let imageDataFor = null;
+    if (includeImageData && deduplicatedResults.length > 0) {
+      const topResult = deduplicatedResults[0];
+      const isVisual = ['photo', 'diagram', 'gif'].includes(topResult.type);
+      const blobId = topResult.metadata?.blob_id;
+      const extension = topResult.metadata?.file_extension;
+
+      if (isVisual && blobId && extension && blobService?.fetchAssetBuffer) {
+        try {
+          const imageBuffer = await blobService.fetchAssetBuffer(blobId, extension);
+          const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5MB cap to avoid oversized payloads
+          if (imageBuffer.length > MAX_IMAGE_BYTES) {
+            console.warn(`[kb_search] Skipping image data for ${topResult.id} (size ${Math.round(imageBuffer.length / 1024)}KB)`);
+          } else {
+            const mimeTypeMap = {
+              'png': 'image/png',
+              'jpg': 'image/jpeg',
+              'jpeg': 'image/jpeg',
+              'gif': 'image/gif',
+              'webp': 'image/webp'
+            };
+            const mimeType = mimeTypeMap[extension.toLowerCase()] || 'image/png';
+            imageData = {
+              mimeType,
+              data: imageBuffer.toString('base64')
+            };
+            imageDataFor = {
+              id: topResult.id,
+              title: topResult.title,
+              caption: topResult.metadata?.caption || topResult.title || ''
+            };
+            console.log(`[kb_search] Fetched image data for ${topResult.id} (${Math.round(imageBuffer.length / 1024)}KB)`);
+          }
+        } catch (imageError) {
+          console.warn(`[kb_search] Failed to fetch image buffer for ${topResult.id}:`, imageError.message);
+        }
+      }
+    }
+
+    const responseData = {
+      results: deduplicatedResults,
+      total_found: uniqueEntities,
+      query: args.query,
+      filters_applied: args.filters || null,
+      clamped: topK !== originalTopK,
+      _timing: finalTiming
+    };
+
+    if (imageData) {
+      responseData._imageData = imageData;
+      responseData.image_data_for = imageDataFor;
+    }
 
     return {
       ok: true,
-      data: {
-        results: deduplicatedResults,
-        total_found: uniqueEntities,
-        query: args.query,
-        filters_applied: args.filters || null,
-        clamped: topK !== originalTopK,
-        _timing: {
-          embeddingDuration,
-          searchDuration
-        }
-      },
+      data: responseData,
       meta: {
-        embeddingDuration,
-        searchDuration
+        _timing: finalTiming
       }
     };
   } catch (error) {

@@ -22,7 +22,7 @@ engagement_modes:
   - product_studio
   - consulting
 contacts:
-  email: hello@fram.design
+  email: andrei@fram.design
   website: https://fram.design
 contact_policy:
   preferred: email

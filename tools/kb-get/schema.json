@@ -10,10 +10,10 @@
     "properties": {
       "id": {
         "type": "string",
-        "description": "Exact entity ID (e.g., 'person:andrei_clodius', 'project:vector_watch_project')",
+        "description": "Exact entity ID from kb_search results. NEVER construct or guess IDs - always use the 'id' field from kb_search response.",
         "minLength": 3,
         "maxLength": 100,
-        "pattern": "^[a-z_]+:[a-z0-9_]+$"
+        "pattern": "^[a-z_]+:[a-zA-Z0-9_]+$"
       }
     }
   },

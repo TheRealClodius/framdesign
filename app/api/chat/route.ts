@@ -25,6 +25,7 @@ import { createStateController } from '@/tools/_core/state-controller';
 import { retryWithBackoff as retryToolExecution } from '@/tools/_core/retry-handler';
 import { UsageService } from '@/lib/services/usage-service';
 import { toolMemoryStore } from '@/tools/_core/tool-memory-store';
+import { loopDetector } from '@/tools/_core/loop-detector';
 import { toolMemoryDedup } from '@/tools/_core/tool-memory-dedup';
 import { toolMemorySummarizer } from '@/tools/_core/tool-memory-summarizer';
 import { hashArgs } from '@/tools/_core/utils/hash-args';
@@ -178,7 +179,7 @@ ${conversationText}
 Summary:`;
 
     const result = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: "gemini-2.5-flash",
       contents: [{
         role: "user" as const,
         parts: [{ text: summaryPrompt }],
@@ -403,11 +404,11 @@ async function getSystemPromptCache(ai: GoogleGenAI, providerSchemas: ProviderSc
       ];
 
       // Check token count first (optional, but good practice)
-      // Note: gemini-3-flash-preview might not support caching yet
+      // Note: this model might not support caching yet
       // We'll try to create cache, but fall back gracefully if it fails
       // Include tools in cache so we don't need to pass them when using cached content
       const cache = await ai.caches.create({
-        model: "gemini-3-flash-preview", // Try with preview model
+        model: "gemini-2.5-flash",
         config: {
           systemInstruction: FRAM_SYSTEM_PROMPT,
           contents: systemContent,
@@ -534,7 +535,7 @@ async function getConversationCache(
 
       // Include tools in cache so we don't need to pass them when using cached content
       const cache = await ai.caches.create({
-        model: "gemini-3-flash-preview",
+        model: "gemini-2.5-flash",
         config: {
           systemInstruction: FRAM_SYSTEM_PROMPT,
           contents: cacheContent,
@@ -618,10 +619,13 @@ async function retryWithBackoff<T>(
 }
 
 export async function POST(request: Request) {
+  // T0: Request received
+  const requestStartTime = Date.now();
+
   // Check for observability mode (dev-only)
   const url = new URL(request.url);
   const observabilityMode = url.searchParams.get('_observability') === 'true';
-  
+
   // Initialize observability collector (only if mode is enabled)
   const observability: ObservabilityData | null = observabilityMode ? {
     contextStack: {} as ObservabilityContextStack,
@@ -629,7 +633,7 @@ export async function POST(request: Request) {
     chainedCalls: 0,
     totalDuration: 0,
     finalResponseLength: 0,
-    requestStartTime: Date.now()
+    requestStartTime: requestStartTime
   } : null;
 
   try {
@@ -768,8 +772,8 @@ export async function POST(request: Request) {
       parametersJsonSchema: tool.jsonSchema  // Canonical JSON Schema from registry
     }));
 
-    // Caching disabled due to instability with gemini-3-flash-preview (Internal Errors)
-    const ENABLE_CACHING = false;
+    // Caching enabled for performance and cost savings
+    const ENABLE_CACHING = true;
 
     // Get conversation hash for cache tracking
     const conversationHash = hashConversation(messages, timeoutExpired);
@@ -986,6 +990,21 @@ export async function POST(request: Request) {
       console.log(`Dropped ${budgetResult.droppedMessages} oldest message(s) to fit token budget`);
     }
 
+    // T1: Context preparation complete
+    const contextPrepTime = Date.now();
+    console.log(`[Request Lifecycle] Context prep: ${contextPrepTime - requestStartTime}ms (T1-T0)`);
+
+    // Phase 2: Context Size Analysis
+    const contextMetrics = {
+      messageCount: contentsToSend.length,
+      totalChars: contentsToSend.reduce((sum, msg) => sum + JSON.stringify(msg).length, 0),
+      estimatedTokens: estimateMessageTokens(contentsToSend),
+      hasSummary: !!summary,
+      summaryTokens: summary ? estimateTokens(summary) : 0,
+      toolSchemaTokens: estimateTokens(JSON.stringify(providerSchemas))
+    };
+    console.log('[Context Analysis]', JSON.stringify(contextMetrics, null, 2));
+
     // Collect context stack data for observability
     if (observability) {
       const toolCount = toolRegistry.tools.size;
@@ -1014,11 +1033,15 @@ export async function POST(request: Request) {
       };
     }
 
+    // T2: About to call Gemini API
+    const geminiCallStart = Date.now();
+    console.log(`[Request Lifecycle] Pre-Gemini: ${geminiCallStart - contextPrepTime}ms (T2-T1)`);
+
     // Generate response with streaming (with retry logic)
     const stream = await retryWithBackoff(async () => {
       const estimatedTokens = estimateMessageTokens(contentsToSend);
       console.log("=== Gemini API Request ===");
-      console.log("Model: gemini-3-flash-preview (streaming)");
+      console.log("Model: gemini-2.5-flash (streaming)");
       console.log("Messages to send:", contentsToSend.length);
       console.log("Estimated tokens:", estimatedTokens);
       console.log("Using cached content:", cachedContent || "none");
@@ -1053,13 +1076,15 @@ export async function POST(request: Request) {
       }
 
       try {
+        const apiCallStart = Date.now();
         const result = await ai.models.generateContentStream({
-          model: "gemini-3-flash-preview", // Gemini 3 Flash Preview
+          model: "gemini-2.5-flash",
           contents: contentsToSend,
           config
         });
-        
-        console.log("Gemini API stream created");
+        const streamCreated = Date.now();
+        console.log(`[Gemini API] Stream created in ${streamCreated - apiCallStart}ms`);
+
         return result;
       } catch (err) {
         // If cache error and we're using cache, retry without cache
@@ -1074,7 +1099,7 @@ export async function POST(request: Request) {
           };
           
           const result = await ai.models.generateContentStream({
-            model: "gemini-3-flash-preview",
+            model: "gemini-2.5-flash",
             contents: contentsToSend,
             config: fallbackConfig
           });
@@ -1089,43 +1114,68 @@ export async function POST(request: Request) {
 
     // Check early chunks for function calls, then stream progressively to the client
     // Store the functionCall data (name and args)
-    let functionCall: FunctionCall | null = null;
-    // Store the full functionCallPart with thoughtSignature as sibling (required by Gemini 3)
-    let functionCallPart: FunctionCallPart | null = null;
+    let functionCalls: FunctionCall[] = [];
+    // Store the full functionCallParts with thoughtSignature as sibling (required by Gemini 3)
+    let functionCallParts: FunctionCallPart[] = [];
     const bufferedChunks: unknown[] = [];
 
     try {
       const iterator = stream[Symbol.asyncIterator]();
       const bufferStart = Date.now();
+      let firstChunkTime: number | null = null;
 
       // Buffer a few chunks (or up to time limit) to detect function calls before streaming
       while (bufferedChunks.length < STREAM_CONFIG.MAX_BUFFER_CHUNKS && Date.now() - bufferStart < STREAM_CONFIG.MAX_BUFFER_MS) {
         const { value, done } = await iterator.next();
         if (done) break;
+
+        // T3: First chunk received from Gemini
+        if (firstChunkTime === null) {
+          firstChunkTime = Date.now();
+          console.log(`[Request Lifecycle] Gemini TTFT: ${firstChunkTime - geminiCallStart}ms (T3-T2) ← KEY METRIC`);
+          console.log(`[Gemini API] Time from stream created to first chunk: ${firstChunkTime - bufferStart}ms (model processing)`);
+        }
+
         bufferedChunks.push(value);
 
         const typed = value as { candidates?: Array<{ content?: { parts?: Array<StreamChunkPart> } }> };
         const candidates = typed.candidates?.[0]?.content?.parts || [];
-        const callPart = candidates.find((part) => part.functionCall);
-        if (callPart?.functionCall) {
-          functionCall = callPart.functionCall;
-          // Preserve thoughtSignature as a SIBLING of functionCall (required by Gemini 3)
-          // The API expects: { functionCall: {...}, thoughtSignature: "..." }
-          // NOT: { functionCall: { ..., thought_signature: "..." } }
-          functionCallPart = {
-            functionCall: {
-              name: functionCall.name,
-              args: functionCall.args
-            },
-            thoughtSignature: callPart.thoughtSignature
-          };
-          break;
+        
+        for (const part of candidates) {
+          if (part.functionCall) {
+            const call = part.functionCall;
+            functionCalls.push(call);
+            functionCallParts.push({
+              functionCall: {
+                name: call.name,
+                args: call.args
+              },
+              thoughtSignature: part.thoughtSignature
+            });
+          }
+        }
+        
+        // If we found at least one function call, we can stop buffering early
+        // but we should continue processing the current chunk's parts
+        if (functionCalls.length > 0) {
+          // Check if we have terminal tools that need immediate handling
+          const hasTerminalTool = functionCalls.some(c => c.name === "ignore_user" || c.name === "start_voice_session");
+          if (hasTerminalTool) break;
         }
       }
 
+      // T4: Buffering complete
+      const bufferingCompleteTime = Date.now();
+      console.log(`[Request Lifecycle] Buffering: ${bufferingCompleteTime - (firstChunkTime || bufferStart)}ms (T4-T3)`);
+      console.log(`[Request Lifecycle] Buffered ${bufferedChunks.length} chunks in ${bufferingCompleteTime - bufferStart}ms`);
+
       // If function call detected early, handle it and return JSON (no stream)
-      if (functionCall?.name === "ignore_user") {
+      const ignoreUserCall = functionCalls.find(c => c.name === "ignore_user");
+      const ignoreUserPart = functionCallParts.find(p => p.functionCall.name === "ignore_user");
+      
+      if (ignoreUserCall) {
         // Initialize state controller
+        const turnNumber = Math.ceil(messages.length / 2);
         const state = createStateController({
           mode: 'text',
           isActive: true
@@ -1139,7 +1189,7 @@ export async function POST(request: Request) {
           clientId: `text-${Date.now()}`,
           ws: null,  // No WebSocket in text mode
           geminiSession: null,
-          args: functionCall.args,
+          args: ignoreUserCall.args,
           session: {
             isActive: state.get('isActive'),
             toolsVersion: toolRegistry.getVersion(),
@@ -1167,8 +1217,8 @@ export async function POST(request: Request) {
             position: observability.toolCalls.length + 1,
             chainPosition: 0,
             toolId: 'ignore_user',
-            args: functionCall.args,
-            thoughtSignature: functionCallPart?.thoughtSignature,
+            args: ignoreUserCall.args,
+            thoughtSignature: ignoreUserPart?.thoughtSignature,
             startTime: startTime,
             duration: duration,
             ok: result.ok,
@@ -1193,9 +1243,9 @@ export async function POST(request: Request) {
         // Return response based on result
         if (result.ok) {
           const response = {
-            message: result.data.farewellMessage || functionCall.args.farewell_message,
+            message: result.data.farewellMessage || ignoreUserCall.args.farewell_message,
             timeout: {
-              duration: result.data.durationSeconds || functionCall.args.duration_seconds,
+              duration: result.data.durationSeconds || ignoreUserCall.args.duration_seconds,
               until: result.data.timeoutUntil
             }
           };
@@ -1236,8 +1286,12 @@ export async function POST(request: Request) {
       }
 
       // Handle start_voice_session tool call
-      if (functionCall?.name === "start_voice_session") {
+      const startVoiceCall = functionCalls.find(c => c.name === "start_voice_session");
+      const startVoicePart = functionCallParts.find(p => p.functionCall.name === "start_voice_session");
+
+      if (startVoiceCall) {
         // Initialize state controller
+        const turnNumber = Math.ceil(messages.length / 2);
         const state = createStateController({
           mode: 'text',
           isActive: true
@@ -1249,7 +1303,7 @@ export async function POST(request: Request) {
           clientId: `text-${Date.now()}`,
           ws: null,
           geminiSession: null,
-          args: functionCall.args || {},
+          args: startVoiceCall.args || {},
           session: {
             isActive: state.get('isActive'),
             toolsVersion: toolRegistry.getVersion(),
@@ -1276,8 +1330,8 @@ export async function POST(request: Request) {
             position: observability.toolCalls.length + 1,
             chainPosition: 0,
             toolId: 'start_voice_session',
-            args: functionCall.args || {},
-            thoughtSignature: functionCallPart?.thoughtSignature,
+            args: startVoiceCall.args || {},
+            thoughtSignature: startVoicePart?.thoughtSignature,
             startTime: startTime,
             duration: duration,
             ok: result.ok,
@@ -1301,7 +1355,7 @@ export async function POST(request: Request) {
         if (result.ok) {
           // Filter out empty or too-short pending_request values
           // Schema allows null/empty, but we normalize to null for consistency
-          let pendingRequest = functionCall.args?.pending_request || null;
+          let pendingRequest = startVoiceCall.args?.pending_request || null;
           if (pendingRequest && typeof pendingRequest === 'string' && pendingRequest.trim().length < 3) {
             pendingRequest = null;
           }
@@ -1364,11 +1418,16 @@ export async function POST(request: Request) {
       }
 
       // Handle all other function calls (kb_search, kb_get, end_voice_session, etc.)
-      if (functionCall && functionCall.name) {
-        const toolName = functionCall.name;
+      const otherFunctionCall = functionCalls.find(c => c.name !== "ignore_user" && c.name !== "start_voice_session");
+      const otherFunctionPart = functionCallParts.find(p => p.functionCall.name !== "ignore_user" && p.functionCall.name !== "start_voice_session");
+      
+      if (otherFunctionCall && otherFunctionCall.name) {
+        const toolName = otherFunctionCall.name;
         console.log(`Handling function call: ${toolName}`);
+        const toolErrorNotices: Array<{ toolName: string; type: string; message: string }> = [];
         
         // Initialize state controller
+        const turnNumber = Math.ceil(messages.length / 2);
         const state = createStateController({
           mode: 'text',
           isActive: true
@@ -1390,7 +1449,7 @@ export async function POST(request: Request) {
           clientId: `text-${Date.now()}`,
           ws: null,
           geminiSession: null,
-          args: functionCall.args || {},
+          args: otherFunctionCall.args || {},
           capabilities: { voice: false },
           session: {
             isActive: state.get('isActive'),
@@ -1406,7 +1465,7 @@ export async function POST(request: Request) {
         const dedupCheck = toolMemoryDedup.checkForDuplicate(
           sessionId,
           toolName,
-          functionCall.args || {}
+          otherFunctionCall.args || {}
         );
 
         let result;
@@ -1418,6 +1477,22 @@ export async function POST(request: Request) {
           result = dedupCheck.cachedResult;
           duration = Date.now() - startTime; // Should be ~0ms (instant)
         } else {
+        // Check for loop before execution
+        const loopCheck = loopDetector.detectLoop(sessionId, turnNumber, toolName, otherFunctionCall.args || {});
+        if (loopCheck.detected) {
+          console.warn(`[Loop Detection] Loop detected for ${toolName}: ${loopCheck.message}`);
+          result = {
+            ok: false,
+            error: {
+              type: 'LOOP_DETECTED',
+              message: loopCheck.message,
+              retryable: false
+            }
+          };
+        } else {
+          // Record call
+          loopDetector.recordCall(sessionId, turnNumber, toolName, otherFunctionCall.args || {}, null);
+
           // Execute tool through registry with retry logic
           result = await retryToolExecution(
             () => toolRegistry.executeTool(toolName, executionContext),
@@ -1429,15 +1504,24 @@ export async function POST(request: Request) {
               clientId: `text-${Date.now()}`
             }
           );
+        }
           duration = Date.now() - startTime;
+
+          // Enhanced timing log for slow tool calls
+          if (duration > 500) {
+            console.log(`[Tool] ⏱️ SLOW TOOL CALL: ${toolName} took ${duration}ms`);
+            if (result.meta?._timing) {
+              console.log(`[Tool] ⏱️ Breakdown: ${JSON.stringify(result.meta._timing)}`);
+            }
+          }
 
           // Record in tool memory store (post-execution)
           const callId = `call-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
           toolMemoryStore.recordToolCall(sessionId, {
             id: callId,
             toolId: toolName,
-            args: functionCall.args || {},
-            argsHash: hashArgs(functionCall.args || {}),
+            args: otherFunctionCall.args || {},
+            argsHash: hashArgs(otherFunctionCall.args || {}),
             timestamp: Date.now(),
             turn: 1, // TODO: Track actual turn number
             duration: duration,
@@ -1455,8 +1539,8 @@ export async function POST(request: Request) {
             position: observability.toolCalls.length + 1,
             chainPosition: 0,
             toolId: toolName,
-            args: functionCall.args || {},
-            thoughtSignature: functionCallPart?.thoughtSignature,
+            args: otherFunctionCall.args || {},
+            thoughtSignature: otherFunctionPart?.thoughtSignature,
             startTime: startTime,
             duration: duration,
             ok: result.ok,
@@ -1502,41 +1586,104 @@ export async function POST(request: Request) {
 
         // Continue conversation with tool result (success or error)
         // Add the function call and result to the conversation
-        // IMPORTANT: Use the full functionCallPart which includes thoughtSignature as sibling (required by Gemini 3)
-        // For errors, send the error information back to the model so it can respond naturally
+        // IMPORTANT: Clean the result data to remove internal metadata (_timing, etc.) before sending to model
+        const cleanedResultData = result.ok ? JSON.parse(JSON.stringify(result.data)) : null;
+
+        // Extract image data for multimodal analysis before cleaning
+        let imageData = null;
+        if (cleanedResultData && typeof cleanedResultData === 'object' && cleanedResultData._imageData) {
+          imageData = cleanedResultData._imageData;
+          delete cleanedResultData._imageData; // Remove from response text
+        }
+
+        if (cleanedResultData && typeof cleanedResultData === 'object') {
+          delete cleanedResultData._timing;
+          delete cleanedResultData._distance;
+          // Also clean nested results if they exist
+          if (Array.isArray(cleanedResultData.results)) {
+            cleanedResultData.results.forEach((r: any) => {
+              if (r.metadata) {
+                delete r.metadata._distance;
+                delete r.metadata.vector;
+              }
+            });
+          }
+
+          // Truncate large kb_get content field to reduce API latency
+          if (toolName === 'kb_get' && cleanedResultData.content) {
+            const maxLength = 2000; // ~500 tokens
+            if (cleanedResultData.content.length > maxLength) {
+              const originalLength = cleanedResultData.content.length;
+              const truncated = cleanedResultData.content.substring(0, maxLength);
+              cleanedResultData.content = truncated + '\n\n... [Content truncated for performance. Full content available in chunks.]';
+              cleanedResultData._truncated = true;
+              console.log(`[Performance] Truncated kb_get content from ${originalLength} to ${maxLength} chars`);
+            }
+          }
+        }
+
+        // Build response parts - include both functionResponse and imageData if available
+        const responseParts: Array<{ functionResponse?: { name: string; response: Record<string, unknown> }; inlineData?: { mimeType: string; data: string } }> = [
+          {
+            functionResponse: {
+              name: toolName,
+              // Send cleaned data to model
+              response: result.ok ? (cleanedResultData as Record<string, unknown>) : {
+                error: true,
+                type: result.error.type,
+                message: result.error.message,
+                retryable: result.error.retryable,
+                details: result.error.details
+              }
+            }
+          }
+        ];
+
+        // Add image data as separate part for multimodal analysis if available
+        // This enables pixel-level analysis grounded in the metadata context
+        if (imageData && imageData.mimeType && imageData.data) {
+          responseParts.push({
+            inlineData: {
+              mimeType: imageData.mimeType,
+              data: imageData.data
+            }
+          });
+          console.log(`[Multimodal] Including image data for ${toolName} (${imageData.mimeType})`);
+        }
+
         const updatedContents = [
           ...contentsToSend,
           {
             role: "model" as const,
             parts: [
               // Use the preserved functionCallPart which includes thoughtSignature
-              (functionCallPart as FunctionCallPart) || {
+              (otherFunctionPart as FunctionCallPart) || {
                 functionCall: {
                   name: toolName,
-                  args: functionCall.args || {}
+                  args: otherFunctionCall.args || {}
                 }
               }
             ]
           },
           {
             role: "user" as const,
-            parts: [
-              {
-                functionResponse: {
-                  name: toolName,
-                  // Send error info back to model if tool failed, otherwise send data
-                  response: result.ok ? result.data : {
-                    error: true,
-                    type: result.error.type,
-                    message: result.error.message,
-                    retryable: result.error.retryable,
-                    details: result.error.details
-                  }
-                }
-              }
-            ]
+            parts: responseParts
           }
         ];
+
+        if (!result.ok) {
+          toolErrorNotices.push({
+            toolName,
+            type: result.error.type,
+            message: result.error.message
+          });
+          updatedContents.push({
+            role: "user" as const,
+            parts: [{
+              text: `IMPORTANT: The tool "${toolName}" failed with a ${result.error.type} error. You must tell the user this happened and include the error message verbatim: "${result.error.message}". If the message includes suggestions or next steps, surface them explicitly.`
+            }]
+          });
+        }
 
         // Add guidance if KB search results are irrelevant
         if (shouldAddRelevanceGuidance) {
@@ -1575,7 +1722,7 @@ export async function POST(request: Request) {
           try {
              debugLog(`Calling generateContentStream for tool: ${toolName}`);
              const result = await ai.models.generateContentStream({
-                model: "gemini-3-flash-preview",
+                model: "gemini-2.5-flash",
                 contents: updatedContents,
                 config
              });
@@ -1596,7 +1743,7 @@ export async function POST(request: Request) {
                };
                
                return await ai.models.generateContentStream({
-                 model: "gemini-3-flash-preview",
+                 model: "gemini-2.5-flash",
                  contents: updatedContents,
                  config: fallbackConfig
                });
@@ -1622,70 +1769,82 @@ export async function POST(request: Request) {
 
               try {
                 // Emit status for the initial tool call
-                if (functionCall) {
-                  const initialStatus = buildToolStatus(toolName, functionCall.args || {});
+                if (otherFunctionCall) {
+                  const initialStatus = buildToolStatus(toolName, otherFunctionCall.args || {});
                   const statusEvent = encodeStatusEvent(initialStatus);
                   controller.enqueue(encoder.encode(statusEvent));
                 }
 
+                // Phase 3: Track chain metrics
+                const chainMetrics: Array<{
+                  chainIndex: number;
+                  toolName: string;
+                  toolExecutionMs: number;
+                  geminiTTFTMs: number;
+                  contextTokensAdded: number;
+                  totalChainStepMs: number;
+                }> = [];
+
                 // Loop to handle chained function calls
                 while (chainCount < MAX_CHAIN_LENGTH) {
-                  // Collect all chunks from current stream
-                  const collectedChunks: unknown[] = [];
-                  const iterator = currentStream[Symbol.asyncIterator]();
-                  let chunkCount = 0;
-                  while (true) {
-                    debugLog(`Iterating stream loop ${chunkCount}...`);
-                    const { value, done } = await iterator.next();
-                    chunkCount++;
-                    debugLog(`Stream chunk ${chunkCount} received: done=${done}`);
-                    if (done) break;
-                    collectedChunks.push(value);
-                  }
-                  debugLog(`Stream iteration complete. ${chunkCount} chunks.`);
-
-
-                  // Extract function calls and text from collected chunks
+                  // Extract function calls and text from stream chunks as they arrive
                   let nextFunctionCall: FunctionCall | null = null;
                   let nextFunctionCallPart: FunctionCallPart | null = null;
                   let responseText = "";
-                  
+
                   // Accumulate function call data across chunks
-                  // Note: thoughtSignature is tracked separately (sibling of functionCall, not inside it)
                   const accumulatedFunctionCall: Partial<FunctionCall> = {};
                   let accumulatedThoughtSignature: string | undefined = undefined;
                   let hasFunctionCall = false;
-                  
-                  // Debug: Dump chunks if needed
+
+                  const iterator = currentStream[Symbol.asyncIterator]();
+                  let chunkCount = 0;
+                  let firstTokenTime: number | null = null;
+                  const streamStartTime = Date.now();
                   const debugChunks: unknown[] = [];
 
-                  for (const chunk of collectedChunks) {
-                    const typed = chunk as StreamChunk;
-                    debugChunks.push(typed); // Store for debugging
+                  while (true) {
+                    const { value, done } = await iterator.next();
+                    if (done) break;
+                    
+                    if (firstTokenTime === null) {
+                      firstTokenTime = Date.now();
+                      console.log(`[Chain ${chainCount}] First token received in ${firstTokenTime - streamStartTime}ms`);
+                    }
+                    
+                    chunkCount++;
+                    const typed = value as StreamChunk;
+                    debugChunks.push(typed);
                     const candidates: StreamChunkPart[] = typed?.candidates?.[0]?.content?.parts || [];
 
-                    // Look for function calls and text in parts
+                    // Process parts in this chunk
                     for (const part of candidates) {
+                      // 1. Handle Text (Stream immediately for better TTFT)
+                      if (part.text) {
+                        responseText += part.text;
+                        const encoded = encoder.encode(part.text);
+                        totalBytesSent += encoded.length;
+                        controller.enqueue(encoded);
+                      }
+
+                      // 2. Handle Function Calls (Accumulate)
                       if (part.functionCall) {
                         hasFunctionCall = true;
-                        
                         if (part.functionCall.name) accumulatedFunctionCall.name = part.functionCall.name;
                         
-                        // thoughtSignature is a SIBLING of functionCall in the part, not inside it
+                        // thoughtSignature is a SIBLING of functionCall in the part
                         if (part.thoughtSignature) {
-                           accumulatedThoughtSignature = part.thoughtSignature;
+                          accumulatedThoughtSignature = part.thoughtSignature;
                         }
                         
                         if (part.functionCall.args) {
-                           accumulatedFunctionCall.args = { ...accumulatedFunctionCall.args, ...part.functionCall.args };
+                          accumulatedFunctionCall.args = { ...accumulatedFunctionCall.args, ...part.functionCall.args };
                         }
-                      }
-                      if (part.text) {
-                        responseText += part.text;
                       }
                     }
                   }
-                  
+                  debugLog(`Stream iteration complete. ${chunkCount} chunks.`);
+
                   if (hasFunctionCall && accumulatedFunctionCall.name) {
                      nextFunctionCall = accumulatedFunctionCall as FunctionCall;
                      // Build the part with thoughtSignature as a SIBLING of functionCall
@@ -1749,17 +1908,54 @@ export async function POST(request: Request) {
                     };
 
                     const chainedStartTime = Date.now();
-                    const chainedResult = await retryToolExecution(
-                      () => toolRegistry.executeTool(chainedToolName, chainedExecutionContext),
-                      {
-                        mode: 'text',
-                        maxRetries: 3,
-                        toolId: chainedToolName,
-                        toolMetadata: chainedToolMetadata,
-                        clientId: `text-${Date.now()}`
-                      }
-                    );
+                    let chainedResult;
+
+                    // Check for loop before execution
+                    const chainedLoopCheck = loopDetector.detectLoop(sessionId, turnNumber, chainedToolName, nextFunctionCall.args || {});
+                    if (chainedLoopCheck.detected) {
+                      console.warn(`[Loop Detection] Chained loop detected for ${chainedToolName}: ${chainedLoopCheck.message}`);
+                      chainedResult = {
+                        ok: false,
+                        error: {
+                          type: 'LOOP_DETECTED',
+                          message: chainedLoopCheck.message,
+                          retryable: false
+                        }
+                      };
+                    } else {
+                      // Record call
+                      loopDetector.recordCall(sessionId, turnNumber, chainedToolName, nextFunctionCall.args || {}, null);
+
+                      chainedResult = await retryToolExecution(
+                        () => toolRegistry.executeTool(chainedToolName, chainedExecutionContext),
+                        {
+                          mode: 'text',
+                          maxRetries: 3,
+                          toolId: chainedToolName,
+                          toolMetadata: chainedToolMetadata,
+                          clientId: `text-${Date.now()}`
+                        }
+                      );
+                    }
                     const chainedDuration = Date.now() - chainedStartTime;
+
+                    // Track tool execution time for chain metrics
+                    const toolExecutionTime = chainedDuration;
+                    const geminiTTFT = firstTokenTime ? firstTokenTime - streamStartTime : 0;
+                    const estimatedTokensAdded = chainedResult.ok ? estimateTokens(JSON.stringify(chainedResult.data)) : 0;
+                    const totalChainStepTime = (Date.now() - chainedStartTime) + (firstTokenTime ? firstTokenTime - streamStartTime : 0);
+
+                    // Add to chain metrics
+                    chainMetrics.push({
+                      chainIndex: chainCount,
+                      toolName: chainedToolName,
+                      toolExecutionMs: toolExecutionTime,
+                      geminiTTFTMs: geminiTTFT,
+                      contextTokensAdded: estimatedTokensAdded,
+                      totalChainStepMs: totalChainStepTime
+                    });
+
+                    console.log(`[Chain Analysis] Chain ${chainCount} (${chainedToolName}): tool=${toolExecutionTime}ms, TTFT=${geminiTTFT}ms, total=${totalChainStepTime}ms, +${estimatedTokensAdded} tokens`);
 
                     // Collect observability data for chained calls
                     if (observability) {
@@ -1799,6 +1995,69 @@ export async function POST(request: Request) {
                     }
 
                     // Update contents with this function call and result (success or error)
+                    // Clean result data before sending to model
+                    const cleanedChainedResultData = chainedResult.ok ? JSON.parse(JSON.stringify(chainedResult.data)) : null;
+
+                    // Extract image data for multimodal analysis before cleaning (chained calls)
+                    let chainedImageData = null;
+                    if (cleanedChainedResultData && typeof cleanedChainedResultData === 'object' && cleanedChainedResultData._imageData) {
+                      chainedImageData = cleanedChainedResultData._imageData;
+                      delete cleanedChainedResultData._imageData; // Remove from response text
+                    }
+
+                    if (cleanedChainedResultData && typeof cleanedChainedResultData === 'object') {
+                      delete cleanedChainedResultData._timing;
+                      delete cleanedChainedResultData._distance;
+                      if (Array.isArray(cleanedChainedResultData.results)) {
+                        cleanedChainedResultData.results.forEach((r: any) => {
+                          if (r.metadata) {
+                            delete r.metadata._distance;
+                            delete r.metadata.vector;
+                          }
+                        });
+                      }
+
+                      // Truncate large kb_get content field to reduce API latency
+                      if (chainedToolName === 'kb_get' && cleanedChainedResultData.content) {
+                        const maxLength = 2000; // ~500 tokens
+                        if (cleanedChainedResultData.content.length > maxLength) {
+                          const originalLength = cleanedChainedResultData.content.length;
+                          const truncated = cleanedChainedResultData.content.substring(0, maxLength);
+                          cleanedChainedResultData.content = truncated + '\n\n... [Content truncated for performance. Full content available in chunks.]';
+                          cleanedChainedResultData._truncated = true;
+                          console.log(`[Performance] Truncated chained kb_get content from ${originalLength} to ${maxLength} chars`);
+                        }
+                      }
+                    }
+
+                    // Build chained response parts - include both functionResponse and imageData if available
+                    const chainedResponseParts: Array<{ functionResponse?: { name: string; response: Record<string, unknown> }; inlineData?: { mimeType: string; data: string } }> = [
+                      {
+                        functionResponse: {
+                          name: chainedToolName,
+                          // Send cleaned info back to model
+                          response: chainedResult.ok ? (cleanedChainedResultData as Record<string, unknown>) : {
+                            error: true,
+                            type: chainedResult.error.type,
+                            message: chainedResult.error.message,
+                            retryable: chainedResult.error.retryable,
+                            details: chainedResult.error.details
+                          }
+                        }
+                      }
+                    ];
+
+                    // Add image data for chained calls too
+                    if (chainedImageData && chainedImageData.mimeType && chainedImageData.data) {
+                      chainedResponseParts.push({
+                        inlineData: {
+                          mimeType: chainedImageData.mimeType,
+                          data: chainedImageData.data
+                        }
+                      });
+                      console.log(`[Multimodal] Including image data for chained ${chainedToolName} (${chainedImageData.mimeType})`);
+                    }
+
                     currentContents = [
                       ...currentContents,
                       {
@@ -1807,21 +2066,23 @@ export async function POST(request: Request) {
                       },
                       {
                         role: "user" as const,
-                        parts: [{
-                          functionResponse: {
-                            name: chainedToolName,
-                            // Send error info back to model if tool failed, otherwise send data
-                            response: chainedResult.ok ? chainedResult.data : {
-                              error: true,
-                              type: chainedResult.error.type,
-                              message: chainedResult.error.message,
-                              retryable: chainedResult.error.retryable,
-                              details: chainedResult.error.details
-                            }
-                          }
-                        }]
+                        parts: chainedResponseParts
                       }
                     ];
+
+                    if (!chainedResult.ok) {
+                      toolErrorNotices.push({
+                        toolName: chainedToolName,
+                        type: chainedResult.error.type,
+                        message: chainedResult.error.message
+                      });
+                      currentContents.push({
+                        role: "user" as const,
+                        parts: [{
+                          text: `IMPORTANT: The tool "${chainedToolName}" failed with a ${chainedResult.error.type} error. You must tell the user this happened and include the error message verbatim: "${chainedResult.error.message}". If the message includes suggestions or next steps, surface them explicitly.`
+                        }]
+                      });
+                    }
 
                     console.log(`[Chain ${chainCount}] Tool result received, continuing conversation`);
 
@@ -1844,9 +2105,12 @@ export async function POST(request: Request) {
                     }
 
                     // Make another API call with the new tool result
+                    const followUpStartTime = Date.now();
                     currentStream = await retryWithBackoff(async () => {
                       const config: GeminiConfig = {};
 
+                      // Check if we can use or create a cache for this chained call
+                      // This is critical for performance when tool results are large
                       if (cachedContent && cachedContent.trim()) {
                         config.cachedContent = cachedContent;
                       } else {
@@ -1855,11 +2119,16 @@ export async function POST(request: Request) {
                       }
 
                       try {
-                        return await ai.models.generateContentStream({
-                          model: "gemini-3-flash-preview",
+                        const chainApiCallStart = Date.now();
+                        const stream = await ai.models.generateContentStream({
+                          model: "gemini-2.5-flash",
                           contents: currentContents,
                           config
                         });
+                        const chainStreamCreated = Date.now();
+                        console.log(`[Chain ${chainCount}] Follow-up stream created in ${chainStreamCreated - chainApiCallStart}ms`);
+                        console.log(`[Gemini API] Chain ${chainCount} network handshake: ${chainStreamCreated - followUpStartTime}ms`);
+                        return stream;
                       } catch (err) {
                         // If cache error and we're using cache, retry without cache
                         if (isCacheError(err) && config.cachedContent) {
@@ -1873,7 +2142,7 @@ export async function POST(request: Request) {
                           };
                           
                           return await ai.models.generateContentStream({
-                            model: "gemini-3-flash-preview",
+                            model: "gemini-2.5-flash",
                             contents: currentContents,
                             config: fallbackConfig
                           });
@@ -1887,15 +2156,38 @@ export async function POST(request: Request) {
                     continue;
                   }
 
-                  // No more function calls, stream the text response
+                  // No more function calls, we're done
+                  // (Text was already streamed chunk-by-chunk in the iteration loop above)
                   if (responseText) {
                     accumulatedFullText += responseText;
-                    const encoded = encoder.encode(responseText);
-                    totalBytesSent += encoded.length;
-                    controller.enqueue(encoded);
-                    console.log(`Final response streamed: ${encoded.length} bytes (after ${chainCount} chained calls)`);
+                    console.log(`Final response streamed: ${responseText.length} bytes (after ${chainCount} chained calls)`);
                   } else {
                     console.warn(`No text in final response after ${chainCount} chained calls`);
+                  }
+
+                  if (toolErrorNotices.length > 0) {
+                    const missingNotices = toolErrorNotices.filter((notice) =>
+                      !accumulatedFullText.includes(notice.message)
+                    );
+                    if (missingNotices.length > 0) {
+                      const noticeText = missingNotices
+                        .map((notice) => `Tool error (${notice.toolName}): ${notice.type} - "${notice.message}"`)
+                        .join('\n');
+                      const suffix = `\n\n${noticeText}`;
+                      controller.enqueue(encoder.encode(suffix));
+                      accumulatedFullText += suffix;
+                    }
+                  }
+
+                  // Log chain metrics summary
+                  if (chainMetrics.length > 0) {
+                    const totalToolTime = chainMetrics.reduce((sum, m) => sum + m.toolExecutionMs, 0);
+                    const totalModelTime = chainMetrics.reduce((sum, m) => sum + m.geminiTTFTMs, 0);
+                    const totalChainTime = chainMetrics.reduce((sum, m) => sum + m.totalChainStepMs, 0);
+                    console.log(`[Chain Analysis Summary] Total chains: ${chainMetrics.length}`);
+                    console.log(`[Chain Analysis Summary] Tool time: ${totalToolTime}ms (${Math.round(totalToolTime / totalChainTime * 100)}%)`);
+                    console.log(`[Chain Analysis Summary] Model time: ${totalModelTime}ms (${Math.round(totalModelTime / totalChainTime * 100)}%)`);
+                    console.log(`[Chain Analysis Summary] Total chain cost: ${totalChainTime}ms`);
                   }
 
                   break; // Exit loop
@@ -1953,6 +2245,12 @@ export async function POST(request: Request) {
                 // Trigger background summarization for this turn (tool memory)
                 toolMemorySummarizer.enqueueSummarization(userId || 'anonymous-text-session')
                   .catch(err => console.warn(`[ToolMemory] Summarization failed:`, err));
+
+                // T6: Final response sent (chained path)
+                const requestEndTime = Date.now();
+                const totalRequestTime = requestEndTime - requestStartTime;
+                console.log(`[Request Lifecycle] Total request time: ${totalRequestTime}ms`);
+                console.log(`[Request Lifecycle Summary] Context: ${contextPrepTime - requestStartTime}ms | Gemini TTFT: ${(firstChunkTime || bufferStart) - geminiCallStart}ms | Streaming: ${requestEndTime - (firstChunkTime || bufferStart)}ms`);
 
                 controller.close();
               } catch (error) {
@@ -2028,7 +2326,13 @@ export async function POST(request: Request) {
               }
 
               console.log(`Stream completed: ${chunksProcessed} chunks, ${bytesSent} bytes`);
-              
+
+              // T6: Final response sent (plain text path)
+              const requestEndTime = Date.now();
+              const totalRequestTime = requestEndTime - requestStartTime;
+              console.log(`[Request Lifecycle] Total request time: ${totalRequestTime}ms`);
+              console.log(`[Request Lifecycle Summary] Context: ${contextPrepTime - requestStartTime}ms | Gemini TTFT: ${(firstChunkTime || bufferStart) - geminiCallStart}ms | Streaming: ${requestEndTime - (firstChunkTime || bufferStart)}ms`);
+
               // Background: Update cache with new summary if it was generated
               if (summaryPromise) {
                 summaryPromise.then((newSummary) => {

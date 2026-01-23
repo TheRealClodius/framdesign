@@ -15,7 +15,7 @@ class ToolMemorySummarizer {
     this.queue = [];
     this.isProcessing = false;
     this.TOKEN_BUDGET = 150;
-    this.MODEL = 'gemini-1.5-flash-8b'; // Gemini Flash Nano - very fast
+    this.MODEL = 'gemini-2.5-flash-lite'; // Gemini Flash Lite - optimized for speed and cost
     this.MAX_RESPONSE_CHARS = 1000; // Truncate long responses for summarization
 
     // Initialize AI client
@@ -35,7 +35,7 @@ class ToolMemorySummarizer {
    */
   async enqueueSummarization(sessionId) {
     // Get calls that need summarization
-    const callsNeeding Summary = toolMemoryStore.getCallsNeedingSummarization(sessionId);
+    const callsNeedingSummary = toolMemoryStore.getCallsNeedingSummarization(sessionId);
 
     if (callsNeedingSummary.length === 0) {
       return;

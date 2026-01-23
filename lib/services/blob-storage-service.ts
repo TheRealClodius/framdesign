@@ -245,6 +245,27 @@ export async function assetExists(blobId: string, extension: string): Promise<bo
 }
 
 /**
+ * Fetch asset as Buffer for multimodal processing
+ * @param blobId - Stable identifier
+ * @param extension - File extension
+ * @returns File buffer
+ */
+export async function fetchAssetBuffer(
+  blobId: string,
+  extension: string
+): Promise<Buffer> {
+  if (!blobId) {
+    throw new Error('blob_id is required');
+  }
+
+  const fileName = `assets/${blobId}.${extension}`;
+  const file = bucket.file(fileName);
+
+  const [buffer] = await file.download();
+  return buffer;
+}
+
+/**
  * Get URL cache statistics (useful for monitoring)
  * @returns Cache statistics including size, max size, and expired entry count
  */
@@ -256,13 +277,13 @@ export function getUrlCacheStats(): {
 } {
   const now = Date.now();
   let expiredCount = 0;
-  
+
   for (const entry of urlCache.values()) {
     if (entry.expiresAt <= now) {
       expiredCount++;
     }
   }
-  
+
   return {
     size: urlCache.size,
     maxSize: MAX_CACHE_SIZE,
