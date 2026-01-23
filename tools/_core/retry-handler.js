@@ -25,7 +25,11 @@ const DEFAULT_CONFIG = {
   maxRetries: 3,
   initialDelayMs: 300,  // Increased from 100ms to account for Qdrant indexing delays
   maxDelayMs: 3000,      // Increased from 2000ms
-  backoffMultiplier: 2
+  backoffMultiplier: 2,
+  outageInitialDelayMs: 1000, // Slower retries during service outage (e.g., 503)
+  outageMaxDelayMs: 10000,
+  outageBackoffMultiplier: 2,
+  jitterRatio: 0.2 // Add +/-20% jitter to reduce herd effects
 };
 
 /**
@@ -36,15 +40,33 @@ function sleep(ms) {
 }
 
 /**
+ * Apply jitter to delay to reduce retry storms.
+ */
+function applyJitter(delayMs, jitterRatio) {
+  if (!jitterRatio) {
+    return delayMs;
+  }
+  const jitter = delayMs * jitterRatio;
+  const min = Math.max(0, delayMs - jitter);
+  const max = delayMs + jitter;
+  return Math.floor(min + Math.random() * (max - min));
+}
+
+/**
  * Calculate delay for retry attempt
  *
  * @param {number} attempt - Current attempt number (0-indexed)
  * @param {object} config - Retry configuration
+ * @param {object} error - Tool error (optional)
  * @returns {number} - Delay in milliseconds
  */
-function calculateDelay(attempt, config) {
-  const delay = config.initialDelayMs * Math.pow(config.backoffMultiplier, attempt);
-  return Math.min(delay, config.maxDelayMs);
+function calculateDelay(attempt, config, error) {
+  const isServiceUnavailable = error?.details?.httpStatus === 503;
+  const initialDelayMs = isServiceUnavailable ? config.outageInitialDelayMs : config.initialDelayMs;
+  const backoffMultiplier = isServiceUnavailable ? config.outageBackoffMultiplier : config.backoffMultiplier;
+  const maxDelayMs = isServiceUnavailable ? config.outageMaxDelayMs : config.maxDelayMs;
+  const delay = Math.min(initialDelayMs * Math.pow(backoffMultiplier, attempt), maxDelayMs);
+  return applyJitter(delay, config.jitterRatio);
 }
 
 /**
@@ -92,6 +114,9 @@ export async function retryWithBackoff(executeFn, options = {}) {
       // Check if error is retryable
       const error = result.error;
       if (!error.retryable) {
+        if (error.details?.service === 'qdrant' && error.details?.httpStatus === 503) {
+          console.log(`[RetryHandler] ${toolId} not retrying: Qdrant service unavailable (503) - ${error.message} (client: ${clientId})`);
+        }
         // Not retryable - return error immediately
         if (attempt > 0) {
           console.log(`[RetryHandler] ${toolId} failed after ${attempt} retries: ${error.type} - ${error.message} (client: ${clientId})`);
@@ -120,7 +145,7 @@ export async function retryWithBackoff(executeFn, options = {}) {
       }
 
       // Calculate delay and wait
-      const delay = calculateDelay(attempt, DEFAULT_CONFIG);
+      const delay = calculateDelay(attempt, DEFAULT_CONFIG, error);
       console.log(`[RetryHandler] ${toolId} failed (attempt ${attempt + 1}/${maxRetries + 1}): ${error.type} - ${error.message}. Retrying in ${delay}ms... (client: ${clientId})`);
 
       await sleep(delay);

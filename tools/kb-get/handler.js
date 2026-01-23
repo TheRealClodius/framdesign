@@ -9,11 +9,13 @@ import { ErrorType, ToolError } from '../_core/error-types.js';
 
 // Import blob storage service for GCS URL resolution
 let resolveBlobUrl;
+let fetchAssetBuffer;
 async function loadBlobService() {
-  if (!resolveBlobUrl) {
+  if (!resolveBlobUrl || !fetchAssetBuffer) {
     try {
       const blobModule = await import('@/lib/services/blob-storage-service');
       resolveBlobUrl = blobModule.resolveBlobUrl || blobModule.default?.resolveBlobUrl;
+      fetchAssetBuffer = blobModule.fetchAssetBuffer || blobModule.default?.fetchAssetBuffer;
     } catch (importError) {
       // Fallback for Node.js runtime (voice server)
       // Use a function to create the import path dynamically so webpack doesn't analyze it
@@ -22,13 +24,43 @@ async function loadBlobService() {
         const blobPath = getImportPath('blob-storage-service');
         const blobModule = await import(/* webpackIgnore: true */ blobPath);
         resolveBlobUrl = blobModule.resolveBlobUrl || blobModule.default?.resolveBlobUrl;
+        fetchAssetBuffer = blobModule.fetchAssetBuffer || blobModule.default?.fetchAssetBuffer;
       } catch (fallbackError) {
         console.warn('[kb_get] Failed to load blob storage service:', fallbackError);
         // Will throw error when trying to use it for assets
       }
     }
   }
-  return resolveBlobUrl;
+  return { resolveBlobUrl, fetchAssetBuffer };
+}
+
+function normalizeEntityId(rawId) {
+  if (typeof rawId !== 'string') return rawId;
+  const [type, name, ...rest] = rawId.split(':');
+  if (!type || !name || rest.length > 0) {
+    return rawId.toLowerCase();
+  }
+  return `${type.toLowerCase()}:${name.toLowerCase()}`;
+}
+
+function extractHttpStatus(error) {
+  if (!error || typeof error !== 'object') return undefined;
+  return (
+    error.status ||
+    error.statusCode ||
+    error.code ||
+    error.response?.status ||
+    error.response?.statusCode ||
+    error.data?.status ||
+    error.data?.statusCode
+  );
+}
+
+function isServiceUnavailable(error) {
+  const status = extractHttpStatus(error);
+  if (status === 503) return true;
+  const message = (error?.message || String(error || '')).toLowerCase();
+  return message.includes('service unavailable') || message.includes('503');
 }
 
 /**
@@ -40,8 +72,12 @@ async function loadBlobService() {
 export async function execute(context) {
   const { args } = context;
   const startTime = Date.now();
-  const entityId = args.id;
+  const rawEntityId = args.id;
+  const entityId = normalizeEntityId(rawEntityId);
 
+  if (rawEntityId !== entityId) {
+    console.log(`[kb_get] Normalized entity id "${rawEntityId}" -> "${entityId}"`);
+  }
   console.log(`[kb_get] Retrieving entity: ${entityId}`);
 
   try {
@@ -106,82 +142,10 @@ export async function execute(context) {
     }));
 
     if (matchingChunks.length === 0) {
-      // Entity not found - try to suggest similar entity IDs
-      let suggestion = '';
-      
-      // Extract type and name from entity ID
-      const parts = entityId.split(':');
-      if (parts.length === 2) {
-        const [type, name] = parts;
-        
-        // Special cases for common ID mismatches
-        if (name === 'uipath_delegate' && type === 'project') {
-          suggestion = ' Did you mean "project:desktop_agent_uipath"?';
-        } else if (name === 'uipath_desktop_agent' && type === 'project') {
-          suggestion = ' Did you mean "project:desktop_agent_uipath"?';
-        } else {
-          // Try to find similar entity IDs by searching for entities of the same type
-          try {
-            // Get all entities of the same type to suggest alternatives
-            const allResults = await searchSimilar(
-              dummyEmbedding,
-              50,
-              { entity_type: type }
-            );
-            
-            // Extract unique entity IDs
-            const entityIds = new Set();
-            for (const result of allResults) {
-              const id = result.metadata?.entity_id;
-              if (id && id.startsWith(`${type}:`)) {
-                entityIds.add(id);
-              }
-            }
-            
-            // Find similar names (improved string similarity with word order tolerance)
-            const similarIds = Array.from(entityIds).filter(id => {
-              const idName = id.split(':')[1];
-              if (!idName) return false;
-              
-              // Normalize names for comparison
-              const nameWords = new Set(name.toLowerCase().split('_').filter(w => w.length > 0));
-              const idWords = new Set(idName.toLowerCase().split('_').filter(w => w.length > 0));
-              
-              // Check if names share common words (order-independent)
-              const commonWords = [...nameWords].filter(w => idWords.has(w));
-              const allWords = new Set([...nameWords, ...idWords]);
-              
-              // Calculate similarity: common words / total unique words
-              // If they share most words (even in different order), they're similar
-              const similarity = commonWords.length / Math.max(allWords.size, 1);
-              
-              // Also check substring matches for partial matches
-              const nameLower = name.toLowerCase();
-              const idNameLower = idName.toLowerCase();
-              
-              return similarity >= 0.5 || // At least 50% word overlap
-                     commonWords.length >= 2 || // At least 2 common words
-                     idNameLower.includes(nameLower) ||
-                     nameLower.includes(idNameLower);
-            });
-            
-            if (similarIds.length > 0) {
-              suggestion = ` Did you mean one of: ${similarIds.slice(0, 3).map(id => `"${id}"`).join(', ')}?`;
-            } else if (entityIds.size > 0) {
-              // If no similar names, just show some examples of the same type
-              const examples = Array.from(entityIds).slice(0, 3);
-              suggestion = ` Available ${type} entities include: ${examples.map(id => `"${id}"`).join(', ')}.`;
-            }
-          } catch (suggestionError) {
-            // If suggestion lookup fails, just use the basic error message
-            console.warn(`[kb_get] Failed to generate suggestions:`, suggestionError);
-          }
-        }
-      }
-      
+      // Entity not found - fail fast without suggestions
       throw new ToolError(
         ErrorType.PERMANENT,
-        `Entity '${entityId}' not found in KB.${suggestion} Use kb_search to find the correct entity ID.`,
+        `Entity '${entityId}' not found in KB. Use kb_search to find entities.`,
         { retryable: false }
       );
     }
@@ -208,26 +172,58 @@ export async function execute(context) {
       // Assets are single chunks - return asset-specific data with GCS URL resolution
       const blobId = metadata.blob_id;
       const extension = metadata.file_extension;
-      
+
       // Resolve blob_id to GCS URL if available
       let assetUrl = '';
       let markdown = '';
-      
+      let imageData = null; // For multimodal analysis
+
       if (blobId && extension) {
         try {
-          await loadBlobService();
-          if (!resolveBlobUrl) {
+          const blobService = await loadBlobService();
+          if (!blobService.resolveBlobUrl) {
             throw new Error('Blob storage service not available');
           }
-          assetUrl = await resolveBlobUrl(blobId, extension);
+          assetUrl = await blobService.resolveBlobUrl(blobId, extension);
           const caption = metadata.caption || metadata.title || '';
-          
+
           // Handle videos with HTML video tag, images/GIFs with markdown
           if (entityType === 'video' || extension === 'mov' || extension === 'mp4' || extension === 'webm') {
             markdown = `<video controls><source src="${assetUrl}" type="video/${extension === 'mov' ? 'quicktime' : extension}">Your browser does not support the video tag.</video>\n\n${caption ? `*${caption}*` : ''}`;
           } else {
             // Images and GIFs use markdown image syntax
             markdown = `![${caption}](${assetUrl})`;
+
+            // For visual assets (photo, diagram, gif), fetch image data for multimodal analysis
+            // This allows the agent to analyze actual pixels while being grounded in metadata context
+            if (['photo', 'diagram', 'gif'].includes(entityType)) {
+              try {
+                if (!blobService.fetchAssetBuffer) {
+                  throw new Error('fetchAssetBuffer not available');
+                }
+                const imageBuffer = await blobService.fetchAssetBuffer(blobId, extension);
+
+                // Determine MIME type from extension
+                const mimeTypeMap = {
+                  'png': 'image/png',
+                  'jpg': 'image/jpeg',
+                  'jpeg': 'image/jpeg',
+                  'gif': 'image/gif',
+                  'webp': 'image/webp'
+                };
+                const mimeType = mimeTypeMap[extension.toLowerCase()] || 'image/png';
+
+                imageData = {
+                  mimeType,
+                  data: imageBuffer.toString('base64')
+                };
+
+                console.log(`[kb_get] Fetched image data for ${entityId} (${Math.round(imageBuffer.length / 1024)}KB)`);
+              } catch (imageError) {
+                console.warn(`[kb_get] Failed to fetch image buffer for ${entityId}:`, imageError.message);
+                // Continue without image data - metadata is still useful
+              }
+            }
           }
         } catch (blobError) {
           console.warn(`[kb_get] Failed to resolve blob URL for ${entityId}:`, blobError.message);
@@ -258,7 +254,7 @@ export async function execute(context) {
           );
         }
       }
-      
+
       return {
         ok: true,
         data: {
@@ -276,7 +272,8 @@ export async function execute(context) {
           tags: tryParseJSON(metadata.tags) || [],
           metadata: extractRelevantMetadata(metadata),
           _instructions: "Use the 'markdown' field directly in your response",
-          _timing: finalTiming
+          _timing: finalTiming,
+          _imageData: imageData // Image data for multimodal analysis (internal, excluded from display)
         },
         meta: {
           _timing: finalTiming
@@ -310,6 +307,20 @@ export async function execute(context) {
     // Propagate ToolErrors
     if (error.name === 'ToolError') {
       throw error;
+    }
+    if (isServiceUnavailable(error)) {
+      const status = extractHttpStatus(error) || 503;
+      throw new ToolError(
+        ErrorType.TRANSIENT,
+        `Vector store unavailable (Qdrant ${status}). Please try again later.`,
+        {
+          retryable: false,
+          details: {
+            service: 'qdrant',
+            httpStatus: status
+          }
+        }
+      );
     }
     // Wrap unexpected errors
     throw new ToolError(ErrorType.TRANSIENT, `Failed to retrieve entity: ${error.message}`, {

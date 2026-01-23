@@ -179,7 +179,7 @@ ${conversationText}
 Summary:`;
 
     const result = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: "gemini-2.5-flash",
       contents: [{
         role: "user" as const,
         parts: [{ text: summaryPrompt }],
@@ -404,11 +404,11 @@ async function getSystemPromptCache(ai: GoogleGenAI, providerSchemas: ProviderSc
       ];
 
       // Check token count first (optional, but good practice)
-      // Note: gemini-3-flash-preview might not support caching yet
+      // Note: this model might not support caching yet
       // We'll try to create cache, but fall back gracefully if it fails
       // Include tools in cache so we don't need to pass them when using cached content
       const cache = await ai.caches.create({
-        model: "gemini-3-flash-preview", // Try with preview model
+        model: "gemini-2.5-flash",
         config: {
           systemInstruction: FRAM_SYSTEM_PROMPT,
           contents: systemContent,
@@ -535,7 +535,7 @@ async function getConversationCache(
 
       // Include tools in cache so we don't need to pass them when using cached content
       const cache = await ai.caches.create({
-        model: "gemini-3-flash-preview",
+        model: "gemini-2.5-flash",
         config: {
           systemInstruction: FRAM_SYSTEM_PROMPT,
           contents: cacheContent,
@@ -619,10 +619,13 @@ async function retryWithBackoff<T>(
 }
 
 export async function POST(request: Request) {
+  // T0: Request received
+  const requestStartTime = Date.now();
+
   // Check for observability mode (dev-only)
   const url = new URL(request.url);
   const observabilityMode = url.searchParams.get('_observability') === 'true';
-  
+
   // Initialize observability collector (only if mode is enabled)
   const observability: ObservabilityData | null = observabilityMode ? {
     contextStack: {} as ObservabilityContextStack,
@@ -630,7 +633,7 @@ export async function POST(request: Request) {
     chainedCalls: 0,
     totalDuration: 0,
     finalResponseLength: 0,
-    requestStartTime: Date.now()
+    requestStartTime: requestStartTime
   } : null;
 
   try {
@@ -987,6 +990,21 @@ export async function POST(request: Request) {
       console.log(`Dropped ${budgetResult.droppedMessages} oldest message(s) to fit token budget`);
     }
 
+    // T1: Context preparation complete
+    const contextPrepTime = Date.now();
+    console.log(`[Request Lifecycle] Context prep: ${contextPrepTime - requestStartTime}ms (T1-T0)`);
+
+    // Phase 2: Context Size Analysis
+    const contextMetrics = {
+      messageCount: contentsToSend.length,
+      totalChars: contentsToSend.reduce((sum, msg) => sum + JSON.stringify(msg).length, 0),
+      estimatedTokens: estimateMessageTokens(contentsToSend),
+      hasSummary: !!summary,
+      summaryTokens: summary ? estimateTokens(summary) : 0,
+      toolSchemaTokens: estimateTokens(JSON.stringify(providerSchemas))
+    };
+    console.log('[Context Analysis]', JSON.stringify(contextMetrics, null, 2));
+
     // Collect context stack data for observability
     if (observability) {
       const toolCount = toolRegistry.tools.size;
@@ -1015,11 +1033,15 @@ export async function POST(request: Request) {
       };
     }
 
+    // T2: About to call Gemini API
+    const geminiCallStart = Date.now();
+    console.log(`[Request Lifecycle] Pre-Gemini: ${geminiCallStart - contextPrepTime}ms (T2-T1)`);
+
     // Generate response with streaming (with retry logic)
     const stream = await retryWithBackoff(async () => {
       const estimatedTokens = estimateMessageTokens(contentsToSend);
       console.log("=== Gemini API Request ===");
-      console.log("Model: gemini-3-flash-preview (streaming)");
+      console.log("Model: gemini-2.5-flash (streaming)");
       console.log("Messages to send:", contentsToSend.length);
       console.log("Estimated tokens:", estimatedTokens);
       console.log("Using cached content:", cachedContent || "none");
@@ -1054,13 +1076,15 @@ export async function POST(request: Request) {
       }
 
       try {
+        const apiCallStart = Date.now();
         const result = await ai.models.generateContentStream({
-          model: "gemini-3-flash-preview", // Gemini 3 Flash Preview
+          model: "gemini-2.5-flash",
           contents: contentsToSend,
           config
         });
-        
-        console.log("Gemini API stream created");
+        const streamCreated = Date.now();
+        console.log(`[Gemini API] Stream created in ${streamCreated - apiCallStart}ms`);
+
         return result;
       } catch (err) {
         // If cache error and we're using cache, retry without cache
@@ -1075,7 +1099,7 @@ export async function POST(request: Request) {
           };
           
           const result = await ai.models.generateContentStream({
-            model: "gemini-3-flash-preview",
+            model: "gemini-2.5-flash",
             contents: contentsToSend,
             config: fallbackConfig
           });
@@ -1098,11 +1122,20 @@ export async function POST(request: Request) {
     try {
       const iterator = stream[Symbol.asyncIterator]();
       const bufferStart = Date.now();
+      let firstChunkTime: number | null = null;
 
       // Buffer a few chunks (or up to time limit) to detect function calls before streaming
       while (bufferedChunks.length < STREAM_CONFIG.MAX_BUFFER_CHUNKS && Date.now() - bufferStart < STREAM_CONFIG.MAX_BUFFER_MS) {
         const { value, done } = await iterator.next();
         if (done) break;
+
+        // T3: First chunk received from Gemini
+        if (firstChunkTime === null) {
+          firstChunkTime = Date.now();
+          console.log(`[Request Lifecycle] Gemini TTFT: ${firstChunkTime - geminiCallStart}ms (T3-T2) ← KEY METRIC`);
+          console.log(`[Gemini API] Time from stream created to first chunk: ${firstChunkTime - bufferStart}ms (model processing)`);
+        }
+
         bufferedChunks.push(value);
 
         const typed = value as { candidates?: Array<{ content?: { parts?: Array<StreamChunkPart> } }> };
@@ -1130,6 +1163,11 @@ export async function POST(request: Request) {
           if (hasTerminalTool) break;
         }
       }
+
+      // T4: Buffering complete
+      const bufferingCompleteTime = Date.now();
+      console.log(`[Request Lifecycle] Buffering: ${bufferingCompleteTime - (firstChunkTime || bufferStart)}ms (T4-T3)`);
+      console.log(`[Request Lifecycle] Buffered ${bufferedChunks.length} chunks in ${bufferingCompleteTime - bufferStart}ms`);
 
       // If function call detected early, handle it and return JSON (no stream)
       const ignoreUserCall = functionCalls.find(c => c.name === "ignore_user");
@@ -1386,6 +1424,7 @@ export async function POST(request: Request) {
       if (otherFunctionCall && otherFunctionCall.name) {
         const toolName = otherFunctionCall.name;
         console.log(`Handling function call: ${toolName}`);
+        const toolErrorNotices: Array<{ toolName: string; type: string; message: string }> = [];
         
         // Initialize state controller
         const turnNumber = Math.ceil(messages.length / 2);
@@ -1549,6 +1588,14 @@ export async function POST(request: Request) {
         // Add the function call and result to the conversation
         // IMPORTANT: Clean the result data to remove internal metadata (_timing, etc.) before sending to model
         const cleanedResultData = result.ok ? JSON.parse(JSON.stringify(result.data)) : null;
+
+        // Extract image data for multimodal analysis before cleaning
+        let imageData = null;
+        if (cleanedResultData && typeof cleanedResultData === 'object' && cleanedResultData._imageData) {
+          imageData = cleanedResultData._imageData;
+          delete cleanedResultData._imageData; // Remove from response text
+        }
+
         if (cleanedResultData && typeof cleanedResultData === 'object') {
           delete cleanedResultData._timing;
           delete cleanedResultData._distance;
@@ -1561,7 +1608,7 @@ export async function POST(request: Request) {
               }
             });
           }
-          
+
           // Truncate large kb_get content field to reduce API latency
           if (toolName === 'kb_get' && cleanedResultData.content) {
             const maxLength = 2000; // ~500 tokens
@@ -1573,6 +1620,35 @@ export async function POST(request: Request) {
               console.log(`[Performance] Truncated kb_get content from ${originalLength} to ${maxLength} chars`);
             }
           }
+        }
+
+        // Build response parts - include both functionResponse and imageData if available
+        const responseParts: Array<{ functionResponse?: { name: string; response: Record<string, unknown> }; inlineData?: { mimeType: string; data: string } }> = [
+          {
+            functionResponse: {
+              name: toolName,
+              // Send cleaned data to model
+              response: result.ok ? (cleanedResultData as Record<string, unknown>) : {
+                error: true,
+                type: result.error.type,
+                message: result.error.message,
+                retryable: result.error.retryable,
+                details: result.error.details
+              }
+            }
+          }
+        ];
+
+        // Add image data as separate part for multimodal analysis if available
+        // This enables pixel-level analysis grounded in the metadata context
+        if (imageData && imageData.mimeType && imageData.data) {
+          responseParts.push({
+            inlineData: {
+              mimeType: imageData.mimeType,
+              data: imageData.data
+            }
+          });
+          console.log(`[Multimodal] Including image data for ${toolName} (${imageData.mimeType})`);
         }
 
         const updatedContents = [
@@ -1591,23 +1667,23 @@ export async function POST(request: Request) {
           },
           {
             role: "user" as const,
-            parts: [
-              {
-                functionResponse: {
-                  name: toolName,
-                  // Send cleaned data to model
-                  response: result.ok ? cleanedResultData : {
-                    error: true,
-                    type: result.error.type,
-                    message: result.error.message,
-                    retryable: result.error.retryable,
-                    details: result.error.details
-                  }
-                }
-              }
-            ]
+            parts: responseParts
           }
         ];
+
+        if (!result.ok) {
+          toolErrorNotices.push({
+            toolName,
+            type: result.error.type,
+            message: result.error.message
+          });
+          updatedContents.push({
+            role: "user" as const,
+            parts: [{
+              text: `IMPORTANT: The tool "${toolName}" failed with a ${result.error.type} error. You must tell the user this happened and include the error message verbatim: "${result.error.message}". If the message includes suggestions or next steps, surface them explicitly.`
+            }]
+          });
+        }
 
         // Add guidance if KB search results are irrelevant
         if (shouldAddRelevanceGuidance) {
@@ -1646,7 +1722,7 @@ export async function POST(request: Request) {
           try {
              debugLog(`Calling generateContentStream for tool: ${toolName}`);
              const result = await ai.models.generateContentStream({
-                model: "gemini-3-flash-preview",
+                model: "gemini-2.5-flash",
                 contents: updatedContents,
                 config
              });
@@ -1667,7 +1743,7 @@ export async function POST(request: Request) {
                };
                
                return await ai.models.generateContentStream({
-                 model: "gemini-3-flash-preview",
+                 model: "gemini-2.5-flash",
                  contents: updatedContents,
                  config: fallbackConfig
                });
@@ -1699,18 +1775,28 @@ export async function POST(request: Request) {
                   controller.enqueue(encoder.encode(statusEvent));
                 }
 
+                // Phase 3: Track chain metrics
+                const chainMetrics: Array<{
+                  chainIndex: number;
+                  toolName: string;
+                  toolExecutionMs: number;
+                  geminiTTFTMs: number;
+                  contextTokensAdded: number;
+                  totalChainStepMs: number;
+                }> = [];
+
                 // Loop to handle chained function calls
                 while (chainCount < MAX_CHAIN_LENGTH) {
                   // Extract function calls and text from stream chunks as they arrive
                   let nextFunctionCall: FunctionCall | null = null;
                   let nextFunctionCallPart: FunctionCallPart | null = null;
                   let responseText = "";
-                  
+
                   // Accumulate function call data across chunks
                   const accumulatedFunctionCall: Partial<FunctionCall> = {};
                   let accumulatedThoughtSignature: string | undefined = undefined;
                   let hasFunctionCall = false;
-                  
+
                   const iterator = currentStream[Symbol.asyncIterator]();
                   let chunkCount = 0;
                   let firstTokenTime: number | null = null;
@@ -1853,6 +1939,24 @@ export async function POST(request: Request) {
                     }
                     const chainedDuration = Date.now() - chainedStartTime;
 
+                    // Track tool execution time for chain metrics
+                    const toolExecutionTime = chainedDuration;
+                    const geminiTTFT = firstTokenTime ? firstTokenTime - streamStartTime : 0;
+                    const estimatedTokensAdded = chainedResult.ok ? estimateTokens(JSON.stringify(chainedResult.data)) : 0;
+                    const totalChainStepTime = (Date.now() - chainedStartTime) + (firstTokenTime ? firstTokenTime - streamStartTime : 0);
+
+                    // Add to chain metrics
+                    chainMetrics.push({
+                      chainIndex: chainCount,
+                      toolName: chainedToolName,
+                      toolExecutionMs: toolExecutionTime,
+                      geminiTTFTMs: geminiTTFT,
+                      contextTokensAdded: estimatedTokensAdded,
+                      totalChainStepMs: totalChainStepTime
+                    });
+
+                    console.log(`[Chain Analysis] Chain ${chainCount} (${chainedToolName}): tool=${toolExecutionTime}ms, TTFT=${geminiTTFT}ms, total=${totalChainStepTime}ms, +${estimatedTokensAdded} tokens`);
+
                     // Collect observability data for chained calls
                     if (observability) {
                       observability.toolCalls.push({
@@ -1893,6 +1997,14 @@ export async function POST(request: Request) {
                     // Update contents with this function call and result (success or error)
                     // Clean result data before sending to model
                     const cleanedChainedResultData = chainedResult.ok ? JSON.parse(JSON.stringify(chainedResult.data)) : null;
+
+                    // Extract image data for multimodal analysis before cleaning (chained calls)
+                    let chainedImageData = null;
+                    if (cleanedChainedResultData && typeof cleanedChainedResultData === 'object' && cleanedChainedResultData._imageData) {
+                      chainedImageData = cleanedChainedResultData._imageData;
+                      delete cleanedChainedResultData._imageData; // Remove from response text
+                    }
+
                     if (cleanedChainedResultData && typeof cleanedChainedResultData === 'object') {
                       delete cleanedChainedResultData._timing;
                       delete cleanedChainedResultData._distance;
@@ -1904,7 +2016,7 @@ export async function POST(request: Request) {
                           }
                         });
                       }
-                      
+
                       // Truncate large kb_get content field to reduce API latency
                       if (chainedToolName === 'kb_get' && cleanedChainedResultData.content) {
                         const maxLength = 2000; // ~500 tokens
@@ -1918,6 +2030,34 @@ export async function POST(request: Request) {
                       }
                     }
 
+                    // Build chained response parts - include both functionResponse and imageData if available
+                    const chainedResponseParts: Array<{ functionResponse?: { name: string; response: Record<string, unknown> }; inlineData?: { mimeType: string; data: string } }> = [
+                      {
+                        functionResponse: {
+                          name: chainedToolName,
+                          // Send cleaned info back to model
+                          response: chainedResult.ok ? (cleanedChainedResultData as Record<string, unknown>) : {
+                            error: true,
+                            type: chainedResult.error.type,
+                            message: chainedResult.error.message,
+                            retryable: chainedResult.error.retryable,
+                            details: chainedResult.error.details
+                          }
+                        }
+                      }
+                    ];
+
+                    // Add image data for chained calls too
+                    if (chainedImageData && chainedImageData.mimeType && chainedImageData.data) {
+                      chainedResponseParts.push({
+                        inlineData: {
+                          mimeType: chainedImageData.mimeType,
+                          data: chainedImageData.data
+                        }
+                      });
+                      console.log(`[Multimodal] Including image data for chained ${chainedToolName} (${chainedImageData.mimeType})`);
+                    }
+
                     currentContents = [
                       ...currentContents,
                       {
@@ -1926,21 +2066,23 @@ export async function POST(request: Request) {
                       },
                       {
                         role: "user" as const,
-                        parts: [{
-                          functionResponse: {
-                            name: chainedToolName,
-                            // Send cleaned info back to model
-                            response: chainedResult.ok ? cleanedChainedResultData : {
-                              error: true,
-                              type: chainedResult.error.type,
-                              message: chainedResult.error.message,
-                              retryable: chainedResult.error.retryable,
-                              details: chainedResult.error.details
-                            }
-                          }
-                        }]
+                        parts: chainedResponseParts
                       }
                     ];
+
+                    if (!chainedResult.ok) {
+                      toolErrorNotices.push({
+                        toolName: chainedToolName,
+                        type: chainedResult.error.type,
+                        message: chainedResult.error.message
+                      });
+                      currentContents.push({
+                        role: "user" as const,
+                        parts: [{
+                          text: `IMPORTANT: The tool "${chainedToolName}" failed with a ${chainedResult.error.type} error. You must tell the user this happened and include the error message verbatim: "${chainedResult.error.message}". If the message includes suggestions or next steps, surface them explicitly.`
+                        }]
+                      });
+                    }
 
                     console.log(`[Chain ${chainCount}] Tool result received, continuing conversation`);
 
@@ -1977,12 +2119,15 @@ export async function POST(request: Request) {
                       }
 
                       try {
+                        const chainApiCallStart = Date.now();
                         const stream = await ai.models.generateContentStream({
-                          model: "gemini-3-flash-preview",
+                          model: "gemini-2.5-flash",
                           contents: currentContents,
                           config
                         });
-                        console.log(`[Chain ${chainCount}] Follow-up stream created in ${Date.now() - followUpStartTime}ms`);
+                        const chainStreamCreated = Date.now();
+                        console.log(`[Chain ${chainCount}] Follow-up stream created in ${chainStreamCreated - chainApiCallStart}ms`);
+                        console.log(`[Gemini API] Chain ${chainCount} network handshake: ${chainStreamCreated - followUpStartTime}ms`);
                         return stream;
                       } catch (err) {
                         // If cache error and we're using cache, retry without cache
@@ -1997,7 +2142,7 @@ export async function POST(request: Request) {
                           };
                           
                           return await ai.models.generateContentStream({
-                            model: "gemini-3-flash-preview",
+                            model: "gemini-2.5-flash",
                             contents: currentContents,
                             config: fallbackConfig
                           });
@@ -2018,6 +2163,31 @@ export async function POST(request: Request) {
                     console.log(`Final response streamed: ${responseText.length} bytes (after ${chainCount} chained calls)`);
                   } else {
                     console.warn(`No text in final response after ${chainCount} chained calls`);
+                  }
+
+                  if (toolErrorNotices.length > 0) {
+                    const missingNotices = toolErrorNotices.filter((notice) =>
+                      !accumulatedFullText.includes(notice.message)
+                    );
+                    if (missingNotices.length > 0) {
+                      const noticeText = missingNotices
+                        .map((notice) => `Tool error (${notice.toolName}): ${notice.type} - "${notice.message}"`)
+                        .join('\n');
+                      const suffix = `\n\n${noticeText}`;
+                      controller.enqueue(encoder.encode(suffix));
+                      accumulatedFullText += suffix;
+                    }
+                  }
+
+                  // Log chain metrics summary
+                  if (chainMetrics.length > 0) {
+                    const totalToolTime = chainMetrics.reduce((sum, m) => sum + m.toolExecutionMs, 0);
+                    const totalModelTime = chainMetrics.reduce((sum, m) => sum + m.geminiTTFTMs, 0);
+                    const totalChainTime = chainMetrics.reduce((sum, m) => sum + m.totalChainStepMs, 0);
+                    console.log(`[Chain Analysis Summary] Total chains: ${chainMetrics.length}`);
+                    console.log(`[Chain Analysis Summary] Tool time: ${totalToolTime}ms (${Math.round(totalToolTime / totalChainTime * 100)}%)`);
+                    console.log(`[Chain Analysis Summary] Model time: ${totalModelTime}ms (${Math.round(totalModelTime / totalChainTime * 100)}%)`);
+                    console.log(`[Chain Analysis Summary] Total chain cost: ${totalChainTime}ms`);
                   }
 
                   break; // Exit loop
@@ -2075,6 +2245,12 @@ export async function POST(request: Request) {
                 // Trigger background summarization for this turn (tool memory)
                 toolMemorySummarizer.enqueueSummarization(userId || 'anonymous-text-session')
                   .catch(err => console.warn(`[ToolMemory] Summarization failed:`, err));
+
+                // T6: Final response sent (chained path)
+                const requestEndTime = Date.now();
+                const totalRequestTime = requestEndTime - requestStartTime;
+                console.log(`[Request Lifecycle] Total request time: ${totalRequestTime}ms`);
+                console.log(`[Request Lifecycle Summary] Context: ${contextPrepTime - requestStartTime}ms | Gemini TTFT: ${(firstChunkTime || bufferStart) - geminiCallStart}ms | Streaming: ${requestEndTime - (firstChunkTime || bufferStart)}ms`);
 
                 controller.close();
               } catch (error) {
@@ -2150,7 +2326,13 @@ export async function POST(request: Request) {
               }
 
               console.log(`Stream completed: ${chunksProcessed} chunks, ${bytesSent} bytes`);
-              
+
+              // T6: Final response sent (plain text path)
+              const requestEndTime = Date.now();
+              const totalRequestTime = requestEndTime - requestStartTime;
+              console.log(`[Request Lifecycle] Total request time: ${totalRequestTime}ms`);
+              console.log(`[Request Lifecycle Summary] Context: ${contextPrepTime - requestStartTime}ms | Gemini TTFT: ${(firstChunkTime || bufferStart) - geminiCallStart}ms | Streaming: ${requestEndTime - (firstChunkTime || bufferStart)}ms`);
+
               // Background: Update cache with new summary if it was generated
               if (summaryPromise) {
                 summaryPromise.then((newSummary) => {

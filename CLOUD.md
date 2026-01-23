@@ -17,7 +17,9 @@ This document provides instructions for cloud agents (automated AI coding assist
 
 ### Environment Variables
 
-Tests use the **same environment variables as the deployment**. The test setup (`tests/setup.ts`) loads variables from `.env.local` or `.env` files automatically.
+Tests use the **same environment variables as the deployment**. The test setup (`tests/setup.ts`) loads variables from:
+- `.env` in the project root (for main application tests)
+- `.env` in the `voice-server/` folder (for voice server, if applicable)
 
 No special configuration is needed - if the app runs, the tests will have access to the same credentials.
 

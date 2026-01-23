@@ -401,6 +401,8 @@ export default function MarkdownWithMermaid({ content, className = "", isStreami
   // Custom components for ReactMarkdown
   const components: Components = useMemo(
     () => ({
+      // Strip non-standard <suggestions> tags from raw markdown HTML
+      suggestions: () => null,
       p: ({ children, node }) => {
         // Check if paragraph only contains an image (or images) or video
         // This prevents hydration errors from <div> inside <p>

@@ -6622,3 +6622,162 @@
 2026-01-22T15:47:37.005Z Stream iteration complete. 2 chunks.
 2026-01-22T15:47:50.476Z Stream iteration complete. 2 chunks.
 2026-01-22T15:48:05.628Z Stream iteration complete. 2 chunks.
+2026-01-23T08:37:53.551Z Preparing follow-up stream for tool: kb_search
+2026-01-23T08:37:53.552Z Calling generateContentStream for tool: kb_search
+2026-01-23T08:37:57.750Z generateContentStream returned for tool: kb_search
+2026-01-23T08:37:57.771Z Stream iteration complete. 6 chunks.
+2026-01-23T08:38:30.482Z Preparing follow-up stream for tool: kb_search
+2026-01-23T08:38:30.485Z Calling generateContentStream for tool: kb_search
+2026-01-23T08:38:33.074Z generateContentStream returned for tool: kb_search
+2026-01-23T08:38:33.082Z Stream iteration complete. 2 chunks.
+2026-01-23T08:38:35.542Z Stream iteration complete. 2 chunks.
+2026-01-23T08:38:38.954Z Stream iteration complete. 2 chunks.
+2026-01-23T08:38:48.725Z Stream iteration complete. 23 chunks.
+2026-01-23T10:26:03.648Z Preparing follow-up stream for tool: kb_search
+2026-01-23T10:26:03.650Z Calling generateContentStream for tool: kb_search
+2026-01-23T10:26:06.841Z generateContentStream returned for tool: kb_search
+2026-01-23T10:26:06.846Z Stream iteration complete. 2 chunks.
+2026-01-23T10:26:10.257Z Stream iteration complete. 9 chunks.
+2026-01-23T10:26:17.635Z Preparing follow-up stream for tool: kb_search
+2026-01-23T10:26:17.637Z Calling generateContentStream for tool: kb_search
+2026-01-23T10:26:19.559Z generateContentStream returned for tool: kb_search
+2026-01-23T10:26:19.566Z Stream iteration complete. 2 chunks.
+2026-01-23T10:26:22.372Z Stream iteration complete. 2 chunks.
+2026-01-23T10:26:25.241Z Stream iteration complete. 2 chunks.
+2026-01-23T10:26:28.039Z Stream iteration complete. 2 chunks.
+2026-01-23T10:26:38.137Z Stream iteration complete. 54 chunks.
+2026-01-23T10:31:28.461Z Preparing follow-up stream for tool: kb_get
+2026-01-23T10:31:28.464Z Calling generateContentStream for tool: kb_get
+2026-01-23T10:31:32.975Z generateContentStream returned for tool: kb_get
+2026-01-23T10:31:32.978Z Stream iteration complete. 2 chunks.
+2026-01-23T10:31:38.607Z Stream iteration complete. 10 chunks.
+2026-01-23T10:32:10.889Z Preparing follow-up stream for tool: kb_get
+2026-01-23T10:32:10.892Z Calling generateContentStream for tool: kb_get
+2026-01-23T10:32:13.419Z generateContentStream returned for tool: kb_get
+2026-01-23T10:32:13.852Z Stream iteration complete. 6 chunks.
+2026-01-23T10:44:07.687Z Preparing follow-up stream for tool: kb_get
+2026-01-23T10:44:07.689Z Calling generateContentStream for tool: kb_get
+2026-01-23T10:44:10.566Z generateContentStream returned for tool: kb_get
+2026-01-23T10:44:11.389Z Stream iteration complete. 7 chunks.
+2026-01-23T10:44:18.818Z Preparing follow-up stream for tool: kb_get
+2026-01-23T10:44:18.819Z Calling generateContentStream for tool: kb_get
+2026-01-23T10:44:25.168Z generateContentStream returned for tool: kb_get
+2026-01-23T10:44:25.182Z Stream iteration complete. 2 chunks.
+2026-01-23T10:44:31.485Z Stream iteration complete. 19 chunks.
+2026-01-23T11:16:09.798Z Preparing follow-up stream for tool: kb_search
+2026-01-23T11:16:09.799Z Calling generateContentStream for tool: kb_search
+2026-01-23T11:16:12.149Z generateContentStream returned for tool: kb_search
+2026-01-23T11:16:12.905Z Stream iteration complete. 7 chunks.
+2026-01-23T11:16:17.077Z Preparing follow-up stream for tool: kb_search
+2026-01-23T11:16:17.079Z Calling generateContentStream for tool: kb_search
+2026-01-23T11:16:18.868Z generateContentStream returned for tool: kb_search
+2026-01-23T11:16:19.066Z Stream iteration complete. 4 chunks.
+2026-01-23T11:16:21.841Z Stream iteration complete. 2 chunks.
+2026-01-23T11:16:24.152Z Stream iteration complete. 2 chunks.
+2026-01-23T11:16:37.292Z Stream iteration complete. 24 chunks.
+2026-01-23T11:32:42.889Z Preparing follow-up stream for tool: kb_search
+2026-01-23T11:32:42.890Z Calling generateContentStream for tool: kb_search
+2026-01-23T11:32:45.262Z generateContentStream returned for tool: kb_search
+2026-01-23T11:32:45.274Z Stream iteration complete. 2 chunks.
+2026-01-23T11:32:53.500Z Stream iteration complete. 37 chunks.
+2026-01-23T11:33:20.173Z Preparing follow-up stream for tool: kb_get
+2026-01-23T11:33:20.177Z Calling generateContentStream for tool: kb_get
+2026-01-23T11:33:21.941Z generateContentStream returned for tool: kb_get
+2026-01-23T11:33:21.952Z Stream iteration complete. 3 chunks.
+2026-01-23T11:33:24.391Z Stream iteration complete. 2 chunks.
+2026-01-23T11:33:28.705Z Stream iteration complete. 2 chunks.
+2026-01-23T11:33:35.347Z Stream iteration complete. 27 chunks.
+2026-01-23T11:47:15.434Z Preparing follow-up stream for tool: kb_search
+2026-01-23T11:47:15.435Z Calling generateContentStream for tool: kb_search
+2026-01-23T11:47:18.403Z generateContentStream returned for tool: kb_search
+2026-01-23T11:47:19.255Z Stream iteration complete. 7 chunks.
+2026-01-23T11:47:41.344Z Preparing follow-up stream for tool: kb_search
+2026-01-23T11:47:41.345Z Calling generateContentStream for tool: kb_search
+2026-01-23T11:47:43.149Z generateContentStream returned for tool: kb_search
+2026-01-23T11:47:43.150Z Stream iteration complete. 2 chunks.
+2026-01-23T11:47:46.771Z Stream iteration complete. 5 chunks.
+2026-01-23T11:47:49.488Z Stream iteration complete. 4 chunks.
+2026-01-23T11:47:59.528Z Stream iteration complete. 38 chunks.
+2026-01-23T12:00:47.788Z Preparing follow-up stream for tool: kb_search
+2026-01-23T12:00:47.789Z Calling generateContentStream for tool: kb_search
+2026-01-23T12:00:48.478Z generateContentStream returned for tool: kb_search
+2026-01-23T12:00:49.868Z Stream iteration complete. 6 chunks.
+2026-01-23T12:03:40.137Z Preparing follow-up stream for tool: perplexity_search
+2026-01-23T12:03:40.140Z Calling generateContentStream for tool: perplexity_search
+2026-01-23T12:03:40.751Z generateContentStream returned for tool: perplexity_search
+2026-01-23T12:03:41.801Z Stream iteration complete. 7 chunks.
+2026-01-23T12:03:49.705Z Preparing follow-up stream for tool: kb_search
+2026-01-23T12:03:49.706Z Calling generateContentStream for tool: kb_search
+2026-01-23T12:03:50.296Z generateContentStream returned for tool: kb_search
+2026-01-23T12:03:51.717Z Stream iteration complete. 7 chunks.
+2026-01-23T12:03:54.541Z Preparing follow-up stream for tool: kb_search
+2026-01-23T12:03:54.542Z Calling generateContentStream for tool: kb_search
+2026-01-23T12:03:55.024Z generateContentStream returned for tool: kb_search
+2026-01-23T12:03:55.573Z Stream iteration complete. 4 chunks.
+2026-01-23T12:04:23.922Z Preparing follow-up stream for tool: kb_search
+2026-01-23T12:04:23.923Z Calling generateContentStream for tool: kb_search
+2026-01-23T12:04:24.436Z generateContentStream returned for tool: kb_search
+2026-01-23T12:04:25.332Z Stream iteration complete. 5 chunks.
+2026-01-23T12:05:33.896Z Preparing follow-up stream for tool: kb_search
+2026-01-23T12:05:33.897Z Calling generateContentStream for tool: kb_search
+2026-01-23T12:05:35.427Z generateContentStream returned for tool: kb_search
+2026-01-23T12:05:35.539Z Stream iteration complete. 2 chunks.
+2026-01-23T12:05:47.419Z Preparing follow-up stream for tool: kb_search
+2026-01-23T12:05:47.421Z Calling generateContentStream for tool: kb_search
+2026-01-23T12:05:48.984Z generateContentStream returned for tool: kb_search
+2026-01-23T12:05:49.825Z Stream iteration complete. 5 chunks.
+2026-01-23T12:05:58.139Z Preparing follow-up stream for tool: kb_search
+2026-01-23T12:05:58.140Z Calling generateContentStream for tool: kb_search
+2026-01-23T12:05:58.829Z generateContentStream returned for tool: kb_search
+2026-01-23T12:05:58.836Z Stream iteration complete. 1 chunks.
+2026-01-23T12:06:02.027Z Stream iteration complete. 5 chunks.
+2026-01-23T12:06:07.124Z Preparing follow-up stream for tool: kb_search
+2026-01-23T12:06:07.125Z Calling generateContentStream for tool: kb_search
+2026-01-23T12:06:08.492Z generateContentStream returned for tool: kb_search
+2026-01-23T12:06:08.498Z Stream iteration complete. 1 chunks.
+2026-01-23T12:06:11.465Z Stream iteration complete. 1 chunks.
+2026-01-23T12:06:16.403Z Stream iteration complete. 11 chunks.
+2026-01-23T12:06:48.809Z Preparing follow-up stream for tool: kb_search
+2026-01-23T12:06:48.810Z Calling generateContentStream for tool: kb_search
+2026-01-23T12:06:50.369Z generateContentStream returned for tool: kb_search
+2026-01-23T12:06:52.542Z Stream iteration complete. 11 chunks.
+2026-01-23T12:09:08.594Z Preparing follow-up stream for tool: kb_search
+2026-01-23T12:09:08.595Z Calling generateContentStream for tool: kb_search
+2026-01-23T12:09:10.477Z generateContentStream returned for tool: kb_search
+2026-01-23T12:09:12.633Z Stream iteration complete. 12 chunks.
+2026-01-23T12:12:12.792Z Preparing follow-up stream for tool: perplexity_search
+2026-01-23T12:12:12.793Z Calling generateContentStream for tool: perplexity_search
+2026-01-23T12:12:13.304Z generateContentStream returned for tool: perplexity_search
+2026-01-23T12:12:13.495Z Stream iteration complete. 3 chunks.
+2026-01-23T12:14:02.169Z Preparing follow-up stream for tool: kb_search
+2026-01-23T12:14:02.172Z Calling generateContentStream for tool: kb_search
+2026-01-23T12:14:02.728Z generateContentStream returned for tool: kb_search
+2026-01-23T12:14:02.835Z Stream iteration complete. 3 chunks.
+2026-01-23T12:17:30.468Z Preparing follow-up stream for tool: perplexity_search
+2026-01-23T12:17:30.470Z Calling generateContentStream for tool: perplexity_search
+2026-01-23T12:17:31.833Z generateContentStream returned for tool: perplexity_search
+2026-01-23T12:17:31.978Z Stream iteration complete. 2 chunks.
+2026-01-23T12:19:40.413Z Preparing follow-up stream for tool: kb_search
+2026-01-23T12:19:40.415Z Calling generateContentStream for tool: kb_search
+2026-01-23T12:19:42.534Z generateContentStream returned for tool: kb_search
+2026-01-23T12:19:42.544Z Stream iteration complete. 1 chunks.
+2026-01-23T12:19:55.467Z Preparing follow-up stream for tool: perplexity_search
+2026-01-23T12:19:55.470Z Calling generateContentStream for tool: perplexity_search
+2026-01-23T12:19:56.287Z generateContentStream returned for tool: perplexity_search
+2026-01-23T12:19:57.200Z Stream iteration complete. 5 chunks.
+2026-01-23T12:21:32.236Z Preparing follow-up stream for tool: kb_search
+2026-01-23T12:21:32.237Z Calling generateContentStream for tool: kb_search
+2026-01-23T12:21:32.819Z generateContentStream returned for tool: kb_search
+2026-01-23T12:21:34.423Z Stream iteration complete. 10 chunks.
+2026-01-23T12:23:32.853Z Preparing follow-up stream for tool: perplexity_search
+2026-01-23T12:23:32.855Z Calling generateContentStream for tool: perplexity_search
+2026-01-23T12:23:34.191Z generateContentStream returned for tool: perplexity_search
+2026-01-23T12:23:34.849Z Stream iteration complete. 4 chunks.
+2026-01-23T12:24:08.504Z Preparing follow-up stream for tool: perplexity_search
+2026-01-23T12:24:08.507Z Calling generateContentStream for tool: perplexity_search
+2026-01-23T12:24:10.311Z generateContentStream returned for tool: perplexity_search
+2026-01-23T12:24:10.941Z Stream iteration complete. 4 chunks.
+2026-01-23T12:25:29.121Z Preparing follow-up stream for tool: kb_search
+2026-01-23T12:25:29.122Z Calling generateContentStream for tool: kb_search
+2026-01-23T12:25:32.026Z generateContentStream returned for tool: kb_search
+2026-01-23T12:25:33.267Z Stream iteration complete. 8 chunks.

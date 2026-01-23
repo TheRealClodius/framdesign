@@ -37,6 +37,11 @@
         "type": "boolean",
         "description": "Include text snippets (default: true)",
         "default": true
+      },
+      "include_image_data": {
+        "type": "boolean",
+        "description": "When searching for visual assets, include image data for the top result (text mode only). Use sparingly for multimodal analysis.",
+        "default": false
       }
     }
   },
