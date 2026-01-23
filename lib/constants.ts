@@ -29,7 +29,7 @@ export const CACHE_CONFIG = {
 export const TOKEN_CONFIG = {
   TOKENS_PER_CHAR: 0.25,
   MAX_TOKENS: 30000,
-  MAX_GLOBAL_TOKENS_PER_USER: 100000, // Global limit across all sessions
+  MAX_GLOBAL_TOKENS_PER_USER: 300000, // Global limit across all sessions
   SUMMARY_WORD_LIMIT: 80,
 } as const;
 
