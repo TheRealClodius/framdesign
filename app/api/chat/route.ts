@@ -253,6 +253,28 @@ function trimToWords(text: string, maxWords: number): string {
 }
 
 /**
+ * Strips suggestion markup from message content before sending to Gemini API.
+ * This handles cases where the client sends messages with unstripped suggestions
+ * due to React's asynchronous state updates.
+ */
+function stripSuggestionsFromContent(content: string): string {
+  if (!content) return content;
+
+  let result = content;
+
+  // Remove inline suggestions: <suggestions>[...]</suggestions>
+  result = result.replace(/<suggestions>[\s\S]*?<\/suggestions>/g, '').trimEnd();
+
+  // Remove legacy ---SUGGESTIONS--- markers and their JSON payloads
+  const suggestionsMarker = '---SUGGESTIONS---';
+  if (result.includes(suggestionsMarker)) {
+    result = result.substring(0, result.indexOf(suggestionsMarker)).trimEnd();
+  }
+
+  return result;
+}
+
+/**
  * Builds a user-friendly status message for tool execution
  * @param toolId - Tool identifier
  * @param args - Tool arguments
@@ -835,7 +857,14 @@ export async function POST(request: Request) {
     // Convert recent raw messages to Gemini format
     for (const msg of rawMessages) {
       // Ensure content is a non-empty string (safety net for malformed client data)
-      const content = typeof msg.content === 'string' ? msg.content : String(msg.content || '');
+      let content = typeof msg.content === 'string' ? msg.content : String(msg.content || '');
+
+      // Strip any suggestion markup from assistant messages
+      // This handles cases where the client sends unstripped content due to React's async state updates
+      if (msg.role === 'assistant') {
+        content = stripSuggestionsFromContent(content);
+      }
+
       if (content.trim()) {
         recentMessages.push({
           role: msg.role === "assistant" ? "model" : "user",
