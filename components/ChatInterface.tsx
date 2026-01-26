@@ -1633,8 +1633,8 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
       {/* Messages wrapper - extends to top on desktop */}
       <div className="flex flex-col h-[600px] md:flex-1 md:min-h-0 font-mono text-[0.875rem]">
         <div ref={messagesContainerRef} className={`h-[600px] md:flex-1 md:min-h-0 overflow-y-auto overflow-x-hidden mb-2 scrollbar-boxy ${isDark ? 'scrollbar-dark' : ''}`}>
-          {/* Header - sticky at top of scroll area on desktop */}
-          <div className={`mb-10 md:mb-0 md:sticky md:top-0 md:z-10 md:backdrop-blur-sm md:py-6 md:-mx-4 md:px-4 text-center flex-shrink-0 flex items-center justify-center gap-4 transition-colors duration-300 ${isDark ? 'md:bg-gray-900/80' : 'md:bg-white/80'}`}>
+          {/* Header - sticky at top of scroll area */}
+          <div className={`mb-10 md:mb-0 sticky top-0 z-10 backdrop-blur-sm md:py-6 md:-mx-4 md:px-4 text-center flex-shrink-0 flex items-center justify-center gap-4 transition-colors duration-300 ${isDark ? 'bg-gray-900/80' : 'bg-white/80'}`}>
             <p className={`text-[0.75rem] font-mono tracking-wider transition-colors duration-300 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>FRAM ASSISTANT</p>
             <button
               onClick={handleClearChat}
