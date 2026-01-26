@@ -1291,7 +1291,7 @@ wss.on('connection', async (ws, req) => {
                 error: 'USER_BUDGET_EXHAUSTED',
                 details: {
                   type: 'budget_exhausted',
-                  suggestion: 'You have reached your global token limit for voice interactions. Please contact support.'
+                  suggestion: "We've just hit an iceberg in our conversation...metaphorically speaking that is. This is the max amount of tokens I can spend chatting with you. If you want to talk more, reach out to Andrei to upgrade you to a partner account."
                 }
               }));
               return;
