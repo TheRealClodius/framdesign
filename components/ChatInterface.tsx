@@ -355,7 +355,13 @@ function extractSuggestionsFromContent(content: string): string[] | undefined {
     try {
       const parsed = JSON.parse(inlineMatch[1]);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed.slice(0, 2); // Max 2 suggestions
+        // Filter to only include non-empty strings to prevent server errors
+        const validSuggestions = parsed.filter(
+          (item): item is string => typeof item === 'string' && item.trim().length > 0
+        );
+        if (validSuggestions.length > 0) {
+          return validSuggestions.slice(0, 2); // Max 2 suggestions
+        }
       }
     } catch {
       // Ignore parse errors
@@ -393,7 +399,13 @@ function extractSuggestionsFromContent(content: string): string[] | undefined {
   try {
     const parsed = JSON.parse(content.substring(jsonStart, jsonEnd));
     if (parsed.suggestions && Array.isArray(parsed.suggestions)) {
-      return parsed.suggestions;
+      // Filter to only include non-empty strings to prevent server errors
+      const validSuggestions = parsed.suggestions.filter(
+        (item: unknown): item is string => typeof item === 'string' && (item as string).trim().length > 0
+      );
+      if (validSuggestions.length > 0) {
+        return validSuggestions;
+      }
     }
   } catch {
     // Ignore parse errors
