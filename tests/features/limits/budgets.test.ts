@@ -1,18 +1,36 @@
 /**
  * Feature: Telemetry & Limits
- * 
+ *
  * This suite verifies the system's ability to track usage (tokens)
  * and enforce safety budgets per user to prevent abuse and cost overruns.
  */
 
+import { UsageService } from '@/lib/services/usage-service';
+import { TOKEN_CONFIG } from '@/lib/constants';
+import { BudgetExhaustedError } from '@/lib/errors';
+import { promises as fs } from 'fs';
+import path from 'path';
+
+const USAGE_DIR = path.join(process.cwd(), '.usage');
+const USAGE_FILE = path.join(USAGE_DIR, 'user-tokens.json');
+
 describe('Feature: Telemetry & Limits', () => {
-  
+
+  // Clean up test data before each test
+  beforeEach(async () => {
+    try {
+      await fs.unlink(USAGE_FILE);
+    } catch {
+      // File doesn't exist, that's fine
+    }
+  });
+
   // --- 1. Telemetry (Token Usage) ---
   describe('1. Telemetry (Token Tracking)', () => {
     test('should accurately estimate tokens using tiktoken-style logic', () => {
       // Mocking the 1 token ≈ 4 chars logic used in the app
       const estimateTokens = (text: string) => Math.ceil(text.length / 4);
-      
+
       const text = "This is a test sentence."; // 24 chars
       expect(estimateTokens(text)).toBe(6);
     });
@@ -23,7 +41,7 @@ describe('Feature: Telemetry & Limits', () => {
         latency: 150,
         timestamp: Date.now()
       };
-      
+
       expect(metrics.latency).toBeLessThan(5000); // Standard budget
       expect(metrics.toolId).toBe('kb_search');
     });
@@ -31,42 +49,79 @@ describe('Feature: Telemetry & Limits', () => {
 
   // --- 2. Limits (Budgets & Safety) ---
   describe('2. Limits (Safety Budgets)', () => {
-    const GLOBAL_USER_LIMITS = {
-      MAX_TOTAL_TOKENS_PER_USER: 50000, // Global lifetime/period budget
-      MAX_TOKENS_PER_SESSION: 10000,
-      MAX_TOOL_CALLS_PER_TURN: 5
-    };
+    test('should use 300K tokens as the global limit', () => {
+      expect(TOKEN_CONFIG.MAX_GLOBAL_TOKENS_PER_USER).toBe(300000);
+    });
 
-    test('should enforce global token budget per userID', () => {
-      const userUsageRegistry = {
-        'user_A': 45000,
-        'user_B': 51000
-      };
+    test('UsageService: should track token usage per user', async () => {
+      const userId = 'test-user-1';
 
-      const checkBudget = (userId: string, requestedTokens: number) => {
-        const currentUsage = userUsageRegistry[userId as keyof typeof userUsageRegistry] || 0;
-        if (currentUsage + requestedTokens > GLOBAL_USER_LIMITS.MAX_TOTAL_TOKENS_PER_USER) {
-          return { 
-            allowed: false, 
-            reason: 'GLOBAL_BUDGET_EXCEEDED',
-            event: 'USER_BUDGET_EXHAUSTED' // Event for UI to listen to
-          };
-        }
-        return { allowed: true };
-      };
+      // Record some usage
+      await UsageService.recordUsage(userId, 1000);
 
-      // User A still has room
-      expect(checkBudget('user_A', 1000).allowed).toBe(true);
-      
-      // User B is already over
-      const resultB = checkBudget('user_B', 100);
-      expect(resultB.allowed).toBe(false);
-      expect(resultB.event).toBe('USER_BUDGET_EXHAUSTED');
-      
-      // User A hits the limit
-      const resultAFinal = checkBudget('user_A', 6000);
-      expect(resultAFinal.allowed).toBe(false);
-      expect(resultAFinal.event).toBe('USER_BUDGET_EXHAUSTED');
+      // Check usage
+      const usage = await UsageService.getUserUsage(userId);
+      expect(usage.totalTokens).toBe(1000);
+
+      // Record more usage
+      await UsageService.recordUsage(userId, 500);
+
+      // Check updated usage
+      const updatedUsage = await UsageService.getUserUsage(userId);
+      expect(updatedUsage.totalTokens).toBe(1500);
+    });
+
+    test('UsageService: should detect when user is over budget', async () => {
+      const userId = 'test-user-2';
+
+      // Record usage below limit
+      await UsageService.recordUsage(userId, 250000);
+      expect(await UsageService.isOverBudget(userId)).toBe(false);
+
+      // Record usage that exceeds limit
+      await UsageService.recordUsage(userId, 60000); // Total: 310000
+      expect(await UsageService.isOverBudget(userId)).toBe(true);
+    });
+
+    test('UsageService: should calculate remaining tokens correctly', async () => {
+      const userId = 'test-user-3';
+
+      await UsageService.recordUsage(userId, 100000);
+
+      const remaining = await UsageService.getRemainingTokens(userId);
+      expect(remaining).toBe(200000);
+    });
+
+    test('UsageService: should return 0 remaining tokens when over budget', async () => {
+      const userId = 'test-user-4';
+
+      await UsageService.recordUsage(userId, 350000);
+
+      const remaining = await UsageService.getRemainingTokens(userId);
+      expect(remaining).toBe(0);
+    });
+
+    test('UsageService: should isolate budgets between different users', async () => {
+      const userA = 'test-user-a';
+      const userB = 'test-user-b';
+
+      await UsageService.recordUsage(userA, 50000);
+      await UsageService.recordUsage(userB, 100000);
+
+      const usageA = await UsageService.getUserUsage(userA);
+      const usageB = await UsageService.getUserUsage(userB);
+
+      expect(usageA.totalTokens).toBe(50000);
+      expect(usageB.totalTokens).toBe(100000);
+    });
+
+    test('BudgetExhaustedError: should have correct properties', () => {
+      const error = new BudgetExhaustedError();
+
+      expect(error.name).toBe('BudgetExhaustedError');
+      expect(error.status).toBe(402);
+      expect(error.message).toContain('iceberg');
+      expect(error.message).toContain('Andrei');
     });
 
     test('should prevent any agent response once budget is exhausted', () => {
@@ -77,22 +132,6 @@ describe('Feature: Telemetry & Limits', () => {
       };
 
       expect(generateResponse("Hello")).toBeNull();
-    });
-
-    test('should prevent spam by limiting tool calls per turn', () => {
-      const toolCallsInTurn = 6;
-      const isSpam = toolCallsInTurn > GLOBAL_USER_LIMITS.MAX_TOOL_CALLS_PER_TURN;
-      
-      expect(isSpam).toBe(true);
-    });
-
-    test('should isolate budgets between different userIDs', () => {
-      const budgets = new Map<string, number>();
-      budgets.set('user_A', 500);
-      budgets.set('user_B', 9500);
-
-      expect(budgets.get('user_A')).toBeLessThan(GLOBAL_USER_LIMITS.MAX_TOTAL_TOKENS_PER_USER);
-      expect(budgets.get('user_B')).toBeLessThan(GLOBAL_USER_LIMITS.MAX_TOTAL_TOKENS_PER_USER);
     });
   });
 });

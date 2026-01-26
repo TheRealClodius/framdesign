@@ -7,6 +7,7 @@ export const STORAGE_KEYS = {
   TIMEOUT: "fram_timeout_until",
   CONVERSATION: "fram_conversation",
   USER_ID: "fram_user_id",
+  BUDGET_EXHAUSTED: "fram_budget_exhausted",
 } as const;
 
 // Message limits
@@ -18,6 +19,7 @@ export const MESSAGE_LIMITS = {
 
 // Timeout and blocking
 export const BLOCKED_MESSAGE = "Fram has decided not to respond to you anymore as you've been rude. Fram does not take shit from anybody.";
+export const BUDGET_EXHAUSTED_MESSAGE = "We've just hit an iceberg in our conversation...metaphorically speaking that is. This is the max amount of tokens I can spend chatting with you. If you want to talk more, reach out to Andrei to upgrade you to a partner account.";
 
 // Cache configuration
 export const CACHE_CONFIG = {

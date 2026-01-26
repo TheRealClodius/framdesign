@@ -79,6 +79,26 @@ export function isBlocked(): boolean {
 }
 
 /**
+ * Mark user as budget exhausted in storage
+ */
+export function setBudgetExhausted(exhausted: boolean): void {
+  if (typeof window === "undefined") return;
+  if (exhausted) {
+    localStorage.setItem(STORAGE_KEYS.BUDGET_EXHAUSTED, "true");
+  } else {
+    localStorage.removeItem(STORAGE_KEYS.BUDGET_EXHAUSTED);
+  }
+}
+
+/**
+ * Check if user is marked as budget exhausted in storage
+ */
+export function isBudgetExhausted(): boolean {
+  if (typeof window === "undefined") return false;
+  return localStorage.getItem(STORAGE_KEYS.BUDGET_EXHAUSTED) === "true";
+}
+
+/**
  * Sanitize messages for storage (remove streaming, ensure IDs, limit count)
  */
 export function sanitizeMessagesForStorage(

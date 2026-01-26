@@ -2,7 +2,7 @@
  * Chat API service
  */
 
-import { parseApiError, OverloadedError } from "../errors";
+import { parseApiError, OverloadedError, BudgetExhaustedError } from "../errors";
 import { prepareMessagesForSend } from "../message-utils";
 import type { Message } from "../storage";
 
@@ -149,7 +149,7 @@ export async function streamChatResponse(
       return data; // Return full response for tool calls
     }
   } catch (error) {
-    if (error instanceof OverloadedError) {
+    if (error instanceof OverloadedError || error instanceof BudgetExhaustedError) {
       throw error;
     }
     const apiError = error instanceof Error ? error : new Error(String(error));

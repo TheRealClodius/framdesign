@@ -34,6 +34,16 @@ export class AuthenticationError extends ApiError {
   }
 }
 
+export class BudgetExhaustedError extends ApiError {
+  constructor() {
+    super(
+      "We've just hit an iceberg in our conversation...metaphorically speaking that is. This is the max amount of tokens I can spend chatting with you. If you want to talk more, reach out to Andrei to upgrade you to a partner account.",
+      402
+    );
+    this.name = "BudgetExhaustedError";
+  }
+}
+
 /**
  * Check if an error is a cache-related error (cache not found or permission denied)
  * These errors should trigger a fallback to non-cached requests
@@ -70,20 +80,24 @@ export function isRetryableError(error: unknown): boolean {
  */
 export async function parseApiError(response: Response): Promise<ApiError> {
   let errorData: { error?: string; details?: string } = {};
-  
+
   try {
     errorData = await response.json();
   } catch {
     // If JSON parsing fails, use status text
     errorData = { error: response.statusText };
   }
-  
+
   const errorMessage = errorData.error || errorData.details || `Failed to fetch response: ${response.status}`;
-  
+
   if (response.status === 503 || errorMessage.toLowerCase().includes("overloaded")) {
     return new OverloadedError();
   }
-  
+
+  if (response.status === 402 || errorMessage === "USER_BUDGET_EXHAUSTED") {
+    return new BudgetExhaustedError();
+  }
+
   if (
     response.status === 401 ||
     response.status === 403 ||
@@ -92,7 +106,7 @@ export async function parseApiError(response: Response): Promise<ApiError> {
   ) {
     return new AuthenticationError(errorMessage);
   }
-  
+
   return new ApiError(errorMessage, response.status, errorData.details);
 }
 

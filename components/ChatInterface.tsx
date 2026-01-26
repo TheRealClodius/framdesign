@@ -182,17 +182,20 @@ import {
   saveMessagesToStorage,
   clearChatHistory,
   getUserId,
+  isBudgetExhausted,
+  setBudgetExhausted,
   type Message,
 } from "@/lib/storage";
 import {
   MESSAGE_LIMITS,
   BLOCKED_MESSAGE,
+  BUDGET_EXHAUSTED_MESSAGE,
 } from "@/lib/constants";
 import {
   streamChatResponse,
   sendChatRequest,
 } from "@/lib/services/chat-service";
-import { OverloadedError } from "@/lib/errors";
+import { OverloadedError, BudgetExhaustedError } from "@/lib/errors";
 import { voiceService } from "@/lib/services/voice-service";
 import { useTheme } from "@/lib/hooks/useTheme";
 
@@ -505,6 +508,7 @@ export default function ChatInterface() {
   const [loadingStatus, setLoadingStatus] = useState<string | null>(null);
   const [timeoutUntil, setTimeoutUntilState] = useState<number | null>(null);
   const [wasBlocked, setWasBlocked] = useState(false);
+  const [budgetExhausted, setBudgetExhaustedState] = useState(false);
   const [isVoiceMode, setIsVoiceMode] = useState(false);
   const [isVoiceLoading, setIsVoiceLoading] = useState(false);
   const [voiceError, setVoiceError] = useState<string | null>(null);
@@ -685,6 +689,34 @@ export default function ChatInterface() {
         setWasBlocked(true); // Mark that there was a timeout, so we can detect expiration
       }
     }
+  }, []);
+
+  // Check budget status on mount
+  useEffect(() => {
+    const checkBudget = async () => {
+      // First check localStorage
+      if (isBudgetExhausted()) {
+        setBudgetExhaustedState(true);
+        return;
+      }
+
+      // Then check with API to ensure it's current
+      try {
+        const userId = getUserId();
+        const response = await fetch(`/api/budget?userId=${userId}`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.isOverBudget) {
+            setBudgetExhausted(true);
+            setBudgetExhaustedState(true);
+          }
+        }
+      } catch (error) {
+        console.error("Error checking budget on mount:", error);
+      }
+    };
+
+    checkBudget();
   }, []);
 
   // Load conversation from localStorage on mount
@@ -1086,11 +1118,14 @@ export default function ChatInterface() {
   }, [timeoutUntil, wasBlocked]);
 
   // Check if currently blocked by timeout
-  const isBlocked = timeoutUntil !== null && Date.now() < timeoutUntil;
+  const isTimeoutBlocked = timeoutUntil !== null && Date.now() < timeoutUntil;
+
+  // Check if blocked by budget exhaustion
+  const isBlocked = isTimeoutBlocked || budgetExhausted;
 
   // Detect if timeout just expired (was blocked, now not blocked)
   // This happens when wasBlocked is true but isBlocked is false
-  const timeoutJustExpired = wasBlocked && !isBlocked;
+  const timeoutJustExpired = wasBlocked && !isTimeoutBlocked;
 
   // Show conversation starters only when chat is in initial state
   const showSuggestions =
@@ -1451,6 +1486,25 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
           return updated;
         });
       } catch (streamError) {
+        // Handle budget exhaustion error
+        if (streamError instanceof BudgetExhaustedError) {
+          setBudgetExhausted(true);
+          setBudgetExhaustedState(true);
+          setMessages((prev) => {
+            const updated = [...prev];
+            const lastIndex = updated.length - 1;
+            if (lastIndex >= 0 && updated[lastIndex].id === assistantMessageId) {
+              updated[lastIndex] = {
+                ...updated[lastIndex],
+                content: BUDGET_EXHAUSTED_MESSAGE,
+                streaming: false,
+              };
+            }
+            return updated;
+          });
+          return;
+        }
+
         // If streaming fails, try JSON fallback
         if (streamError instanceof OverloadedError) {
           setMessages((prev) => {
@@ -1728,17 +1782,29 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
         </div>
 
         {isBlocked ? (
-          <div className={`text-center py-4 flex-shrink-0 transition-colors duration-300 ${isDark ? 'border-t border-gray-700' : 'border-t border-gray-200'}`}>
-            <p className={`text-[0.8rem] leading-relaxed mb-3 transition-colors duration-300 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-              {BLOCKED_MESSAGE}
+          <div className={`py-4 flex-shrink-0 transition-colors duration-300 ${isDark ? 'border-t border-gray-700' : 'border-t border-gray-200'}`}>
+            <p className={`text-[0.8rem] leading-relaxed mb-4 transition-colors duration-300 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+              {budgetExhausted ? BUDGET_EXHAUSTED_MESSAGE : BLOCKED_MESSAGE}
             </p>
-            {process.env.NODE_ENV === 'development' && (
-              <button
-                onClick={resetTimeout}
-                className={`text-[0.7rem] uppercase tracking-wider underline transition-colors duration-300 ${isDark ? 'text-gray-500 hover:text-gray-300' : 'text-gray-400 hover:text-gray-600'}`}
-              >
-                Reset timeout (dev)
-              </button>
+            {budgetExhausted && (
+              <div className="flex justify-start">
+                <a
+                  href="mailto:andrei@fram.design?subject=Partner%20Account%20Request&body=Hi%20Andrei%2C%0A%0AI've%20reached%20my%20conversation%20limit%20with%20Fram%20and%20would%20like%20to%20upgrade%20to%20a%20partner%20account.%0A%0AThanks!"
+                  className={`text-[0.75rem] font-mono uppercase tracking-wider transition-colors px-3 py-1.5 border rounded ${isDark ? 'text-gray-400 hover:text-gray-100 border-gray-600 hover:border-gray-400' : 'text-gray-400 hover:text-black border-gray-300 hover:border-black'}`}
+                >
+                  Send Email
+                </a>
+              </div>
+            )}
+            {process.env.NODE_ENV === 'development' && !budgetExhausted && (
+              <div className="text-center">
+                <button
+                  onClick={resetTimeout}
+                  className={`text-[0.7rem] uppercase tracking-wider underline transition-colors duration-300 ${isDark ? 'text-gray-500 hover:text-gray-300' : 'text-gray-400 hover:text-gray-600'}`}
+                >
+                  Reset timeout (dev)
+                </button>
+              </div>
             )}
           </div>
         ) : (
