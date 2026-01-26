@@ -834,10 +834,12 @@ export async function POST(request: Request) {
 
     // Convert recent raw messages to Gemini format
     for (const msg of rawMessages) {
-      if (msg.content && msg.content.trim()) {
+      // Ensure content is a non-empty string (safety net for malformed client data)
+      const content = typeof msg.content === 'string' ? msg.content : String(msg.content || '');
+      if (content.trim()) {
         recentMessages.push({
           role: msg.role === "assistant" ? "model" : "user",
-          parts: [{ text: msg.content }],
+          parts: [{ text: content }],
         });
       }
     }
