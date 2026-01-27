@@ -663,13 +663,18 @@ export async function POST(request: Request) {
     const { messages, timeoutExpired, userId } = body;
 
     // Check global budget if userId is provided
+    // Wrapped in try/catch to prevent chat failures when usage store is inaccessible
     if (userId) {
-      const isOverBudget = await UsageService.isOverBudget(userId);
-      if (isOverBudget) {
-        return NextResponse.json({
-          error: "USER_BUDGET_EXHAUSTED",
-          message: "You have reached your global token limit. Please contact support to increase your budget."
-        }, { status: 402 });
+      try {
+        const isOverBudget = await UsageService.isOverBudget(userId);
+        if (isOverBudget) {
+          return NextResponse.json({
+            error: "USER_BUDGET_EXHAUSTED",
+            message: "You have reached your global token limit. Please contact support to increase your budget."
+          }, { status: 402 });
+        }
+      } catch (budgetError) {
+        console.error("Failed to check user budget, allowing request to proceed:", budgetError);
       }
     }
 
