@@ -390,15 +390,33 @@ class ToolRegistry {
     // Filter args to only include schema-defined properties
     // This prevents validation errors when LLMs include extra properties (common in chained calls)
     const filteredArgs = this.filterArgsBySchema(executionContext.args || {}, tool.jsonSchema, toolId);
+
+    // Normalize kb_search queries that are too short to pass validation
+    // This avoids exposing validation errors when the model emits short or empty queries.
+    let normalizedArgs = filteredArgs;
+    if (toolId === 'kb_search') {
+      normalizedArgs = { ...filteredArgs };
+      const rawQuery = typeof normalizedArgs.query === 'string' ? normalizedArgs.query.trim() : '';
+      if (rawQuery.length < 3) {
+        const filterType = normalizedArgs.filters && typeof normalizedArgs.filters.type === 'string'
+          ? normalizedArgs.filters.type.trim()
+          : '';
+        const fallbackQuery = rawQuery.length > 0
+          ? `${rawQuery} design`
+          : (filterType.length >= 3 ? filterType : 'image');
+        console.warn(`[Registry] kb_search query too short ("${rawQuery}"). Using fallback "${fallbackQuery}".`);
+        normalizedArgs.query = fallbackQuery;
+      }
+    }
     
     // Update execution context with filtered args
     const filteredExecutionContext = {
       ...executionContext,
-      args: filteredArgs
+      args: normalizedArgs
     };
 
     // Validate parameters
-    const valid = validator(filteredArgs);
+    const valid = validator(normalizedArgs);
     if (!valid) {
       const duration = Date.now() - startTime;
       
@@ -418,7 +436,7 @@ class ToolRegistry {
       
       // Log original args if validation fails (helpful for debugging)
       console.error(`[Registry] Validation failed for ${toolId}:`, {
-        filteredArgs,
+        filteredArgs: normalizedArgs,
         originalArgs: executionContext.args,
         errors: validator.errors
       });
