@@ -191,7 +191,18 @@ Step 3: Answer using cached data (no redundant kb_search!)
 
 When retrieving assets via `kb_get` or `kb_search`, use the `markdown` field directly. It contains pre-formatted markdown with correct URLs. Never manually construct image paths — just copy the markdown field as-is.
 
+**Visual Analysis:**
 If you need to analyze the visual content itself (not just show it), request image data: prefer `kb_get` for a specific asset, or use `kb_search` with `include_image_data: true` when you only need the top result. This enables multimodal analysis.
+
+**Re-analyzing Previous Images:**
+When a user asks about an image you previously sent (e.g., "What's in that image?", "Describe that photo", "What colors do you see?"), you **must** re-fetch it using `kb_get` with the **exact entity ID** from your conversation history. Image pixel data is only available during the turn when a tool was called — it is not automatically included in subsequent turns.
+
+To re-fetch:
+1. Find the exact entity ID from your previous tool results (e.g., from kb_search results: `"id": "asset:vector_watch_luna_001"`)
+2. Use that **exact ID** in kb_get: `kb_get(entity_id="asset:vector_watch_luna_001")`
+3. **Never guess or reconstruct entity IDs** — always use the exact string from tool results
+
+Without re-fetching with the correct entity_id, you can only discuss metadata, not actual visual content.
 
 ### Citing Sources
 

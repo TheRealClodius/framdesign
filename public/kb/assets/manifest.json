@@ -1,0 +1,1024 @@
+{
+  "version": "2.0.0",
+  "assets": [
+    {
+      "id": "asset:vector_watch_luna_001",
+      "type": "asset",
+      "entity_type": "photo",
+      "title": "Vector Watch Luna with Mobile App",
+      "description": "Product photo showing Vector Watch Luna model with round monochrome display and three-button interface alongside iPhone running the iOS companion app, demonstrating the complete wearables ecosystem and mobile integration. The watch features distinctive yellow buttons on its black metal case, and the phone displays fitness tracking data including steps, active calories, distance, and sleep metrics.",
+      "path": "/kb-assets/vector/vector-watch-luna.jpeg",
+      "related_entities": [
+        "project:vector_watch"
+      ],
+      "tags": [
+        "wearables",
+        "hardware",
+        "mobile-app",
+        "iOS",
+        "product-photo",
+        "smartwatch",
+        "fitness-tracking",
+        "Vector-Luna"
+      ],
+      "caption": "Vector Watch Luna and mobile companion app",
+      "metadata": {
+        "date": "2016",
+        "format": "jpeg",
+        "source": "FRAM Design portfolio"
+      },
+      "blob_id": "vector/vector-watch-luna",
+      "file_extension": "jpeg",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/vector/vector-watch-luna.jpeg"
+    },
+    {
+      "id": "asset:andrei_clodius_design_values_001",
+      "type": "asset",
+      "entity_type": "diagram",
+      "title": "Andrei Clodius Design Values - What I Believe In",
+      "description": "Infographic titled 'What I believe in' presenting ten core design values and principles by Andrei Clodius. Clean minimalist white background layout with two rows of five values, each featuring a red icon, bold black title, and descriptive sentence. Row 1: Strong Vision - I focus on the big picture on every decision (icon: eye with arrows pointing inwards and outwards). Clarity First - Create clarity and alignment at every step (icon: circle with crescent segment). Formalise the future - Visually shape ideas to get people on board (icon: landscape with mountain and sun). Speed is a KPI - Move fast to create agency and purpose (icon: speedometer gauge). Painless Mistakes - Always create space to fail and try again (icon: circular refresh arrow). Row 2: Feedback loops - Shortest path to new information is the best (icon: curved loop arrow). Keep it light - Always have a sense of humour when facing issues (icon: smiling emoticon). Best for now - Nothing is perfect forever. Know when to stop for now (icon: checkmark in circle). Resilience - Learn, adapt, be flexible but push back when needed (icon: two intertwined shapes). Take a chance - With a project, with a person (icon: dice showing six dots).",
+      "path": "/kb-assets/andrei-clodius/design-values.png",
+      "related_entities": [
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "andrei-clodius",
+        "design-values",
+        "philosophy",
+        "principles",
+        "work-ethic",
+        "design-thinking",
+        "infographic",
+        "professional-beliefs",
+        "strong-vision",
+        "clarity",
+        "speed",
+        "resilience",
+        "feedback-loops"
+      ],
+      "caption": "Design values and principles by Andrei Clodius",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio"
+      },
+      "blob_id": "andrei-clodius/design-values",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/andrei-clodius/design-values.png"
+    },
+    {
+      "id": "asset:andrei_clodius_photo_001",
+      "type": "asset",
+      "entity_type": "photo",
+      "title": "Andrei Clodius - LinkedIn Profile Photo",
+      "description": "Circular portrait photograph of Andrei Clodius smiling broadly and looking directly at the camera. Andrei has dark curly hair, a full beard and mustache, and is wearing a dark hooded jacket. He is smiling widely showing his teeth with clear braces visible. A red and white strap from a backpack is visible over his shoulder. The background shows an outdoor wooded scene with a winding path through tall trees. This is Andrei's preferred profile picture and the image he uses on LinkedIn.",
+      "path": "/kb-assets/andrei-clodius/photo_of_andrei.png",
+      "related_entities": [
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "andrei-clodius",
+        "portrait",
+        "photo",
+        "linkedin",
+        "profile-picture",
+        "smiling",
+        "outdoor",
+        "founder",
+        "person"
+      ],
+      "caption": "Andrei Clodius - LinkedIn profile photo",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio",
+        "usage": "LinkedIn profile picture"
+      },
+      "blob_id": "andrei-clodius/photo_of_andrei",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/andrei-clodius/photo_of_andrei.png"
+    },
+    {
+      "id": "asset:andrei_clodius_smiling_001",
+      "type": "asset",
+      "entity_type": "photo",
+      "title": "Andrei Clodius Smiling - Informal Portrait",
+      "description": "Close-up informal portrait photograph of Andrei Clodius smiling broadly. Andrei has dark hair and a beard, wearing a light-colored textured top, smiling widely with his eyes squinted in a joyful expression. Directly behind his head, against a plain light-colored wall, is a golden or brass-colored wooden photo frame shaped like a sun with numerous radiating rays. The sun rays appear to emanate from behind Andrei's head, creating a humorous halo-like or crown-like effect that makes the photo playful and informal.",
+      "path": "/kb-assets/andrei-clodius/smiling.png",
+      "related_entities": [
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "andrei-clodius",
+        "portrait",
+        "photo",
+        "smiling",
+        "informal",
+        "humorous",
+        "casual",
+        "person"
+      ],
+      "caption": "Andrei Clodius smiling with sun rays behind his head",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio"
+      },
+      "blob_id": "andrei-clodius/smiling",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/andrei-clodius/smiling.png"
+    },
+    {
+      "id": "asset:andrei_clodius_sosetuta_001",
+      "type": "asset",
+      "entity_type": "photo",
+      "title": "Sosetuta - Andrei's Dog",
+      "description": "Funny candid photograph of Sosetuta, Andrei Clodius's dog, in a squatting position while defecating. Sosetuta is a medium-sized, short-legged dog with a reddish-brown coat and white markings on its chest and paws. The dog is wearing a dark-colored harness with a subtle polka-dot pattern and has a green tag or collar visible. Sosetuta's back is slightly arched with hindquarters lowered close to the ground, looking directly forward with a serious or concentrated expression. The setting is outdoors on a light grey paved surface, possibly concrete or asphalt. This is a humorous, candid shot capturing the dog in this natural moment.",
+      "path": "/kb-assets/andrei-clodius/sosetuta.png",
+      "related_entities": [
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "andrei-clodius",
+        "dog",
+        "sosetuta",
+        "pet",
+        "funny",
+        "candid",
+        "humorous",
+        "person"
+      ],
+      "caption": "Sosetuta, Andrei's dog",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio"
+      },
+      "blob_id": "andrei-clodius/sosetuta",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/andrei-clodius/sosetuta.png"
+    },
+    {
+      "id": "asset:autopilot_context_structure_sketch_001",
+      "type": "asset",
+      "entity_type": "diagram",
+      "title": "Autopilot Context Structure Sketch",
+      "description": "Diagram illustrating the hierarchical context stacking design for the LLM-powered Autopilot assistant at UiPath. Shows nested context layers from broadest to most specific: Team/Business Context (Team Context, Company Context), Business User Context (Global Context, App Integrations, Files and documents global), and Space Context (individual projects/conversations with User Prompt, AgentCall, and User Defined Context). The diagram visually represents how context is organized and nested based on the enterprise deployment: (prompt)chat history)user-designed-context)project)team)business). Each Space can contain one or multiple conversation timelines, with user-defined context including files, documents, and code snippets. This sketch was used to design how the Autopilot agent accesses and prioritizes different layers of enterprise context.",
+      "path": "/kb-assets/autopilot/agent context structure sketch.png",
+      "related_entities": [
+        "project:autopilot_uipath",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "autopilot",
+        "uipath",
+        "context-stacking",
+        "LLM",
+        "enterprise",
+        "diagram",
+        "architecture",
+        "design",
+        "andrei-clodius"
+      ],
+      "caption": "Context structure sketch for Autopilot assistant",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio",
+        "client": "UiPath"
+      },
+      "blob_id": "autopilot/agent-context-structure-sketch",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/autopilot/agent context structure sketch.png"
+    },
+    {
+      "id": "asset:autopilot_meeting_followup_001",
+      "type": "asset",
+      "entity_type": "diagram",
+      "title": "Automated Meeting Follow-up Scenario",
+      "description": "User flow diagram titled 'Automated Meeting Follow-up' illustrating a complete scenario for the UiPath Autopilot assistant. Shows how a user (Sarah) starts from a Slack notification with a meeting summary link, clicks to authenticate Zoom connection, links Zoom to Autopilot, and then generates themes, lists key decisions, and performs other actions related to that specific call. The flow includes: Slack integration showing meeting summary link, UiPath Assistant onboarding with Meeting Notetaker agent, SSO authentication for Zoom, desktop notifications for new meeting summaries, and navigation to Meetings Space (project folder) with custom prompts that ground the agent. The diagram demonstrates how individual conversations are organized within Spaces, with each Space containing agent threads, snapshots, and user-defined context. This specific conversation would be part of a Space with custom prompts that ground the agent for meeting-related tasks.",
+      "path": "/kb-assets/autopilot/Automated Meeting Follow-up.png",
+      "related_entities": [
+        "project:autopilot_uipath",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "autopilot",
+        "uipath",
+        "user-flow",
+        "scenario",
+        "meeting",
+        "zoom",
+        "slack",
+        "integration",
+        "diagram",
+        "andrei-clodius"
+      ],
+      "caption": "Automated meeting follow-up user scenario",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio",
+        "client": "UiPath"
+      },
+      "blob_id": "autopilot/automated-meeting-follow-up",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/autopilot/Automated Meeting Follow-up.png"
+    },
+    {
+      "id": "asset:autopilot_chatbubble_options_001",
+      "type": "asset",
+      "entity_type": "diagram",
+      "title": "Autopilot Chat Bubble Component Documentation",
+      "description": "Design system documentation screenshot showing part of the chat-bubble component from the Autopilot Component Library that Andrei worked on. Displays how user bubbles and agent bubbles are laid out, including the visual structure, spacing, and typography. Shows the secondary options that appear on hover for both user and agent message bubbles, demonstrating the interaction patterns and component specifications for the Autopilot design system.",
+      "path": "/kb-assets/autopilot/Autopilot-ChatBubble-Options-Analysis.png",
+      "related_entities": [
+        "project:autopilot_uipath",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "autopilot",
+        "uipath",
+        "design-system",
+        "component-library",
+        "chat-bubble",
+        "UI",
+        "documentation",
+        "andrei-clodius"
+      ],
+      "caption": "Chat bubble component design system documentation",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio",
+        "client": "UiPath"
+      },
+      "blob_id": "autopilot/autopilot-chatbubble-options-analysis",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/autopilot/Autopilot-ChatBubble-Options-Analysis.png"
+    },
+    {
+      "id": "asset:autopilot_context_nesting_001",
+      "type": "asset",
+      "entity_type": "diagram",
+      "title": "Autopilot Context Nesting Diagram",
+      "description": "Visual diagram titled 'Personal Context' describing the context nesting that Andrei envisioned for the Autopilot agent when integrated in an enterprise environment. Shows concentric nested rectangles representing different layers of context from innermost to outermost: Local Context (files stored locally with 'You are here' indicator), Account Context (files across devices tied to account), External Sources (broader information pool), and Frame of reference (Employee, Team, Company Context). The diagram illustrates how files from cloud storage, repos, and company accounts (Drive, Slack) can be pinned and referenced, along with additional context on employee actions, organization, and company information. This visual representation demonstrates the hierarchical approach to providing context to the AI assistant within a complex organizational structure, moving from granular individual-specific data to broader enterprise-wide information.",
+      "path": "/kb-assets/autopilot/Autopilot-context-nesting.png",
+      "related_entities": [
+        "project:autopilot_uipath",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "autopilot",
+        "uipath",
+        "context-nesting",
+        "enterprise",
+        "diagram",
+        "architecture",
+        "design",
+        "andrei-clodius"
+      ],
+      "caption": "Context nesting diagram for Autopilot enterprise integration",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio",
+        "client": "UiPath"
+      },
+      "blob_id": "autopilot/autopilot-context-nesting",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/autopilot/Autopilot-context-nesting.png"
+    },
+    {
+      "id": "asset:autopilot_expert_icon_001",
+      "type": "asset",
+      "entity_type": "photo",
+      "title": "Autopilot Expert Icon Exploration",
+      "description": "Screenshot from Figma showing an icon exploration for the Autopilot Slack integration. Features a bold black four-pointed star-like shape (stylized plus sign or four-petal flower) with broad rounded arms, centrally placed on a white rounded square background. The icon has a subtle drop shadow giving it depth, and is displayed on a dark gray background. The text 'Autopilot Expert' appears in the top-left corner. This icon exploration demonstrates the visual design process for creating a distinctive icon for the Autopilot Slack integration feature.",
+      "path": "/kb-assets/autopilot/Autopilot-Expert-Icon-Exploration.png",
+      "related_entities": [
+        "project:autopilot_uipath",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "autopilot",
+        "uipath",
+        "icon",
+        "slack",
+        "figma",
+        "design-exploration",
+        "UI",
+        "andrei-clodius"
+      ],
+      "caption": "Icon exploration for Autopilot Slack integration",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio",
+        "client": "UiPath"
+      },
+      "blob_id": "autopilot/autopilot-expert-icon-exploration",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/autopilot/Autopilot-Expert-Icon-Exploration.png"
+    },
+    {
+      "id": "asset:autopilot_modes_exploration_001",
+      "type": "asset",
+      "entity_type": "video",
+      "title": "Autopilot Agent Modes Design Exploration",
+      "description": "Video showing the Chat, Plan, and Act agent modes in the Autopilot prompt input interface, demonstrating how the mode switch animates between the three different interaction modes. Shows the visual design and animation of switching between Chat mode (conversational interaction), Plan mode (structured planning), and Act mode (action execution) within the Autopilot assistant interface. This video captures the interaction design and animation details for the mode selector component.",
+      "path": "/kb-assets/autopilot/autopilot-modes-design-exploration.mov",
+      "related_entities": [
+        "project:autopilot_uipath",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "autopilot",
+        "uipath",
+        "video",
+        "modes",
+        "chat",
+        "plan",
+        "act",
+        "animation",
+        "UI",
+        "interaction-design",
+        "andrei-clodius"
+      ],
+      "caption": "Autopilot agent modes animation",
+      "metadata": {
+        "format": "mov",
+        "source": "FRAM Design portfolio",
+        "client": "UiPath"
+      },
+      "blob_id": "autopilot/autopilot-modes-design-exploration",
+      "file_extension": "mov",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/autopilot/autopilot-modes-design-exploration.mov"
+    },
+    {
+      "id": "asset:autopilot_structure_sketch_001",
+      "type": "asset",
+      "entity_type": "diagram",
+      "title": "Autopilot Structure Sketch",
+      "description": "Architectural drawing titled 'Assistant PRO w/ Autopilot' used in discussions with engineers to align on the different data sources Autopilot could use when prompted or when given a task. Shows the system architecture including: legacy Assistant with Task Timeline, Assistant PRO with Autopilot (run custom agents, templates, permissions, tools), context blocks (Operator Context, Org Context, Company Context), and data sources (Documents, 3rd party apps like Calendar, Zoom, Outlook, Slack, Salesforce, LinkedIn, Confluence, Jira, Activities/Events like New Email Received, Snapshots like Clipboard History Item and Recent Activity, Internet Search). Also shows example task chains for sales scenarios: Generate Transcript, Summarise meeting, Suggest next steps, Schedule follow up, Share summary on Slack, Generate email follow-ups, Prepare for meeting, Quiz me, Review my understanding. This sketch was instrumental in aligning the engineering team on how Autopilot accesses and utilizes various enterprise data sources.",
+      "path": "/kb-assets/autopilot/Autopilot-structure-sketch.png",
+      "related_entities": [
+        "project:autopilot_uipath",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "autopilot",
+        "uipath",
+        "architecture",
+        "sketch",
+        "data-sources",
+        "engineering",
+        "diagram",
+        "andrei-clodius"
+      ],
+      "caption": "Autopilot structure sketch for engineering alignment",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio",
+        "client": "UiPath"
+      },
+      "blob_id": "autopilot/autopilot-structure-sketch",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/autopilot/Autopilot-structure-sketch.png"
+    },
+    {
+      "id": "asset:autopilot_tool_calls_dark_001",
+      "type": "asset",
+      "entity_type": "photo",
+      "title": "Autopilot Tool Calls - Dark Mode",
+      "description": "Full screen screenshot of the Autopilot experience in dark mode showing the tool view interface when the agent was editing a JavaScript file. The interface displays the code editing capabilities with syntax highlighting, showing how Autopilot can directly manipulate code files. The prompt input is active (clicked) at the bottom, ready for user interaction. This screenshot demonstrates the dark theme implementation and the tool execution interface within the Autopilot assistant.",
+      "path": "/kb-assets/autopilot/Autopilot-Tool-Calls-Dark.png",
+      "related_entities": [
+        "project:autopilot_uipath",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "autopilot",
+        "uipath",
+        "dark-mode",
+        "tool-calls",
+        "javascript",
+        "code-editing",
+        "screenshot",
+        "UI",
+        "andrei-clodius"
+      ],
+      "caption": "Autopilot tool calls interface in dark mode",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio",
+        "client": "UiPath"
+      },
+      "blob_id": "autopilot/autopilot-tool-calls-dark",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/autopilot/Autopilot-Tool-Calls-Dark.png"
+    },
+    {
+      "id": "asset:autopilot_self_assessment_001",
+      "type": "asset",
+      "entity_type": "diagram",
+      "title": "Employees Writing Annual Self-Assessment Scenario",
+      "description": "Comprehensive user flow diagram describing a usage scenario where a user can use the Autopilot app to help with their annual performance review and self-assessment process. Shows the complete journey: user goal (efficiently create end-of-year self-assessment), Slack notification from HR about Review Season introducing Self-Assessment Agent, opening Autopilot Assistant in HR Space landing page, connecting Zoom and Workday integrations, viewing deadlines and tasks, accessing recent threads for Self-Assessment Writer and AskFeedback agents, and navigating to main Assistant landing page showing all Spaces (Product Specs, Sales Meetings, HR Space), Clipboard, and Unassigned Threads. The diagram demonstrates how Autopilot integrates with enterprise tools (Slack, Zoom, Workday), leverages specialized agents (Self-Assessment Writer, AskFeedback), and organizes information into Spaces to assist users with complex multi-step tasks like annual performance reviews.",
+      "path": "/kb-assets/autopilot/Employees writing their annual Self-assessment.png",
+      "related_entities": [
+        "project:autopilot_uipath",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "autopilot",
+        "uipath",
+        "user-flow",
+        "scenario",
+        "self-assessment",
+        "performance-review",
+        "HR",
+        "slack",
+        "zoom",
+        "workday",
+        "diagram",
+        "andrei-clodius"
+      ],
+      "caption": "Annual self-assessment user scenario",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio",
+        "client": "UiPath"
+      },
+      "blob_id": "autopilot/employees-writing-their-annual-self-assessment",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/autopilot/Employees writing their annual Self-assessment.png"
+    },
+    {
+      "id": "asset:clipboard_ai_first_001",
+      "type": "asset",
+      "entity_type": "diagram",
+      "title": "Clipboard AI Feature Overview",
+      "description": "Comprehensive visual collage demonstrating key functionalities and user interface elements of Clipboard AI by UiPath. Composite image made up of nine distinct UI screenshots and central mascot illustration highlighting intelligent data handling, copying, pasting, and automation across enterprise contexts. Shows Windows context menu integration with 'Copy with ClipboardAI' and 'Paste with ClipboardAI' options, smart pasting into forms with intelligent field recognition, document processing integration with Slack/chat platforms for expense extraction, copied data notifications with forget/later options, persistent global widget toolbar, paste history management, secure document password handling, and intelligent data extraction from invoices and PDFs. The central mascot panel explains core functionality: ClipboardAI remembers copied data for later use, with keyboard shortcuts (Ctrl+Shift+V) and expandable toolbar widget. Demonstrates features including automatic document type detection, intelligent data mapping, scanned and handwritten document support, tabular data extraction, and seamless integration with enterprise applications.",
+      "path": "/kb-assets/clipboard-ai/first.png",
+      "related_entities": [
+        "project:clipboard_ai_uipath",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "clipboard-ai",
+        "uipath",
+        "feature-overview",
+        "UI",
+        "automation",
+        "copy-paste",
+        "document-processing",
+        "diagram",
+        "andrei-clodius"
+      ],
+      "caption": "Clipboard AI feature overview and UI elements",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio",
+        "client": "UiPath"
+      },
+      "blob_id": "clipboard-ai/first",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/clipboard-ai/first.png"
+    },
+    {
+      "id": "asset:clipboard_ai_logo_exploration_001",
+      "type": "asset",
+      "entity_type": "photo",
+      "title": "Clipboard AI Logo Exploration",
+      "description": "Logo design exploration for Clipboard AI by UiPath, showing visual identity development and brand language exploration for the AI-powered clipboard tool. Demonstrates design process for creating distinctive logo and visual elements that represent Clipboard AI's intelligent automation capabilities while maintaining approachable and trustworthy brand identity.",
+      "path": "/kb-assets/clipboard-ai/logo-exploration.png",
+      "related_entities": [
+        "project:clipboard_ai_uipath",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "clipboard-ai",
+        "uipath",
+        "logo",
+        "brand-identity",
+        "visual-design",
+        "exploration",
+        "andrei-clodius"
+      ],
+      "caption": "Clipboard AI logo exploration",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio",
+        "client": "UiPath"
+      },
+      "blob_id": "clipboard-ai/logo-exploration",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/clipboard-ai/logo-exploration.png"
+    },
+    {
+      "id": "asset:clipboard_ai_dynamic_width_001",
+      "type": "asset",
+      "entity_type": "video",
+      "title": "Clipboard AI Dynamic Width Ribbon Animation",
+      "description": "Video demonstrating the dynamic width animation of the Clipboard AI ribbon design on Windows desktop. Shows how the Clipboard AI ribbon interface expands and contracts dynamically, adapting its width based on content and context. This Windows-only desktop implementation demonstrates the responsive ribbon design and smooth animation transitions for the Clipboard AI interface elements.",
+      "path": "/kb-assets/clipboard-ai/Dynamic Width Clipboard AI.mov",
+      "related_entities": [
+        "project:clipboard_ai_uipath",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "clipboard-ai",
+        "uipath",
+        "video",
+        "dynamic-width",
+        "ribbon",
+        "windows",
+        "desktop",
+        "animation",
+        "UI",
+        "interaction-design",
+        "andrei-clodius"
+      ],
+      "caption": "Clipboard AI dynamic width ribbon animation on Windows desktop",
+      "metadata": {
+        "format": "mov",
+        "source": "FRAM Design portfolio",
+        "client": "UiPath",
+        "platform": "Windows desktop"
+      },
+      "blob_id": "clipboard-ai/dynamic-width-clipboard-ai",
+      "file_extension": "mov",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/clipboard-ai/Dynamic Width Clipboard AI.mov"
+    },
+    {
+      "id": "asset:desktop_agent_add_context_button_001",
+      "type": "asset",
+      "entity_type": "diagram",
+      "title": "Desktop Agent Add Context Button Explorations",
+      "description": "Visual explorations for the 'Add Context Button' within the Desktop Agent chat interface, showcasing six distinct design variations. Each button is a 40-unit rounded square featuring a stylized '@' symbol, presented against a black background. Shows different interactive states: Idle state (dark charcoal gray with white '@' outline), Hover state (lighter gray background), and Click state (light blue/periwinkle background with dark '@' symbol). Also explores various visual treatments for idle state including subtle sheen effect, faint inner glow around the '@' symbol, and prominent glow effect. These explorations demonstrate different visual styles and interaction feedback patterns for incorporating additional context into agent tasks.",
+      "path": "/kb-assets/desktop-agent-uipath/Chat-Interface-Add-Context-Button-Explorations.png",
+      "related_entities": [
+        "project:desktop_agent_uipath",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "desktop-agent",
+        "uipath",
+        "delegate",
+        "add-context-button",
+        "UI",
+        "component-exploration",
+        "interaction-design",
+        "andrei-clodius"
+      ],
+      "caption": "Add context button design explorations",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio",
+        "client": "UiPath",
+        "code_name": "Delegate"
+      },
+      "blob_id": "desktop-agent-uipath/chat-interface-add-context-button-explorations",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/desktop-agent-uipath/Chat-Interface-Add-Context-Button-Explorations.png"
+    },
+    {
+      "id": "asset:desktop_agent_delegate_gif_001",
+      "type": "asset",
+      "entity_type": "gif",
+      "title": "Desktop Agent UI Components and States",
+      "description": "Animated GIF showing multiple components from the Desktop Agent UI, demonstrating various states, interactions, and theme changes. Shows the dynamic behavior and visual transitions of Desktop Agent interface elements, including component states, hover effects, theme switching between light and dark modes, and interaction patterns across different UI elements.",
+      "path": "/kb-assets/desktop-agent-uipath/delegate.gif",
+      "related_entities": [
+        "project:desktop_agent_uipath",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "desktop-agent",
+        "uipath",
+        "delegate",
+        "gif",
+        "animation",
+        "UI",
+        "components",
+        "states",
+        "theme",
+        "andrei-clodius"
+      ],
+      "caption": "Desktop Agent UI components, states, and theme changes",
+      "metadata": {
+        "format": "gif",
+        "source": "FRAM Design portfolio",
+        "client": "UiPath",
+        "code_name": "Delegate"
+      },
+      "blob_id": "desktop-agent-uipath/delegate",
+      "file_extension": "gif",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/desktop-agent-uipath/delegate.gif"
+    },
+    {
+      "id": "asset:desktop_agent_japanese_interface_001",
+      "type": "asset",
+      "entity_type": "diagram",
+      "title": "Desktop Agent Japanese Interface Exploration",
+      "description": "Visual exploration of what Desktop Agent would look like in Japanese, created during a workshop. Split-screen comparison showing light theme (left) and dark theme (right) implementations. Features Japanese localization with greeting 'こんにちは、ヒロミ' (Hello, Hiromi), navigation tabs for '最近の' (Recent), '私のすべてのプロジェクト' (All My Projects), and 'コラボレーション' (Collaboration). Shows project placeholders, action buttons for '新しいプロジェクト' (New Project) and '新しいチャット' (New Chat), and an informational card with Japanese text about web components. Includes Autopilot disclaimer in Japanese: '自動操縦は間違いを犯す可能性があります。重要な情報を常に確認してください。' (Autopilot may make mistakes. Please always confirm important information.). Demonstrates internationalization design considerations and theme adaptability.",
+      "path": "/kb-assets/desktop-agent-uipath/Desktop Agent japanese interface rough draft.png",
+      "related_entities": [
+        "project:desktop_agent_uipath",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "desktop-agent",
+        "uipath",
+        "delegate",
+        "japanese",
+        "internationalization",
+        "i18n",
+        "localization",
+        "light-theme",
+        "dark-theme",
+        "workshop",
+        "andrei-clodius"
+      ],
+      "caption": "Japanese interface exploration for Desktop Agent",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio",
+        "client": "UiPath",
+        "code_name": "Delegate"
+      },
+      "blob_id": "desktop-agent-uipath/desktop-agent-japanese-interface-rough-draft",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/desktop-agent-uipath/Desktop Agent japanese interface rough draft.png"
+    },
+    {
+      "id": "asset:desktop_agent_pink_color_study_001",
+      "type": "asset",
+      "entity_type": "photo",
+      "title": "Desktop Agent Pink Color Study",
+      "description": "Color study exploration for Desktop Agent (Delegate) interface, showcasing a warm pink and red color palette. Features a prominent rounded rectangular input field with placeholder text 'Delegate your task' in medium pink/red color. Shows '@' symbol icon and control buttons (record button and voice input icon) in consistent medium pink/red. Background transitions through various shades of light pastel pink to deeper rose/desaturated red at the bottom. Demonstrates soft, warm, and inviting color scheme with clean minimalist design and rounded corners, contributing to a friendly and modern aesthetic for the Desktop Agent brand identity.",
+      "path": "/kb-assets/desktop-agent-uipath/Desktop-Agent-pink-002.png",
+      "related_entities": [
+        "project:desktop_agent_uipath",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "desktop-agent",
+        "uipath",
+        "delegate",
+        "color-study",
+        "pink",
+        "brand-identity",
+        "visual-design",
+        "andrei-clodius"
+      ],
+      "caption": "Pink color study for Desktop Agent",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio",
+        "client": "UiPath",
+        "code_name": "Delegate"
+      },
+      "blob_id": "desktop-agent-uipath/desktop-agent-pink-002",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/desktop-agent-uipath/Desktop-Agent-pink-002.png"
+    },
+    {
+      "id": "asset:desktop_agent_screen_recorder_001",
+      "type": "asset",
+      "entity_type": "photo",
+      "title": "Desktop Agent Screen Recorder Interface",
+      "description": "Recording mode interface for Desktop Agent showing a floating rectangular UI module with glowing pink border positioned over a dark-themed application window. Features recording control panel with 'Entire Screen MacOS' button at top, instructional text explaining users can give Assistant additional instructions during recording (speak or write), and recording controls at bottom including '+' icon, large 'Recording' button with red circle, and stop button. Background shows dark-mode application with Slack-like interface displaying channels ('agents-dogfooding', 'conversational-agents-dev') and main content area discussing PromptBox, LLM models, and Assistant's internal monologue. Demonstrates the screen recording functionality that allows users to record actions and create repeatable automations, with ability to provide verbal or textual guidance during the recording process.",
+      "path": "/kb-assets/desktop-agent-uipath/Desktop-Agent-Screen-Recorder.png",
+      "related_entities": [
+        "project:desktop_agent_uipath",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "desktop-agent",
+        "uipath",
+        "delegate",
+        "screen-recorder",
+        "recording-mode",
+        "macos",
+        "automation",
+        "UI",
+        "andrei-clodius"
+      ],
+      "caption": "Screen recorder interface for Desktop Agent",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio",
+        "client": "UiPath",
+        "code_name": "Delegate"
+      },
+      "blob_id": "desktop-agent-uipath/desktop-agent-screen-recorder",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/desktop-agent-uipath/Desktop-Agent-Screen-Recorder.png"
+    },
+    {
+      "id": "asset:desktop_agent_subagent_card_001",
+      "type": "asset",
+      "entity_type": "photo",
+      "title": "Desktop Agent Subagent Card",
+      "description": "User interface element showing a subagent card in the Desktop Agent chat feed, specifically an 'Excel Spreadsheet Assistant' with status 'In progress...'. Displays main task description for analyzing email inboxes for spam patterns and suggesting actions. Below the task, shows list of sub-steps representing the agent's reasoning process: searching and analyzing spreadsheet cells, editing columns, checking categorized tabs, performing currency conversion, and planning next steps. Each step has associated icons (magnifying glass, pencil, angle brackets, sparkle). The 'Planning next steps...' item is highlighted in light blue indicating current active step. Demonstrates observability pattern for showing subagent progress and internal reasoning within the chat interface, enabling users to understand what specialized agents are doing and how they're breaking down complex tasks.",
+      "path": "/kb-assets/desktop-agent-uipath/Desktop-Agent-Subagent-Card.png",
+      "related_entities": [
+        "project:desktop_agent_uipath",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "desktop-agent",
+        "uipath",
+        "delegate",
+        "subagent",
+        "observability",
+        "chat-interface",
+        "reasoning",
+        "UI",
+        "andrei-clodius"
+      ],
+      "caption": "Subagent card showing progress and reasoning",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio",
+        "client": "UiPath",
+        "code_name": "Delegate"
+      },
+      "blob_id": "desktop-agent-uipath/desktop-agent-subagent-card",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/desktop-agent-uipath/Desktop-Agent-Subagent-Card.png"
+    },
+    {
+      "id": "asset:desktop_agent_subagent_toolcall_001",
+      "type": "asset",
+      "entity_type": "diagram",
+      "title": "Desktop Agent Subagent Tool Call Details",
+      "description": "Three-panel comparison view demonstrating how subagent tool call details are displayed for debugging and observability. Shows progression from collapsed summary view (left) with instruction to 'Hover and click on one of the sub agent steps', to expanded view (middle) revealing full JSON output of tool call results, to expanded view with scrollability indicators (right). The expanded view displays detailed tool result JSON including: tool type ('web.search'), call ID, status ('ok'), search results array with titles, URLs, snippets, stable IDs, hashes, provenance information (kind, stable_id, retrieved_at timestamp), usage metrics (tokens_in, tokens_out), and cache status (hit, ttl_s). The rightmost panel explicitly shows 'MaxWidth + ScrollView' indicator demonstrating how extensive debugging information can be displayed with scrolling capability. This interface provides full observability into subagent tool calls, enabling users to debug agent behavior and understand exactly what tools were called and what results were returned.",
+      "path": "/kb-assets/desktop-agent-uipath/Desktop-Agent-subagent-toolcall-details.png",
+      "related_entities": [
+        "project:desktop_agent_uipath",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "desktop-agent",
+        "uipath",
+        "delegate",
+        "subagent",
+        "tool-calls",
+        "debugging",
+        "observability",
+        "JSON",
+        "UI",
+        "andrei-clodius"
+      ],
+      "caption": "Subagent tool call details for debugging",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio",
+        "client": "UiPath",
+        "code_name": "Delegate"
+      },
+      "blob_id": "desktop-agent-uipath/desktop-agent-subagent-toolcall-details",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/desktop-agent-uipath/Desktop-Agent-subagent-toolcall-details.png"
+    },
+    {
+      "id": "asset:desktop_agent_flow_automation_001",
+      "type": "asset",
+      "entity_type": "photo",
+      "title": "Desktop Agent Flow Automation Interface",
+      "description": "Screenshot showing Desktop Agent interface for adding a pre-existing recording of steps wrapped in a single callable automation. Features translucent light pink application window with rounded corners overlaying macOS desktop. Central 'Flow Title' card displays a pre-defined automation workflow with steps: Open Google Calendar event, Get Salesforce Contact information, Gather Company News, Structure Attendee Profiles, Generate Meeting Brief, and Send Email. Each step has associated application icons (Google Calendar, Salesforce, Google). Card includes 'Run this flow now' call-to-action and input field with '@' symbol for adding context. Shows toolbar with search, add, and list view icons. Demonstrates how users can manage and execute pre-existing automations (flows) that have been created from recorded actions, enabling reuse of complex multi-step workflows across different contexts.",
+      "path": "/kb-assets/desktop-agent-uipath/Screenshot 2025-11-05 at 16.23.35.png",
+      "related_entities": [
+        "project:desktop_agent_uipath",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "desktop-agent",
+        "uipath",
+        "delegate",
+        "flow",
+        "automation",
+        "recording",
+        "callable",
+        "macos",
+        "UI",
+        "andrei-clodius"
+      ],
+      "caption": "Flow automation interface for pre-existing recordings",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio",
+        "client": "UiPath",
+        "code_name": "Delegate",
+        "platform": "macOS"
+      },
+      "blob_id": "desktop-agent-uipath/screenshot-2025-11-05-at-162335",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/desktop-agent-uipath/Screenshot 2025-11-05 at 16.23.35.png"
+    },
+    {
+      "id": "asset:fram_photo_001",
+      "type": "asset",
+      "entity_type": "photo",
+      "title": "Photo of Fram",
+      "description": "Black and white artistically rendered photograph of Fram, a polar bear who guards and represents FRAM Design. The image features a minimalist, high-contrast style showing Fram in profile facing right, with head and front body sharply defined showcasing fur texture, dark eyes, and prominent black nose. The bear's expression appears determined and focused. The body gradually blurs and fades into the background, creating an impression of rapid motion or ethereal quality as if emerging from or dissolving into the environment. A significant dark, grainy shadow extends beneath and behind the bear, contributing to the sense of movement and depth. The background is stark and simple, divided into light gray upper two-thirds (almost white, foggy/snowy atmosphere) and darker textured grainy gray lower third (ground or ice surface). The overall aesthetic is stark beauty and minimalism, focusing on the polar bear's powerful presence against a muted, abstract arctic-like landscape. A small faint signature mark is visible in the bottom right corner.",
+      "path": "/kb-assets/fram/photo of fram.png",
+      "related_entities": [
+        "person:fram",
+        "lab:fram_design"
+      ],
+      "tags": [
+        "fram",
+        "polar-bear",
+        "photo",
+        "black-white",
+        "artistic",
+        "minimalist",
+        "portrait",
+        "mascot"
+      ],
+      "caption": "Photo of Fram, the polar bear",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio"
+      },
+      "blob_id": "fram/photo-of-fram",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/fram/photo of fram.png"
+    },
+    {
+      "id": "asset:semantic_space_document_mobile_001",
+      "type": "asset",
+      "entity_type": "photo",
+      "title": "Semantic Space Document View - Mobile",
+      "description": "Mobile phone screenshot showing a document view within Semantic Space application on iPhone. Displays 'Andrei's Space' workspace with a document named 'Gandalf' in a white card with rounded corners. The document combines an artistic image (abstract scene with coral-like structures, person silhouette interacting with glowing rectangular panels displaying abstract landscapes) and multiple text blocks. Shows inline text editing toolbar with formatting options (Bold, Italic, Underline, Body M style dropdown, chat bubble icon) appearing above highlighted text. Features document header with back arrow, title 'Gandalf', and expand icon. Demonstrates how documents in Semantic Space combine images and editable text on mobile, with active editing capabilities and integration with the agent through chat functionality. Text content includes headings like 'Understanding the product vision' and 'Defining very well articulated user goals', with paragraphs about mapping stakeholders, user journeys, and experimentation processes.",
+      "path": "/kb-assets/semantic-space/document-view-mobile-snapshop-with-perplexity-illustration.png",
+      "related_entities": [
+        "project:semantic_space",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "semantic-space",
+        "document",
+        "mobile",
+        "iphone",
+        "canvas",
+        "editing",
+        "moodboard",
+        "andrei-clodius"
+      ],
+      "caption": "Document view on mobile in Semantic Space",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio",
+        "platform": "iOS"
+      },
+      "blob_id": "semantic-space/document-view-mobile-snapshop-with-perplexity-illustration",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/semantic-space/document-view-mobile-snapshop-with-perplexity-illustration.png"
+    },
+    {
+      "id": "asset:semantic_space_folder_mobile_001",
+      "type": "asset",
+      "entity_type": "photo",
+      "title": "Semantic Space Folder View - Mobile",
+      "description": "Mobile phone screenshot showing folder view within Semantic Space application on iPhone. Displays 'Andrei's Space' workspace with a 'Portfolio Folder' card containing a grid of document cards arranged in two columns. Each document card shows a bold serif title (e.g., 'Hello', 'Gandalf', 'The Dreamer', 'Title', 'hmmm', 'ok') and placeholder text describing document sections. Features floating action buttons (FABs) with '+' icon for creating new documents and chat bubble icon for interacting with the AI agent. Bottom navigation bar shows back arrow, document stack icon, username 'andreiclodius', refresh icon, and ellipsis menu. Demonstrates folder-based organization system for grouping related documents and assets, with quick access to creation and agent interaction features on mobile.",
+      "path": "/kb-assets/semantic-space/folder-view-mobile-snapshot.png",
+      "related_entities": [
+        "project:semantic_space",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "semantic-space",
+        "folder",
+        "mobile",
+        "iphone",
+        "organization",
+        "documents",
+        "moodboard",
+        "andrei-clodius"
+      ],
+      "caption": "Folder view on mobile in Semantic Space",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio",
+        "platform": "iOS"
+      },
+      "blob_id": "semantic-space/folder-view-mobile-snapshot",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/semantic-space/folder-view-mobile-snapshot.png"
+    },
+    {
+      "id": "asset:semantic_space_canvas_sketch_001",
+      "type": "asset",
+      "entity_type": "diagram",
+      "title": "Semantic Space Canvas Design Sketch",
+      "description": "Design sketch showing the canvas view of Semantic Space workspace 'Andrei's Space'. Features a light grey infinite canvas with various content cards arranged spatially: text note cards with titles and summaries, artistic image cards (person silhouette interacting with glowing screens, abstract gradient designs), and document snapshots. Shows left sidebar with circular icons (calculator, calendar, target, pink circle with 'P'). Bottom asset tray displays preview cards (white puppy photo, person-with-screens image, document stack). Centered chat input field with placeholder '@ Chat with this Space' and upward arrow icon. Image cards include interactive elements: upload/download icon, delete button, resize icon, and 'Change' button with pencil icon for remixing. Demonstrates the canvas-based interaction model where users can organize images and document snapshots spatially, interact with the agent through chat, and continuously remix content. The layout shows how different asset types (text, images, documents) coexist on the canvas for moodboard creation and brainstorming.",
+      "path": "/kb-assets/semantic-space/Semantic Space design sketch beginnings.png",
+      "related_entities": [
+        "project:semantic_space",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "semantic-space",
+        "canvas",
+        "sketch",
+        "design",
+        "moodboard",
+        "brainstorming",
+        "workspace",
+        "andrei-clodius"
+      ],
+      "caption": "Canvas view design sketch for Semantic Space",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio"
+      },
+      "blob_id": "semantic-space/semantic-space-design-sketch-beginnings",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/semantic-space/Semantic Space design sketch beginnings.png"
+    },
+    {
+      "id": "asset:semantic_space_chat_bubbles_001",
+      "type": "asset",
+      "entity_type": "diagram",
+      "title": "Semantic Space Chat Bubble Options",
+      "description": "Design exploration for message bubbles in Semantic Space chat interface, showing interaction options for individual message bubbles. Features two stacked message bubbles: upper bubble contains a landscape image (terraced rice paddies with path leading to misty mountains under soft sky), lower bubble contains text message. Both bubbles display semi-transparent dark grey contextual menu overlay on bottom right with three options in large white text: 'Reply', 'Ask Agent', and 'Make image'. Above each contextual menu are two small circular icons: white smiley face (reactions) and white downward chevron (additional options). Demonstrates how users can interact with the agent directly from message bubbles, with 'Ask Agent' option for conversational interaction and 'Make image' option for generating visual content based on chat context. Shows consistency in UI design for both text and image message types, enabling agent interaction and content generation from any message in the space.",
+      "path": "/kb-assets/semantic-space/Semantic-Space-Chat-App-Bubble-Options-Design-Explorations.png",
+      "related_entities": [
+        "project:semantic_space",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "semantic-space",
+        "chat",
+        "message-bubbles",
+        "UI",
+        "interaction-design",
+        "agent",
+        "moodboard",
+        "andrei-clodius"
+      ],
+      "caption": "Chat bubble options design exploration",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio"
+      },
+      "blob_id": "semantic-space/semantic-space-chat-app-bubble-options-design-explorations",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/semantic-space/Semantic-Space-Chat-App-Bubble-Options-Design-Explorations.png"
+    }
+  ],
+  "_schema": {
+    "blob_id": "Stable identifier for GCS storage (category/filename without extension)",
+    "file_extension": "File extension (png, jpeg, mov, gif)",
+    "storage_provider": "Always 'gcs' for Google Cloud Storage"
+  },
+  "_ID_MAPPING_RULES": {
+    "description": "How to maintain ID <> asset mapping when updating assets",
+    "rules": [
+      "1. blob_id format: {category}/{filename-slug} (no extension)",
+      "2. Category matches folder: andrei-clodius/, semantic-space/, etc.",
+      "3. Filename slug: lowercase, hyphens instead of spaces, descriptive",
+      "4. blob_id is STABLE - never change it (URLs will break)",
+      "5. To rename: Keep blob_id, update title/description only",
+      "6. To replace: Upload new file with SAME blob_id (overwrites in GCS)",
+      "7. file_extension must match actual file in GCS"
+    ],
+    "examples": {
+      "good_blob_ids": [
+        "andrei-clodius/photo_of_andrei",
+        "semantic-space/canvas-sketch",
+        "autopilot/context-structure-sketch"
+      ],
+      "bad_blob_ids": [
+        "photo.png",
+        "Semantic Space Sketch",
+        "2024-01-15-image"
+      ]
+    }
+  }
+}

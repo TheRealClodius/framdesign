@@ -63,6 +63,26 @@ function extractBlobIdFromGcsUrl(url: string): { blob_id: string; extension: str
   }
 }
 
+// Extract blob_id and extension from local /kb-assets paths
+function extractBlobIdFromLocalAssetPath(path: string): { blob_id: string; extension: string } | null {
+  try {
+    let pathname = path;
+    if (path.startsWith("http://") || path.startsWith("https://")) {
+      pathname = new URL(path).pathname;
+    }
+    const assetsIndex = pathname.indexOf('/kb-assets/');
+    if (assetsIndex === -1) return null;
+    const assetPath = pathname.substring(assetsIndex + '/kb-assets/'.length);
+    const lastDotIndex = assetPath.lastIndexOf('.');
+    if (lastDotIndex === -1) return null;
+    const blobId = assetPath.substring(0, lastDotIndex);
+    const extension = assetPath.substring(lastDotIndex + 1);
+    return (blobId && extension) ? { blob_id: blobId, extension } : null;
+  } catch {
+    return null;
+  }
+}
+
 // Refresh expired GCS signed URL (shared utility)
 async function refreshGcsUrl(blobId: string, extension: string): Promise<string | null> {
   try {
@@ -99,7 +119,7 @@ function VideoWithError({ src, children, controls, ...props }: { src?: string; c
   const handleVideoError = useCallback(async (e: React.SyntheticEvent<HTMLVideoElement>) => {
     const video = e.currentTarget;
     const currentSrcValue = video.src;
-    const hasTriedLocalFallback = video.getAttribute("data-local-fallback-attempted") === "true";
+    const hasTriedRefresh = video.getAttribute("data-refresh-attempted") === "true";
 
     console.log('[VideoWithError] Video error triggered');
     console.log('  currentSrc state:', currentSrc);
@@ -109,21 +129,22 @@ function VideoWithError({ src, children, controls, ...props }: { src?: string; c
     // Try to extract GCS URL from either the video element or the original src prop
     const urlToCheck = currentSrcValue || src || '';
     
-    // If this is a GCS URL and we haven't tried local fallback yet, try it immediately
-    if (!hasTriedLocalFallback && urlToCheck && urlToCheck.includes("storage.googleapis.com")) {
-      const blobInfo = extractBlobIdFromGcsUrl(urlToCheck);
+    // Try refreshing the signed URL from blob storage before failing
+    if (!hasTriedRefresh && urlToCheck) {
+      const blobInfo = extractBlobIdFromGcsUrl(urlToCheck) || extractBlobIdFromLocalAssetPath(urlToCheck);
       if (blobInfo) {
-        video.setAttribute("data-local-fallback-attempted", "true");
-        // Construct local path: /kb-assets/{blob_id}.{extension}
-        const localPath = `/kb-assets/${blobInfo.blob_id}.${blobInfo.extension}`;
-        console.log('[VideoWithError] Trying local fallback:', localPath);
-        setCurrentSrc(localPath);
-        setVideoError(false);
-        return;
+        video.setAttribute("data-refresh-attempted", "true");
+        const freshUrl = await refreshGcsUrl(blobInfo.blob_id, blobInfo.extension);
+        if (freshUrl) {
+          console.log('[VideoWithError] Refreshed signed URL:', freshUrl);
+          setCurrentSrc(freshUrl);
+          setVideoError(false);
+          return;
+        }
       }
     }
 
-    // If we're already on a local path or local fallback failed, show error
+    // All fallbacks exhausted, show error
     console.log('[VideoWithError] All fallbacks exhausted, showing error');
     setVideoError(true);
   }, [src, currentSrc]);
@@ -283,11 +304,10 @@ function ChatImage({
         onError={async (e) => {
           const img = e.target as HTMLImageElement;
           const currentSrc = img.src;
-          const fallbackAttempts = parseInt(img.getAttribute("data-fallback-attempts") || "0", 10);
           const hasTriedRefresh = img.getAttribute("data-refresh-attempted") === "true";
 
-          if (!hasTriedRefresh && currentSrc.includes("storage.googleapis.com")) {
-            const blobInfo = extractBlobIdFromGcsUrl(currentSrc);
+          if (!hasTriedRefresh) {
+            const blobInfo = extractBlobIdFromGcsUrl(currentSrc) || extractBlobIdFromLocalAssetPath(currentSrc);
             if (blobInfo) {
               img.setAttribute("data-refresh-attempted", "true");
               const freshUrl = await refreshGcsUrl(blobInfo.blob_id, blobInfo.extension);
@@ -295,54 +315,7 @@ function ChatImage({
                 img.src = freshUrl;
                 return;
               }
-              
-              // If refresh failed, try local fallback immediately
-              const localPath = `/kb-assets/${blobInfo.blob_id}.${blobInfo.extension}`;
-              img.src = localPath;
-              return;
             }
-          }
-
-          if (fallbackAttempts < 3 && currentSrc.includes("/kb-assets/")) {
-            try {
-              let pathname = currentSrc;
-              if (currentSrc.startsWith("http://") || currentSrc.startsWith("https://")) {
-                pathname = new URL(currentSrc).pathname;
-              } else if (currentSrc.startsWith("//")) {
-                pathname = new URL(currentSrc, window.location.origin).pathname;
-              }
-
-              let decodedPath = pathname;
-              try { decodedPath = decodeURIComponent(pathname); } catch { decodedPath = pathname; }
-
-              const parts = decodedPath.split("/");
-              const filename = parts[parts.length - 1];
-
-              if (filename) {
-                let fixedFilename = filename;
-                let fixedPath = "";
-
-                if (fallbackAttempts === 0) {
-                  fixedFilename = filename.replace(/-/g, "_");
-                } else if (fallbackAttempts === 1) {
-                  fixedFilename = filename.replace(/-/g, " ");
-                  if (filename.toLowerCase().includes("portrait") && parts.length >= 2 && parts[parts.length - 2] === "fram") {
-                    fixedFilename = "photo of fram.png";
-                  }
-                } else if (fallbackAttempts === 2) {
-                  fixedFilename = filename.replace(/_/g, " ");
-                }
-
-                parts[parts.length - 1] = fixedFilename;
-                const fixedParts = parts.map((part, index) => (index === 0 && part === "") ? "" : encodeURIComponent(part));
-                fixedPath = fixedParts.join("/");
-                if (decodedPath.startsWith("/") && !fixedPath.startsWith("/")) fixedPath = "/" + fixedPath;
-
-                img.setAttribute("data-fallback-attempts", String(fallbackAttempts + 1));
-                img.src = fixedPath;
-                return;
-              }
-            } catch { }
           }
 
           setFailedImages((prev) => new Set(prev).add(normalizedSrc));

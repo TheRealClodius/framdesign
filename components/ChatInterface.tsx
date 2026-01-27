@@ -198,6 +198,8 @@ import {
 import { OverloadedError, BudgetExhaustedError } from "@/lib/errors";
 import { voiceService } from "@/lib/services/voice-service";
 import { useTheme } from "@/lib/hooks/useTheme";
+import { getSuggestionImage } from "@/lib/project-image-map";
+import SuggestionImagePopup from "./SuggestionImagePopup";
 
 /**
  * Normalize text response from voice agent, especially fixing mermaid diagram formatting
@@ -503,17 +505,39 @@ export default function ChatInterface() {
   ]);
 
   const [messages, setMessages] = useState<Message[]>([
-    { id: "initial-assistant", role: "assistant", content: "HELLO. HOW CAN I HELP YOU TODAY?" }
+    { 
+      id: "initial-assistant", 
+      role: "assistant", 
+      content: "HELLO. HOW CAN I HELP YOU TODAY?",
+      suggestions: [
+        "What does FRAM Design do?",
+        "I have a design challenge I'm thinking through",
+        `Tell me about ${PROJECTS[0]}`,
+        "How would you approach a new product?",
+      ]
+    }
   ]);
 
   // Set random project only after component mounts on client (avoid hydration mismatch)
   useEffect(() => {
-    setConversationStarters([
+    const updatedStarters = [
       "What does FRAM Design do?",
       "I have a design challenge I'm thinking through",
       `Tell me about ${getRandomProject()}`,
       "How would you approach a new product?",
-    ]);
+    ];
+    setConversationStarters(updatedStarters);
+    
+    // Also update suggestions for initial message if it's still present
+    setMessages(prev => {
+      if (prev.length === 1 && prev[0].id === "initial-assistant") {
+        return [{
+          ...prev[0],
+          suggestions: updatedStarters
+        }];
+      }
+      return prev;
+    });
   }, []);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -529,7 +553,19 @@ export default function ChatInterface() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  
+
+  // Suggestion image hover state
+  const [hoveredSuggestion, setHoveredSuggestion] = useState<{
+    index: number;
+    imagePath: string;
+    alt: string;
+    buttonRect: DOMRect;
+  } | null>(null);
+
+  // Cache for suggestion image lookups to avoid repeated async calls
+  const suggestionImageCache = useRef<Map<string, { url: string; alt: string; title: string } | null>>(new Map());
+  const activeHoverKeyRef = useRef<string | null>(null);
+
   // Track if we should start a new message turn (for transcript grouping)
   // Set to true when: user interrupts, session ends, or session restarts
   const shouldStartNewTurn = useRef<boolean>(true);
@@ -746,6 +782,36 @@ export default function ChatInterface() {
     }, 300); // Debounce for 300ms
 
     return () => clearTimeout(timeoutId);
+  }, [messages]);
+
+  // Preload images for suggestions to enable instant hover
+  useEffect(() => {
+    const preloadImages = async () => {
+      const lastMessage = messages[messages.length - 1];
+      const suggestions = lastMessage?.suggestions || [];
+
+      for (const suggestion of suggestions) {
+        // Skip if already cached
+        if (suggestionImageCache.current.has(suggestion)) continue;
+
+        try {
+          // Look up image path (caches manifest internally)
+          const imageInfo = await getSuggestionImage(suggestion);
+          suggestionImageCache.current.set(suggestion, imageInfo);
+
+          // Preload the actual image in browser cache
+          if (imageInfo) {
+            const img = new Image();
+            img.src = imageInfo.url;  // Browser caches this
+          }
+        } catch (error) {
+          // Ignore errors - image preloading is best-effort
+          suggestionImageCache.current.set(suggestion, null);
+        }
+      }
+    };
+
+    preloadImages();
   }, [messages]);
 
   useEffect(() => {
@@ -1139,27 +1205,23 @@ export default function ChatInterface() {
   // This happens when wasBlocked is true but isBlocked is false
   const timeoutJustExpired = wasBlocked && !isTimeoutBlocked;
 
-  // Show conversation starters only when chat is in initial state
-  const showSuggestions =
-    messages.length === 1 &&
-    messages[0].id === "initial-assistant" &&
-    !isVoiceMode &&
-    !isLoading;
-
   // Handle clicking a conversation starter - directly submits the message
-  const handleStarterClick = (text: string) => {
+  const handleStarterClick = (text: string, currentMessages?: Message[]) => {
     if (isLoading || isVoiceMode || isBlocked) return;
 
+    const baseMessages = currentMessages || messages;
+
     // Directly submit the starter text (bypass input state)
-    setMessages((prev) => [...prev, { id: generateMessageId(), role: "user", content: text }]);
+    const newUserMessage = { id: generateMessageId(), role: "user" as const, content: text };
+    setMessages([...baseMessages, newUserMessage]);
     setIsLoading(true);
 
     // Trigger the chat request
     const submitStarter = async () => {
       try {
         const requestMessages: Message[] = [
-          ...messages,
-          { id: generateMessageId(), role: "user", content: text }
+          ...baseMessages,
+          newUserMessage
         ];
 
         const assistantMessageId = generateMessageId();
@@ -1628,7 +1690,12 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
       
       // Reset component state to initial message
       setMessages([
-        { id: "initial-assistant", role: "assistant", content: "HELLO. HOW CAN I HELP YOU TODAY?" }
+        { 
+          id: "initial-assistant", 
+          role: "assistant", 
+          content: "HELLO. HOW CAN I HELP YOU TODAY?",
+          suggestions: conversationStarters
+        }
       ]);
       
       // Reset voice-related state
@@ -1736,21 +1803,67 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
                                 type="button"
                                 onClick={() => {
                                   if (isLoading || isVoiceMode || isBlocked) return;
+                                  // Clear hover state when clicking
+                                  setHoveredSuggestion(null);
                                   // Clear suggestions from this message before submitting
+                                  let updatedMessages: Message[] = [];
                                   setMessages((prev) => {
                                     const updated = [...prev];
                                     const msgIndex = updated.findIndex(m => m.id === message.id);
                                     if (msgIndex !== -1) {
                                       // Strip suggestions from content and clear the suggestions property
-                                      updated[msgIndex] = { 
-                                        ...updated[msgIndex], 
+                                      updated[msgIndex] = {
+                                        ...updated[msgIndex],
                                         content: stripSuggestionsFromContent(updated[msgIndex].content),
-                                        suggestions: undefined 
+                                        suggestions: undefined
                                       };
                                     }
+                                    updatedMessages = updated;
                                     return updated;
                                   });
-                                  handleStarterClick(suggestion);
+                                  handleStarterClick(suggestion, updatedMessages);
+                                }}
+                                onMouseEnter={async (e) => {
+                                  // Don't show popups when loading, in voice mode, or blocked
+                                  if (isLoading || isVoiceMode || isBlocked) return;
+
+                                  // Mark this suggestion as the active hover target
+                                  activeHoverKeyRef.current = suggestion;
+
+                                  // Check cache first (instant if already loaded)
+                                  let imageInfo = suggestionImageCache.current.get(suggestion);
+
+                                  // If not in cache, try to load it now (async)
+                                  if (!imageInfo) {
+                                    try {
+                                      imageInfo = await getSuggestionImage(suggestion);
+                                      suggestionImageCache.current.set(suggestion, imageInfo ?? null);
+                                      if (imageInfo) {
+                                        const img = new Image();
+                                        img.src = imageInfo.url;
+                                      }
+                                    } catch {
+                                      suggestionImageCache.current.set(suggestion, null);
+                                      return;
+                                    }
+                                  }
+
+                                  // Only show popup if we still hover this suggestion
+                                  if (activeHoverKeyRef.current === suggestion && imageInfo) {
+                                    const buttonRect = e.currentTarget.getBoundingClientRect();
+                                    setHoveredSuggestion({
+                                      index: idx,
+                                      imagePath: imageInfo.url,
+                                      alt: imageInfo.alt,
+                                      buttonRect
+                                    });
+                                  }
+                                }}
+                                onMouseLeave={() => {
+                                  if (activeHoverKeyRef.current === suggestion) {
+                                    activeHoverKeyRef.current = null;
+                                  }
+                                  setHoveredSuggestion(null);
                                 }}
                                 disabled={isLoading || isVoiceMode || isBlocked}
                                 className={`text-[0.75rem] font-mono uppercase tracking-wider transition-colors px-3 py-1.5 border rounded disabled:opacity-50 disabled:cursor-not-allowed text-left ${isDark ? 'text-gray-400 hover:text-gray-100 border-gray-600 hover:border-gray-400' : 'text-gray-400 hover:text-black border-gray-300 hover:border-black'}`}
@@ -1820,23 +1933,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
             )}
           </div>
         ) : (
-          <div className="flex-shrink-0 md:h-32">
-            {/* Conversation Starters - vertically stacked, left-aligned, above prompt input */}
-            {showSuggestions && (
-              <div className="max-w-[500px] mx-auto w-full mb-4">
-                <div className="flex flex-col gap-y-4 md:gap-y-2 items-start">
-                  {conversationStarters.map((starter, index) => (
-                    <button
-                      key={index}
-                      onClick={() => handleStarterClick(starter)}
-                      className={`text-[0.75rem] font-mono uppercase tracking-wider transition-colors text-left ${isDark ? 'text-gray-400 hover:text-gray-100' : 'text-gray-400 hover:text-black'}`}
-                    >
-                      {starter}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
+          <div className="flex-shrink-0">
             <form onSubmit={handleSubmit} className="relative max-w-[500px] mx-auto w-full">
               <textarea
                 ref={textareaRef}
@@ -1995,6 +2092,15 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
           </div>
         )}
       </div>
+
+      {/* Suggestion image hover popup */}
+      {hoveredSuggestion && (
+        <SuggestionImagePopup
+          imagePath={hoveredSuggestion.imagePath}
+          alt={hoveredSuggestion.alt}
+          buttonRect={hoveredSuggestion.buttonRect}
+        />
+      )}
     </section>
   );
 }

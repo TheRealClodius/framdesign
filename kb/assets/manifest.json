@@ -990,6 +990,239 @@
       "file_extension": "png",
       "storage_provider": "gcs",
       "_old_path": "/kb-assets/semantic-space/Semantic-Space-Chat-App-Bubble-Options-Design-Explorations.png"
+    },
+    {
+      "id": "asset:clubaperitif_gift_001",
+      "type": "asset",
+      "entity_type": "photo",
+      "title": "ClubAperitif Chapter Visual - The Gift",
+      "description": "Chapter cover visual for ClubAperitif titled 'THE GIFT'. Dark, warm-toned gradient background with large serif typography in off-white reading THE GIFT. On the right, a matte black cylindrical object with the word 'lock' embossed vertically evokes the ritual of receiving an invitation and membership artifact. The composition conveys exclusivity, mystery, and a ceremonial invitation to join the ClubAperitif community.",
+      "path": "/kb-assets/clubaperitif/the-gift.png",
+      "related_entities": [
+        "project:clubaperitif"
+      ],
+      "tags": [
+        "clubaperitif",
+        "chapter",
+        "the-gift",
+        "invitation",
+        "membership",
+        "ritual",
+        "brand-visual",
+        "cover"
+      ],
+      "caption": "The Gift chapter visual for ClubAperitif",
+      "metadata": {
+        "format": "png",
+        "source": "ClubAperitif brand assets"
+      },
+      "blob_id": "clubaperitif/the-gift",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/clubaperitif/the-gift.png"
+    },
+    {
+      "id": "asset:clubaperitif_journey_001",
+      "type": "asset",
+      "entity_type": "photo",
+      "title": "ClubAperitif Chapter Visual - The Journey",
+      "description": "Chapter cover visual for ClubAperitif titled 'THE JOURNEY'. Wide mountain landscape with a lone figure standing on rocky terrain amid vivid red and orange slopes. Large serif typography overlays the scene in off-white. The imagery evokes travel, movement, and the evolving experience of membership across places and time.",
+      "path": "/kb-assets/clubaperitif/the-journey.png",
+      "related_entities": [
+        "project:clubaperitif"
+      ],
+      "tags": [
+        "clubaperitif",
+        "chapter",
+        "the-journey",
+        "travel",
+        "exploration",
+        "membership",
+        "brand-visual",
+        "cover"
+      ],
+      "caption": "The Journey chapter visual for ClubAperitif",
+      "metadata": {
+        "format": "png",
+        "source": "ClubAperitif brand assets"
+      },
+      "blob_id": "clubaperitif/the-journey",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/clubaperitif/the-journey.png"
+    },
+    {
+      "id": "asset:clubaperitif_meet_001",
+      "type": "asset",
+      "entity_type": "photo",
+      "title": "ClubAperitif Chapter Visual - The Meet",
+      "description": "Chapter cover visual for ClubAperitif titled 'THE MEET'. Stylized portrait of a person wearing oversized dark sunglasses, rendered in soft retro tones with a subtle film-like texture. Large serif typography in off-white overlays the image. The visual references social encounters, hospitality, and effortless in-person experiences enabled by the ClubAperitif membership.",
+      "path": "/kb-assets/clubaperitif/the-meet.png",
+      "related_entities": [
+        "project:clubaperitif"
+      ],
+      "tags": [
+        "clubaperitif",
+        "chapter",
+        "the-meet",
+        "social",
+        "hospitality",
+        "membership",
+        "brand-visual",
+        "cover"
+      ],
+      "caption": "The Meet chapter visual for ClubAperitif",
+      "metadata": {
+        "format": "png",
+        "source": "ClubAperitif brand assets"
+      },
+      "blob_id": "clubaperitif/the-meet",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/clubaperitif/the-meet.png"
+    },
+    {
+      "id": "asset:clubaperitif_presence_001",
+      "type": "asset",
+      "entity_type": "photo",
+      "title": "ClubAperitif Chapter Visual - The Presence",
+      "description": "Chapter cover visual for ClubAperitif titled 'THE PRESENCE'. Abstract, smoky fluid forms in deep burgundy and pink swirl across a dark background, with large serif typography in off-white. The visual suggests a unique digital identity, ambient presence, and the living, shifting nature of a member's badge and personalization.",
+      "path": "/kb-assets/clubaperitif/the-presence.png",
+      "related_entities": [
+        "project:clubaperitif"
+      ],
+      "tags": [
+        "clubaperitif",
+        "chapter",
+        "the-presence",
+        "digital-identity",
+        "badge",
+        "membership",
+        "brand-visual",
+        "cover"
+      ],
+      "caption": "The Presence chapter visual for ClubAperitif",
+      "metadata": {
+        "format": "png",
+        "source": "ClubAperitif brand assets"
+      },
+      "blob_id": "clubaperitif/the-presence",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/clubaperitif/the-presence.png"
+    },
+    {
+      "id": "asset:clubaperitif_box_with_letter_001",
+      "type": "asset",
+      "entity_type": "photo",
+      "title": "ClubAperitif Invitation Box with Letter",
+      "description": "Concept image of a ClubAperitif invitation package showing a box presentation with a letter inside. The asset supports the membership ritual narrative, emphasizing the invitation as a gift and the tactile feel of receiving a physical artifact.",
+      "path": "/kb-assets/clubaperitif/box with letter.png",
+      "related_entities": [
+        "project:clubaperitif"
+      ],
+      "tags": [
+        "clubaperitif",
+        "invitation",
+        "gift",
+        "membership",
+        "package",
+        "letter",
+        "artifact"
+      ],
+      "caption": "Invitation box with letter concept",
+      "metadata": {
+        "format": "png",
+        "source": "ClubAperitif brand assets"
+      },
+      "blob_id": "clubaperitif/box-with-letter",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/clubaperitif/box with letter.png"
+    },
+    {
+      "id": "asset:clubaperitif_letter_001",
+      "type": "asset",
+      "entity_type": "photo",
+      "title": "ClubAperitif Invitation Letter",
+      "description": "Concept image of a ClubAperitif invitation letter. The asset reinforces the brand's invitation ritual, presenting membership as a personal message rather than a transaction.",
+      "path": "/kb-assets/clubaperitif/letter.png",
+      "related_entities": [
+        "project:clubaperitif"
+      ],
+      "tags": [
+        "clubaperitif",
+        "invitation",
+        "letter",
+        "membership",
+        "ritual",
+        "artifact"
+      ],
+      "caption": "Invitation letter concept",
+      "metadata": {
+        "format": "png",
+        "source": "ClubAperitif brand assets"
+      },
+      "blob_id": "clubaperitif/letter",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/clubaperitif/letter.png"
+    },
+    {
+      "id": "asset:clubaperitif_prize_concept_001",
+      "type": "asset",
+      "entity_type": "photo",
+      "title": "ClubAperitif Prize Concept",
+      "description": "Concept image for a ClubAperitif prize or gift artifact. Used to illustrate the membership reward narrative and the sense of exclusivity associated with receiving ClubAperitif objects.",
+      "path": "/kb-assets/clubaperitif/prize-concept.png",
+      "related_entities": [
+        "project:clubaperitif"
+      ],
+      "tags": [
+        "clubaperitif",
+        "prize",
+        "gift",
+        "artifact",
+        "membership",
+        "concept"
+      ],
+      "caption": "Prize concept for ClubAperitif membership",
+      "metadata": {
+        "format": "png",
+        "source": "ClubAperitif brand assets"
+      },
+      "blob_id": "clubaperitif/prize-concept",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/clubaperitif/prize-concept.png"
+    },
+    {
+      "id": "asset:clubaperitif_open_badge_001",
+      "type": "asset",
+      "entity_type": "video",
+      "title": "ClubAperitif Open Badge Animation",
+      "description": "Short motion asset showing the ClubAperitif digital badge opening or animating. Represents the dynamic, time-based identity of a member's badge and the ritual of making presence known in the app.",
+      "path": "/kb-assets/clubaperitif/open badge.mov",
+      "related_entities": [
+        "project:clubaperitif"
+      ],
+      "tags": [
+        "clubaperitif",
+        "badge",
+        "animation",
+        "motion",
+        "digital-identity",
+        "app"
+      ],
+      "caption": "Open badge animation concept",
+      "metadata": {
+        "format": "mov",
+        "source": "ClubAperitif brand assets"
+      },
+      "blob_id": "clubaperitif/open-badge",
+      "file_extension": "mov",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/clubaperitif/open badge.mov"
     }
   ],
   "_schema": {
