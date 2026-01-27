@@ -179,9 +179,14 @@ function findMostRecentAssetCall(sessionId: string): { id: string; call: any } |
   return null;
 }
 
-function buildAssetResponseForModel(data: any): Record<string, unknown> {
+function buildAssetResponseForModel(
+  data: any,
+  options: { includeMarkdown?: boolean } = {}
+): Record<string, unknown> {
   if (!data || typeof data !== "object") return {};
+  const includeMarkdown = options.includeMarkdown !== false;
   if (data.type === "asset" || data.entity_type) {
+    const markdown = includeMarkdown ? data.markdown : undefined;
     return {
       id: data.id,
       type: data.type,
@@ -190,7 +195,7 @@ function buildAssetResponseForModel(data: any): Record<string, unknown> {
       description: data.description,
       caption: data.caption,
       url: data.url,
-      markdown: data.markdown
+      ...(markdown ? { markdown } : {})
     };
   }
   return data as Record<string, unknown>;
@@ -1231,7 +1236,7 @@ export async function POST(request: Request) {
             delete cleanedData._distance;
           }
 
-          const responsePayload = buildAssetResponseForModel(cleanedData);
+          const responsePayload = buildAssetResponseForModel(cleanedData, { includeMarkdown: false });
           const responseParts: Array<{ functionResponse?: { name: string; response: Record<string, unknown> }; inlineData?: { mimeType: string; data: string }; text?: string }> = [
             {
               functionResponse: {
@@ -1254,7 +1259,7 @@ export async function POST(request: Request) {
           enrichedContents.push(
             { role: "model", parts: [{ functionCall: { name: "kb_get", args: { id: assetId } } }] },
             { role: "user", parts: responseParts },
-            { role: "user", parts: [{ text: "IMPORTANT: The image from the previous response is attached. Analyze it directly and answer the user's question about what it contains." }] }
+            { role: "user", parts: [{ text: "IMPORTANT: The image from the previous response is attached. Analyze it directly and answer the user's question about what it contains. Respond with text only and do not include image markdown or URLs unless the user explicitly asked to see the image." }] }
           );
           contentsToSend = enrichedContents as Array<{ role: string; parts: Array<{ text: string }> }>;
           console.log(`[ImageAnalysis] Attached asset ${assetId} for analysis (${source})`);
