@@ -29,6 +29,7 @@ import {
   recordRegistryLoadTime,
   recordResponseMetrics
 } from './metrics.js';
+import { toolMemoryStore } from './tool-memory-store.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REGISTRY_PATH = join(__dirname, '..', 'tool_registry.json');
@@ -430,6 +431,49 @@ class ToolRegistry {
         retryable: false,
         details: validator.errors
       }, startTime);
+    }
+
+    // Special validation for kb_get: ensure entity ID exists in conversation history
+    if (toolId === 'kb_get' && filteredArgs.id && executionContext.userId) {
+      const requestedId = filteredArgs.id;
+      const sessionId = executionContext.userId;
+
+      // Query tool memory for previous kb_search and kb_get results
+      const previousCalls = toolMemoryStore.queryToolCalls(sessionId, {
+        includeErrors: false
+      });
+
+      // Extract all entity IDs from previous tool results
+      const knownEntityIds = new Set();
+      for (const call of previousCalls) {
+        if (call.toolId === 'kb_search' && call.response?.results) {
+          for (const result of call.response.results) {
+            if (result.id) knownEntityIds.add(result.id);
+          }
+        } else if (call.toolId === 'kb_get' && call.response?.id) {
+          knownEntityIds.add(call.response.id);
+        }
+      }
+
+      // Check if requested ID exists in known IDs
+      if (knownEntityIds.size > 0 && !knownEntityIds.has(requestedId)) {
+        const duration = Date.now() - startTime;
+        const availableIds = Array.from(knownEntityIds).slice(0, 5).join(', ');
+        const suggestion = knownEntityIds.size > 0
+          ? ` Did you mean one of: ${availableIds}${knownEntityIds.size > 5 ? ', ...' : ''}?`
+          : '';
+
+        console.warn(`[Registry] kb_get called with unknown entity ID: "${requestedId}".${suggestion}`);
+
+        recordToolExecution(toolId, duration, false);
+        recordError(toolId, ErrorType.VALIDATION);
+        return createResponse(toolId, false, {
+          type: ErrorType.VALIDATION,
+          message: `Entity ID "${requestedId}" not found in conversation history. Use kb_search first to find entities.${suggestion}`,
+          retryable: true,
+          details: { requestedId, knownEntityIds: Array.from(knownEntityIds) }
+        }, startTime);
+      }
     }
 
     // Build handler context (use filtered args)

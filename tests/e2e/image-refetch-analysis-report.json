@@ -5,14 +5,14 @@
     {
       "toolId": "kb_search",
       "args": {
+        "query": "Vector Watch",
         "filters": {
           "type": "photo"
         },
-        "top_k": 1,
-        "query": "Vector Watch"
+        "top_k": 1
       },
       "ok": true,
-      "durationMs": 602,
+      "durationMs": 598,
       "hasImageData": false,
       "entityId": null,
       "entityType": null,
@@ -32,7 +32,7 @@
         "id": "asset:vector_watch_luna_001"
       },
       "ok": true,
-      "durationMs": 1027,
+      "durationMs": 1019,
       "hasImageData": true,
       "entityId": "asset:vector_watch_luna_001",
       "entityType": "photo",

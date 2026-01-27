@@ -8,7 +8,7 @@
               "functionCall": {
                 "name": "kb_get",
                 "args": {
-                  "id": "project:desktop_agent_uipath"
+                  "id": "asset:semantic_space_canvas_sketch_001"
                 }
               }
             }
@@ -20,22 +20,22 @@
       }
     ],
     "modelVersion": "gemini-2.5-flash",
-    "responseId": "JmRzabzxLpqLvdIP04nX4Qs",
+    "responseId": "MfV4aYOcAePl7M8Phb3zQQ",
     "usageMetadata": {
-      "promptTokenCount": 8719,
-      "candidatesTokenCount": 23,
-      "totalTokenCount": 8742,
-      "cachedContentTokenCount": 7807,
+      "promptTokenCount": 6995,
+      "candidatesTokenCount": 27,
+      "totalTokenCount": 7022,
+      "cachedContentTokenCount": 4802,
       "promptTokensDetails": [
         {
           "modality": "TEXT",
-          "tokenCount": 8719
+          "tokenCount": 6995
         }
       ],
       "cacheTokensDetails": [
         {
           "modality": "TEXT",
-          "tokenCount": 7807
+          "tokenCount": 4802
         }
       ]
     },
@@ -44,9 +44,9 @@
         "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
         "content-disposition": "attachment",
         "content-type": "text/event-stream",
-        "date": "Fri, 23 Jan 2026 12:05:58 GMT",
+        "date": "Tue, 27 Jan 2026 17:26:09 GMT",
         "server": "scaffolding on HTTPServer2",
-        "server-timing": "gfet4t7; dur=638",
+        "server-timing": "gfet4t7; dur=789",
         "transfer-encoding": "chunked",
         "vary": "Origin, X-Origin, Referer",
         "x-content-type-options": "nosniff",

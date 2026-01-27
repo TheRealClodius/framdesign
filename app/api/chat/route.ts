@@ -1629,7 +1629,14 @@ export async function POST(request: Request) {
         let imageData = null;
         if (cleanedResultData && typeof cleanedResultData === 'object' && cleanedResultData._imageData) {
           imageData = cleanedResultData._imageData;
+          console.log(`[Image Data] Extracted from ${toolName} result:`, {
+            mimeType: imageData?.mimeType,
+            dataLength: imageData?.data?.length,
+            hasData: !!(imageData?.mimeType && imageData?.data)
+          });
           delete cleanedResultData._imageData; // Remove from response text
+        } else if (toolName === 'kb_get') {
+          console.log(`[Image Data] No _imageData in kb_get result. Result keys:`, cleanedResultData ? Object.keys(cleanedResultData) : 'null');
         }
 
         if (cleanedResultData && typeof cleanedResultData === 'object') {
@@ -1684,7 +1691,10 @@ export async function POST(request: Request) {
               data: imageData.data
             }
           });
-          console.log(`[Multimodal] Including image data for ${toolName} (${imageData.mimeType})`);
+          const dataSizeKB = Math.round(imageData.data.length / 1024);
+          console.log(`[Multimodal] ✓ Including image data for ${toolName} (${imageData.mimeType}, ${dataSizeKB}KB) in Gemini API call`);
+        } else {
+          console.log(`[Multimodal] ✗ No image data to include for ${toolName}`);
         }
 
         const updatedContents = [
@@ -2038,7 +2048,13 @@ export async function POST(request: Request) {
                     let chainedImageData = null;
                     if (cleanedChainedResultData && typeof cleanedChainedResultData === 'object' && cleanedChainedResultData._imageData) {
                       chainedImageData = cleanedChainedResultData._imageData;
+                      console.log(`[Image Data] Extracted from chained ${chainedToolName}:`, {
+                        mimeType: chainedImageData?.mimeType,
+                        dataLength: chainedImageData?.data?.length
+                      });
                       delete cleanedChainedResultData._imageData; // Remove from response text
+                    } else if (chainedToolName === 'kb_get') {
+                      console.log(`[Image Data] No _imageData in chained kb_get result`);
                     }
 
                     if (cleanedChainedResultData && typeof cleanedChainedResultData === 'object') {
@@ -2091,7 +2107,10 @@ export async function POST(request: Request) {
                           data: chainedImageData.data
                         }
                       });
-                      console.log(`[Multimodal] Including image data for chained ${chainedToolName} (${chainedImageData.mimeType})`);
+                      const chainedDataSizeKB = Math.round(chainedImageData.data.length / 1024);
+                      console.log(`[Multimodal] ✓ Including image data for chained ${chainedToolName} (${chainedImageData.mimeType}, ${chainedDataSizeKB}KB)`);
+                    } else if (chainedToolName === 'kb_get') {
+                      console.log(`[Multimodal] ✗ No image data to include for chained kb_get`);
                     }
 
                     currentContents = [
