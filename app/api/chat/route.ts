@@ -149,6 +149,53 @@ function selectTopVisualResultId(results: Array<{ id?: string; type?: string; me
   return null;
 }
 
+function isVisualAnalysisRequest(text: string): boolean {
+  const normalized = (text || "").toLowerCase();
+  if (!normalized) return false;
+  const hasImageNoun = /\b(image|photo|picture|diagram|gif|screenshot)\b/.test(normalized);
+  const analysisPattern = /\b(what\s+(does|is)\s+(this\s+)?(image|photo|picture|diagram)\s+(contain|show|depict)|what'?s\s+in\s+(this|the)\s+(image|photo|picture|diagram)|describe\s+(the|this)\s+(image|photo|picture|diagram)|tell\s+me\s+about\s+(this|the)\s+(image|photo|picture|diagram))\b/;
+  const containsVerb = /\b(contain|contains|show|shows|depict|depicts|describe|inside|in\s+the)\b/.test(normalized);
+  return analysisPattern.test(normalized) || (hasImageNoun && containsVerb);
+}
+
+function findMostRecentAssetCall(sessionId: string): { id: string; call: any } | null {
+  if (!sessionId) return null;
+  const calls = toolMemoryStore.queryToolCalls(sessionId, {
+    toolId: "kb_get",
+    timeRange: "all",
+    includeErrors: false
+  });
+
+  for (const call of calls) {
+    const id = call?.args?.id;
+    if (typeof id !== "string") continue;
+    const entityType = call?.fullResponse?.data?.entity_type;
+    const isVisual = entityType && VISUAL_ASSET_TYPES.has(entityType);
+    if (id.startsWith("asset:") || isVisual) {
+      return { id, call };
+    }
+  }
+
+  return null;
+}
+
+function buildAssetResponseForModel(data: any): Record<string, unknown> {
+  if (!data || typeof data !== "object") return {};
+  if (data.type === "asset" || data.entity_type) {
+    return {
+      id: data.id,
+      type: data.type,
+      entity_type: data.entity_type,
+      title: data.title,
+      description: data.description,
+      caption: data.caption,
+      url: data.url,
+      markdown: data.markdown
+    };
+  }
+  return data as Record<string, unknown>;
+}
+
 function extractAssetMarkdownsFromResult(
   toolName: string,
   data: unknown
@@ -1101,6 +1148,121 @@ export async function POST(request: Request) {
       }
       cachedContent = undefined;
       console.log("Caching disabled, sending summary + recent messages");
+    }
+
+    // Auto-attach last visual asset for image analysis questions
+    if (isVisualAnalysisRequest(lastUserMessageText)) {
+      const sessionId = userId || 'anonymous-text-session';
+      const recentAsset = findMostRecentAssetCall(sessionId);
+      if (recentAsset?.id) {
+        const assetId = recentAsset.id;
+        let toolResult = recentAsset.call?.fullResponse;
+        let source = toolResult ? 'tool-memory' : 'fresh';
+
+        if (!toolResult || !toolResult.ok || !toolResult.data) {
+          try {
+            const toolMetadata = toolRegistry.getToolMetadata('kb_get') as ToolMetadata | null;
+            const state = createStateController({
+              mode: 'text',
+              isActive: true
+            }) as StateController;
+
+            const executionContext = {
+              clientId: `text-${Date.now()}`,
+              ws: null,
+              geminiSession: null,
+              args: { id: assetId },
+              userId,
+              session: {
+                isActive: state.get('isActive'),
+                toolsVersion: toolRegistry.getVersion(),
+                state: state.getSnapshot()
+              },
+              meta: {
+                perplexityApiKey: process.env.PERPLEXITY_API_KEY
+              }
+            };
+
+            const startTime = Date.now();
+            toolResult = await retryToolExecution(
+              () => toolRegistry.executeTool('kb_get', executionContext),
+              {
+                mode: 'text',
+                maxRetries: 3,
+                toolId: 'kb_get',
+                toolMetadata: toolMetadata ? (toolMetadata as object) : {},
+                clientId: executionContext.clientId
+              }
+            );
+            source = 'kb_get';
+
+            const duration = Date.now() - startTime;
+            const callId = `call-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+            toolMemoryStore.recordToolCall(sessionId, {
+              id: callId,
+              toolId: 'kb_get',
+              args: { id: assetId },
+              argsHash: hashArgs({ id: assetId }),
+              timestamp: Date.now(),
+              turn: 1,
+              duration: duration,
+              fullResponse: toolResult,
+              summary: null,
+              ok: toolResult.ok,
+              error: toolResult.ok ? null : toolResult.error,
+              tokens: estimateTokensForJson(JSON.stringify(toolResult))
+            });
+          } catch (error) {
+            console.warn('[ImageAnalysis] Failed to auto-fetch asset for analysis:', error);
+            toolResult = null;
+          }
+        }
+
+        if (toolResult && toolResult.ok && toolResult.data) {
+          const cleanedData = JSON.parse(JSON.stringify(toolResult.data));
+          let imageData = null;
+          if (cleanedData && typeof cleanedData === 'object' && cleanedData._imageData) {
+            imageData = cleanedData._imageData;
+            delete cleanedData._imageData;
+          }
+          if (cleanedData && typeof cleanedData === 'object') {
+            delete cleanedData._timing;
+            delete cleanedData._distance;
+          }
+
+          const responsePayload = buildAssetResponseForModel(cleanedData);
+          const responseParts: Array<{ functionResponse?: { name: string; response: Record<string, unknown> }; inlineData?: { mimeType: string; data: string }; text?: string }> = [
+            {
+              functionResponse: {
+                name: 'kb_get',
+                response: responsePayload
+              }
+            }
+          ];
+
+          if (imageData && imageData.mimeType && imageData.data) {
+            responseParts.push({
+              inlineData: {
+                mimeType: imageData.mimeType,
+                data: imageData.data
+              }
+            });
+          }
+
+          const enrichedContents = contentsToSend as Array<{ role: string; parts: Array<Record<string, unknown>> }>;
+          enrichedContents.push(
+            { role: "model", parts: [{ functionCall: { name: "kb_get", args: { id: assetId } } }] },
+            { role: "user", parts: responseParts },
+            { role: "user", parts: [{ text: "IMPORTANT: The image from the previous response is attached. Analyze it directly and answer the user's question about what it contains." }] }
+          );
+          contentsToSend = enrichedContents as Array<{ role: string; parts: Array<{ text: string }> }>;
+          console.log(`[ImageAnalysis] Attached asset ${assetId} for analysis (${source})`);
+        } else {
+          console.warn(`[ImageAnalysis] No usable asset data found for ${assetId}`);
+        }
+      } else {
+        console.warn('[ImageAnalysis] No recent asset found to analyze');
+      }
     }
 
     // Enforce token budget after cache decisions
