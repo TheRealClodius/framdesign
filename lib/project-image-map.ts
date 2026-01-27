@@ -30,6 +30,14 @@ interface Manifest {
   assets: Asset[];
 }
 
+function isManifest(value: unknown): value is Manifest {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  const maybeManifest = value as { version?: unknown; assets?: unknown };
+  return typeof maybeManifest.version === 'string' && Array.isArray(maybeManifest.assets);
+}
+
 /**
  * Cached manifest (loaded once at module level)
  */
@@ -49,7 +57,8 @@ async function loadManifest(): Promise<Manifest> {
     if (!response.ok) {
       throw new Error(`Failed to load manifest: ${response.statusText}`);
     }
-    manifestCache = await response.json();
+    const parsed = await response.json();
+    manifestCache = isManifest(parsed) ? parsed : { version: '0.0.0', assets: [] };
     return manifestCache;
   } catch (error) {
     console.error('Error loading manifest:', error);
