@@ -251,7 +251,7 @@ describe('E2E: Visual Analysis Accuracy', () => {
       contents: [
         {
           role: 'user',
-          parts: [{ text: 'Show me a screenshot from the Desktop Agent project' }]
+          parts: [{ text: 'Show me a photo from the Vector Watch project' }]
         }
       ],
       executionContextBase: { ...executionContext, messageCount: 1 },
@@ -277,7 +277,7 @@ describe('E2E: Visual Analysis Accuracy', () => {
     // Add to conversation
     conversation.push({
       role: 'user',
-      parts: [{ text: 'Show me a screenshot from the Desktop Agent project' }]
+      parts: [{ text: 'Show me a photo from the Vector Watch project' }]
     });
     conversation.push({
       role: 'assistant',

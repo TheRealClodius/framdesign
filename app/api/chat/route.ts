@@ -120,6 +120,35 @@ type StreamChunk = {
   text?: string | (() => string);
 };
 
+const VISUAL_ASSET_TYPES = new Set(["photo", "diagram", "gif", "video"]);
+
+function getLastUserMessageText(messages: Array<{ role: string; content: string }>): string {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    if (messages[i]?.role === "user" && typeof messages[i]?.content === "string") {
+      return messages[i].content;
+    }
+  }
+  return "";
+}
+
+function isVisualShowRequest(text: string): boolean {
+  const normalized = (text || "").toLowerCase();
+  if (!normalized) return false;
+  const hasVisualNoun = /\b(photo|image|picture|screenshot|diagram|video|gif)\b/.test(normalized);
+  const hasShowVerb = /\b(show|see|display|view|look)\b/.test(normalized);
+  return hasVisualNoun || (hasShowVerb && normalized.includes("me"));
+}
+
+function selectTopVisualResultId(results: Array<{ id?: string; type?: string; metadata?: { entity_type?: string } }> = []): string | null {
+  for (const result of results) {
+    const type = result?.type || result?.metadata?.entity_type;
+    if (type && VISUAL_ASSET_TYPES.has(type) && typeof result?.id === "string") {
+      return result.id;
+    }
+  }
+  return null;
+}
+
 // Schema conversion removed - using canonical JSON Schema directly from registry
 
 // In-memory cache store for conversation caches
@@ -747,6 +776,8 @@ export async function POST(request: Request) {
       
       return NextResponse.json(errorResponse, { status: 400 });
     }
+
+    const lastUserMessageText = getLastUserMessageText(messages);
 
     const ai = new GoogleGenAI({ apiKey });
 
@@ -1716,6 +1747,145 @@ export async function POST(request: Request) {
             parts: responseParts
           }
         ];
+
+        if (toolName === "kb_search" && result.ok && isVisualShowRequest(lastUserMessageText)) {
+          const autoAssetId = selectTopVisualResultId(
+            Array.isArray(cleanedResultData?.results) ? cleanedResultData.results : []
+          );
+
+          if (autoAssetId) {
+            const autoToolName = "kb_get";
+            const autoArgs = { id: autoAssetId };
+            const autoToolMetadata = toolRegistry.getToolMetadata(autoToolName) as ToolMetadata | null;
+
+            if (autoToolMetadata) {
+              console.log(`[AutoChain] Detected visual request, auto-fetching asset ${autoAssetId}`);
+
+              const autoStartTime = Date.now();
+              let autoResult;
+
+              const autoLoopCheck = loopDetector.detectLoop(sessionId, turnNumber, autoToolName, autoArgs);
+              if (autoLoopCheck.detected) {
+                console.warn(`[Loop Detection] Auto-chain loop detected for ${autoToolName}: ${autoLoopCheck.message}`);
+                autoResult = {
+                  ok: false,
+                  error: {
+                    type: "LOOP_DETECTED",
+                    message: autoLoopCheck.message,
+                    retryable: false
+                  }
+                };
+              } else {
+                loopDetector.recordCall(sessionId, turnNumber, autoToolName, autoArgs, null);
+                autoResult = await retryToolExecution(
+                  () => toolRegistry.executeTool(autoToolName, { ...executionContext, args: autoArgs }),
+                  {
+                    mode: "text",
+                    maxRetries: 3,
+                    toolId: autoToolName,
+                    toolMetadata: autoToolMetadata ? (autoToolMetadata as object) : {},
+                    clientId: `text-${Date.now()}`
+                  }
+                );
+              }
+
+              const autoDuration = Date.now() - autoStartTime;
+              const autoCallId = `call-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+              toolMemoryStore.recordToolCall(sessionId, {
+                id: autoCallId,
+                toolId: autoToolName,
+                args: autoArgs,
+                argsHash: hashArgs(autoArgs),
+                timestamp: Date.now(),
+                turn: 1, // TODO: Track actual turn number
+                duration: autoDuration,
+                fullResponse: autoResult,
+                summary: null,
+                ok: autoResult.ok,
+                error: autoResult.ok ? null : autoResult.error,
+                tokens: estimateTokensForJson(JSON.stringify(autoResult))
+              });
+
+              if (observability) {
+                observability.toolCalls.push({
+                  position: observability.toolCalls.length + 1,
+                  chainPosition: 1,
+                  toolId: autoToolName,
+                  args: autoArgs,
+                  thoughtSignature: undefined,
+                  startTime: autoStartTime,
+                  duration: autoDuration,
+                  ok: autoResult.ok,
+                  result: autoResult.ok ? autoResult.data : null,
+                  error: autoResult.ok ? null : autoResult.error
+                });
+                observability.chainedCalls += 1;
+                observability.totalDuration = Date.now() - observability.requestStartTime;
+              }
+
+              const cleanedAutoResultData = autoResult.ok ? JSON.parse(JSON.stringify(autoResult.data)) : null;
+              let autoImageData = null;
+              if (cleanedAutoResultData && typeof cleanedAutoResultData === "object" && cleanedAutoResultData._imageData) {
+                autoImageData = cleanedAutoResultData._imageData;
+                delete cleanedAutoResultData._imageData;
+              }
+
+              if (cleanedAutoResultData && typeof cleanedAutoResultData === "object") {
+                delete cleanedAutoResultData._timing;
+                delete cleanedAutoResultData._distance;
+              }
+
+              const autoResponseParts: Array<{ functionResponse?: { name: string; response: Record<string, unknown> }; inlineData?: { mimeType: string; data: string } }> = [
+                {
+                  functionResponse: {
+                    name: autoToolName,
+                    response: autoResult.ok ? (cleanedAutoResultData as Record<string, unknown>) : {
+                      error: true,
+                      type: autoResult.error.type,
+                      message: autoResult.error.message,
+                      retryable: autoResult.error.retryable,
+                      details: autoResult.error.details
+                    }
+                  }
+                }
+              ];
+
+              if (autoImageData && autoImageData.mimeType && autoImageData.data) {
+                autoResponseParts.push({
+                  inlineData: {
+                    mimeType: autoImageData.mimeType,
+                    data: autoImageData.data
+                  }
+                });
+              }
+
+              updatedContents.push(
+                {
+                  role: "model" as const,
+                  parts: [{ functionCall: { name: autoToolName, args: autoArgs } }]
+                },
+                {
+                  role: "user" as const,
+                  parts: autoResponseParts
+                }
+              );
+
+              if (!autoResult.ok) {
+                toolErrorNotices.push({
+                  toolName: autoToolName,
+                  type: autoResult.error.type,
+                  message: autoResult.error.message
+                });
+                updatedContents.push({
+                  role: "user" as const,
+                  parts: [{
+                    text: `IMPORTANT: The tool "${autoToolName}" failed with a ${autoResult.error.type} error. You must tell the user this happened and include the error message verbatim: "${autoResult.error.message}". If the message includes suggestions or next steps, surface them explicitly.`
+                  }]
+                });
+              }
+            }
+          }
+        }
 
         if (!result.ok) {
           toolErrorNotices.push({
