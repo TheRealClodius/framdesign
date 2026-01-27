@@ -882,6 +882,7 @@ export async function POST(request: Request) {
     }
 
     const lastUserMessageText = getLastUserMessageText(messages);
+    const shouldInjectAssetMarkdown = !isVisualAnalysisRequest(lastUserMessageText);
 
     const ai = new GoogleGenAI({ apiKey });
 
@@ -2120,7 +2121,7 @@ export async function POST(request: Request) {
         }
 
         const forcedAssetMarkdownList = Array.from(forcedAssetMarkdowns);
-        const assetMarkdownToInject = forcedAssetMarkdownList[0];
+        const assetMarkdownToInject = shouldInjectAssetMarkdown ? forcedAssetMarkdownList[0] : null;
         if (assetMarkdownToInject) {
           updatedContents.push({
             role: "user" as const,
@@ -2633,7 +2634,7 @@ export async function POST(request: Request) {
                     console.warn(`No text in final response after ${chainCount} chained calls`);
                   }
 
-                  if (forcedAssetMarkdownList.length > 0) {
+                  if (shouldInjectAssetMarkdown && forcedAssetMarkdownList.length > 0) {
                     const assetMarkdownsToSend = forcedAssetMarkdownList.slice(0, 1);
                     const missingAssets = assetMarkdownsToSend.filter(
                       (markdown) => !responseContainsAssetMarkdown(accumulatedFullText, markdown)
