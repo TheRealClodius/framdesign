@@ -149,6 +149,63 @@ function selectTopVisualResultId(results: Array<{ id?: string; type?: string; me
   return null;
 }
 
+function extractAssetMarkdownsFromResult(
+  toolName: string,
+  data: unknown
+): string[] {
+  if (!data || typeof data !== "object") return [];
+  const resultData = data as {
+    markdown?: string;
+    results?: Array<{
+      metadata?: { markdown?: string };
+      type?: string;
+    }>;
+  };
+
+  if (toolName === "kb_get" && typeof resultData.markdown === "string") {
+    return [resultData.markdown];
+  }
+
+  if (toolName === "kb_search" && Array.isArray(resultData.results)) {
+    return resultData.results
+      .map((result) => result?.metadata?.markdown)
+      .filter((markdown): markdown is string => typeof markdown === "string" && markdown.trim().length > 0);
+  }
+
+  return [];
+}
+
+function extractAssetUrlsFromMarkdown(markdown: string): string[] {
+  const urls = new Set<string>();
+  const trimmed = markdown.trim();
+  if (!trimmed) return [];
+
+  const markdownMatches = trimmed.matchAll(/!\[[^\]]*]\(([^)]+)\)/g);
+  for (const match of markdownMatches) {
+    if (match[1]) {
+      urls.add(match[1].trim());
+    }
+  }
+
+  const htmlMatches = trimmed.matchAll(/src=["']([^"']+)["']/g);
+  for (const match of htmlMatches) {
+    if (match[1]) {
+      urls.add(match[1].trim());
+    }
+  }
+
+  return Array.from(urls);
+}
+
+function responseContainsAssetMarkdown(responseText: string, markdown: string): boolean {
+  if (!responseText || !markdown) return false;
+  const urls = extractAssetUrlsFromMarkdown(markdown);
+  if (urls.some((url) => responseText.includes(url))) {
+    return true;
+  }
+  return responseText.includes(markdown.trim());
+}
+
 // Schema conversion removed - using canonical JSON Schema directly from registry
 
 // In-memory cache store for conversation caches
@@ -1492,6 +1549,15 @@ export async function POST(request: Request) {
         const toolName = otherFunctionCall.name;
         console.log(`Handling function call: ${toolName}`);
         const toolErrorNotices: Array<{ toolName: string; type: string; message: string }> = [];
+        const forcedAssetMarkdowns = new Set<string>();
+        const recordAssetMarkdowns = (markdowns: string[]) => {
+          for (const markdown of markdowns) {
+            const trimmed = markdown.trim();
+            if (trimmed) {
+              forcedAssetMarkdowns.add(trimmed);
+            }
+          }
+        };
         
         // Initialize state controller
         const turnNumber = Math.ceil(messages.length / 2);
@@ -1696,6 +1762,8 @@ export async function POST(request: Request) {
           }
         }
 
+        recordAssetMarkdowns(extractAssetMarkdownsFromResult(toolName, cleanedResultData));
+
         // Build response parts - include both functionResponse and imageData if available
         const responseParts: Array<{ functionResponse?: { name: string; response: Record<string, unknown> }; inlineData?: { mimeType: string; data: string } }> = [
           {
@@ -1835,6 +1903,8 @@ export async function POST(request: Request) {
                 delete cleanedAutoResultData._distance;
               }
 
+              recordAssetMarkdowns(extractAssetMarkdownsFromResult(autoToolName, cleanedAutoResultData));
+
               const autoResponseParts: Array<{ functionResponse?: { name: string; response: Record<string, unknown> }; inlineData?: { mimeType: string; data: string } }> = [
                 {
                   functionResponse: {
@@ -1885,6 +1955,17 @@ export async function POST(request: Request) {
               }
             }
           }
+        }
+
+        const forcedAssetMarkdownList = Array.from(forcedAssetMarkdowns);
+        const assetMarkdownToInject = forcedAssetMarkdownList[0];
+        if (assetMarkdownToInject) {
+          updatedContents.push({
+            role: "user" as const,
+            parts: [{
+              text: `IMPORTANT: Include the following asset markdown verbatim in your final response. Do not wrap it in code fences or alter the URL:\n\n${assetMarkdownToInject}`
+            }]
+          });
         }
 
         if (!result.ok) {
@@ -2388,6 +2469,19 @@ export async function POST(request: Request) {
                     console.log(`Final response streamed: ${responseText.length} bytes (after ${chainCount} chained calls)`);
                   } else {
                     console.warn(`No text in final response after ${chainCount} chained calls`);
+                  }
+
+                  if (forcedAssetMarkdownList.length > 0) {
+                    const assetMarkdownsToSend = forcedAssetMarkdownList.slice(0, 1);
+                    const missingAssets = assetMarkdownsToSend.filter(
+                      (markdown) => !responseContainsAssetMarkdown(accumulatedFullText, markdown)
+                    );
+                    if (missingAssets.length > 0) {
+                      const assetSuffix = `\n\n${missingAssets.join("\n\n")}`;
+                      controller.enqueue(encoder.encode(assetSuffix));
+                      accumulatedFullText += assetSuffix;
+                      console.log(`[Assets] Appended ${missingAssets.length} asset markdown(s) to response`);
+                    }
                   }
 
                   if (toolErrorNotices.length > 0) {
