@@ -143,6 +143,21 @@ class ToolMemoryStore {
   }
 
   /**
+   * Gets a tool call record by ID
+   * @param {string} sessionId - Session identifier
+   * @param {string} callId - Call ID
+   * @returns {object|null} - Tool call record or null
+   */
+  getCallRecord(sessionId, callId) {
+    const session = this.sessionMemory.get(sessionId);
+    if (!session) {
+      return null;
+    }
+
+    return session.toolCalls.find(c => c.id === callId) || null;
+  }
+
+  /**
    * Finds a similar past call for deduplication
    * @param {string} sessionId - Session identifier
    * @param {string} toolId - Tool ID to search

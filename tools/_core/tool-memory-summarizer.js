@@ -19,7 +19,9 @@ class ToolMemorySummarizer {
     this.MAX_RESPONSE_CHARS = 1000; // Truncate long responses for summarization
 
     // Initialize AI client
-    const apiKey = process.env.GOOGLE_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+    const apiKey = process.env.GEMINI_API_KEY ||
+      process.env.GOOGLE_API_KEY ||
+      process.env.GOOGLE_GENERATIVE_AI_API_KEY;
     if (apiKey) {
       this.ai = new GoogleGenAI({ apiKey });
     } else {
@@ -204,6 +206,15 @@ Be concise and actionable. Max 150 tokens.`;
 
     if (!data) {
       return `${toolId} executed: ${argsSummary}. No data returned.`;
+    }
+
+    // Asset-specific summaries for kb_get
+    if (toolId === 'kb_get' && data?.type === 'asset') {
+      const title = data.title || data.id || 'asset';
+      const entityType = data.entity_type ? `${data.entity_type} asset` : 'asset';
+      const description = data.caption || data.description || '';
+      const detail = description ? ` ${description}` : '';
+      return `kb_get retrieved ${entityType} "${title}".${detail}`;
     }
 
     // For search tools, mention result count

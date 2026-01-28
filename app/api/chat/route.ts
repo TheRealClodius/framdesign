@@ -149,6 +149,115 @@ function selectTopVisualResultId(results: Array<{ id?: string; type?: string; me
   return null;
 }
 
+function isVisualAnalysisRequest(text: string): boolean {
+  const normalized = (text || "").toLowerCase();
+  if (!normalized) return false;
+  const hasImageNoun = /\b(image|photo|picture|diagram|gif|screenshot)\b/.test(normalized);
+  const analysisPattern = /\b(what\s+(does|is)\s+(this\s+)?(image|photo|picture|diagram)\s+(contain|show|depict)|what'?s\s+in\s+(this|the)\s+(image|photo|picture|diagram)|describe\s+(the|this)\s+(image|photo|picture|diagram)|tell\s+me\s+about\s+(this|the)\s+(image|photo|picture|diagram))\b/;
+  const containsVerb = /\b(contain|contains|show|shows|depict|depicts|describe|inside|in\s+the)\b/.test(normalized);
+  return analysisPattern.test(normalized) || (hasImageNoun && containsVerb);
+}
+
+function findMostRecentAssetCall(sessionId: string): { id: string; call: any } | null {
+  if (!sessionId) return null;
+  const calls = toolMemoryStore.queryToolCalls(sessionId, {
+    toolId: "kb_get",
+    timeRange: "all",
+    includeErrors: false
+  });
+
+  for (const call of calls) {
+    const id = call?.args?.id;
+    if (typeof id !== "string") continue;
+    const entityType = call?.fullResponse?.data?.entity_type;
+    const isVisual = entityType && VISUAL_ASSET_TYPES.has(entityType);
+    if (id.startsWith("asset:") || isVisual) {
+      return { id, call };
+    }
+  }
+
+  return null;
+}
+
+function buildAssetResponseForModel(
+  data: any,
+  options: { includeMarkdown?: boolean } = {}
+): Record<string, unknown> {
+  if (!data || typeof data !== "object") return {};
+  const includeMarkdown = options.includeMarkdown !== false;
+  if (data.type === "asset" || data.entity_type) {
+    const markdown = includeMarkdown ? data.markdown : undefined;
+    return {
+      id: data.id,
+      type: data.type,
+      entity_type: data.entity_type,
+      title: data.title,
+      description: data.description,
+      caption: data.caption,
+      url: data.url,
+      ...(markdown ? { markdown } : {})
+    };
+  }
+  return data as Record<string, unknown>;
+}
+
+function extractAssetMarkdownsFromResult(
+  toolName: string,
+  data: unknown
+): string[] {
+  if (!data || typeof data !== "object") return [];
+  const resultData = data as {
+    markdown?: string;
+    results?: Array<{
+      metadata?: { markdown?: string };
+      type?: string;
+    }>;
+  };
+
+  if (toolName === "kb_get" && typeof resultData.markdown === "string") {
+    return [resultData.markdown];
+  }
+
+  if (toolName === "kb_search" && Array.isArray(resultData.results)) {
+    return resultData.results
+      .map((result) => result?.metadata?.markdown)
+      .filter((markdown): markdown is string => typeof markdown === "string" && markdown.trim().length > 0);
+  }
+
+  return [];
+}
+
+function extractAssetUrlsFromMarkdown(markdown: string): string[] {
+  const urls = new Set<string>();
+  const trimmed = markdown.trim();
+  if (!trimmed) return [];
+
+  const markdownMatches = trimmed.matchAll(/!\[[^\]]*]\(([^)]+)\)/g);
+  for (const match of markdownMatches) {
+    if (match[1]) {
+      urls.add(match[1].trim());
+    }
+  }
+
+  const htmlMatches = trimmed.matchAll(/src=["']([^"']+)["']/g);
+  for (const match of htmlMatches) {
+    if (match[1]) {
+      urls.add(match[1].trim());
+    }
+  }
+
+  return Array.from(urls);
+}
+
+function responseContainsAssetMarkdown(responseText: string, markdown: string): boolean {
+  if (!responseText || !markdown) return false;
+  const urls = extractAssetUrlsFromMarkdown(markdown);
+  if (urls.some((url) => responseText.includes(url))) {
+    return true;
+  }
+  return responseText.includes(markdown.trim());
+}
+
 // Schema conversion removed - using canonical JSON Schema directly from registry
 
 // In-memory cache store for conversation caches
@@ -778,6 +887,7 @@ export async function POST(request: Request) {
     }
 
     const lastUserMessageText = getLastUserMessageText(messages);
+    const shouldInjectAssetMarkdown = !isVisualAnalysisRequest(lastUserMessageText);
 
     const ai = new GoogleGenAI({ apiKey });
 
@@ -1044,6 +1154,121 @@ export async function POST(request: Request) {
       }
       cachedContent = undefined;
       console.log("Caching disabled, sending summary + recent messages");
+    }
+
+    // Auto-attach last visual asset for image analysis questions
+    if (isVisualAnalysisRequest(lastUserMessageText)) {
+      const sessionId = userId || 'anonymous-text-session';
+      const recentAsset = findMostRecentAssetCall(sessionId);
+      if (recentAsset?.id) {
+        const assetId = recentAsset.id;
+        let toolResult = recentAsset.call?.fullResponse;
+        let source = toolResult ? 'tool-memory' : 'fresh';
+
+        if (!toolResult || !toolResult.ok || !toolResult.data) {
+          try {
+            const toolMetadata = toolRegistry.getToolMetadata('kb_get') as ToolMetadata | null;
+            const state = createStateController({
+              mode: 'text',
+              isActive: true
+            }) as StateController;
+
+            const executionContext = {
+              clientId: `text-${Date.now()}`,
+              ws: null,
+              geminiSession: null,
+              args: { id: assetId },
+              userId,
+              session: {
+                isActive: state.get('isActive'),
+                toolsVersion: toolRegistry.getVersion(),
+                state: state.getSnapshot()
+              },
+              meta: {
+                perplexityApiKey: process.env.PERPLEXITY_API_KEY
+              }
+            };
+
+            const startTime = Date.now();
+            toolResult = await retryToolExecution(
+              () => toolRegistry.executeTool('kb_get', executionContext),
+              {
+                mode: 'text',
+                maxRetries: 3,
+                toolId: 'kb_get',
+                toolMetadata: toolMetadata ? (toolMetadata as object) : {},
+                clientId: executionContext.clientId
+              }
+            );
+            source = 'kb_get';
+
+            const duration = Date.now() - startTime;
+            const callId = `call-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+            toolMemoryStore.recordToolCall(sessionId, {
+              id: callId,
+              toolId: 'kb_get',
+              args: { id: assetId },
+              argsHash: hashArgs({ id: assetId }),
+              timestamp: Date.now(),
+              turn: 1,
+              duration: duration,
+              fullResponse: toolResult,
+              summary: null,
+              ok: toolResult.ok,
+              error: toolResult.ok ? null : toolResult.error,
+              tokens: estimateTokensForJson(JSON.stringify(toolResult))
+            });
+          } catch (error) {
+            console.warn('[ImageAnalysis] Failed to auto-fetch asset for analysis:', error);
+            toolResult = null;
+          }
+        }
+
+        if (toolResult && toolResult.ok && toolResult.data) {
+          const cleanedData = JSON.parse(JSON.stringify(toolResult.data));
+          let imageData = null;
+          if (cleanedData && typeof cleanedData === 'object' && cleanedData._imageData) {
+            imageData = cleanedData._imageData;
+            delete cleanedData._imageData;
+          }
+          if (cleanedData && typeof cleanedData === 'object') {
+            delete cleanedData._timing;
+            delete cleanedData._distance;
+          }
+
+          const responsePayload = buildAssetResponseForModel(cleanedData, { includeMarkdown: false });
+          const responseParts: Array<{ functionResponse?: { name: string; response: Record<string, unknown> }; inlineData?: { mimeType: string; data: string }; text?: string }> = [
+            {
+              functionResponse: {
+                name: 'kb_get',
+                response: responsePayload
+              }
+            }
+          ];
+
+          if (imageData && imageData.mimeType && imageData.data) {
+            responseParts.push({
+              inlineData: {
+                mimeType: imageData.mimeType,
+                data: imageData.data
+              }
+            });
+          }
+
+          const enrichedContents = contentsToSend as Array<{ role: string; parts: Array<Record<string, unknown>> }>;
+          enrichedContents.push(
+            { role: "model", parts: [{ functionCall: { name: "kb_get", args: { id: assetId } } }] },
+            { role: "user", parts: responseParts },
+            { role: "user", parts: [{ text: "IMPORTANT: The image from the previous response is attached. Analyze it directly and answer the user's question about what it contains. Respond with text only and do not include image markdown or URLs unless the user explicitly asked to see the image." }] }
+          );
+          contentsToSend = enrichedContents as Array<{ role: string; parts: Array<{ text: string }> }>;
+          console.log(`[ImageAnalysis] Attached asset ${assetId} for analysis (${source})`);
+        } else {
+          console.warn(`[ImageAnalysis] No usable asset data found for ${assetId}`);
+        }
+      } else {
+        console.warn('[ImageAnalysis] No recent asset found to analyze');
+      }
     }
 
     // Enforce token budget after cache decisions
@@ -1492,6 +1717,15 @@ export async function POST(request: Request) {
         const toolName = otherFunctionCall.name;
         console.log(`Handling function call: ${toolName}`);
         const toolErrorNotices: Array<{ toolName: string; type: string; message: string }> = [];
+        const forcedAssetMarkdowns = new Set<string>();
+        const recordAssetMarkdowns = (markdowns: string[]) => {
+          for (const markdown of markdowns) {
+            const trimmed = markdown.trim();
+            if (trimmed) {
+              forcedAssetMarkdowns.add(trimmed);
+            }
+          }
+        };
         
         // Initialize state controller
         const turnNumber = Math.ceil(messages.length / 2);
@@ -1696,6 +1930,8 @@ export async function POST(request: Request) {
           }
         }
 
+        recordAssetMarkdowns(extractAssetMarkdownsFromResult(toolName, cleanedResultData));
+
         // Build response parts - include both functionResponse and imageData if available
         const responseParts: Array<{ functionResponse?: { name: string; response: Record<string, unknown> }; inlineData?: { mimeType: string; data: string } }> = [
           {
@@ -1835,6 +2071,8 @@ export async function POST(request: Request) {
                 delete cleanedAutoResultData._distance;
               }
 
+              recordAssetMarkdowns(extractAssetMarkdownsFromResult(autoToolName, cleanedAutoResultData));
+
               const autoResponseParts: Array<{ functionResponse?: { name: string; response: Record<string, unknown> }; inlineData?: { mimeType: string; data: string } }> = [
                 {
                   functionResponse: {
@@ -1885,6 +2123,17 @@ export async function POST(request: Request) {
               }
             }
           }
+        }
+
+        const forcedAssetMarkdownList = Array.from(forcedAssetMarkdowns);
+        const assetMarkdownToInject = shouldInjectAssetMarkdown ? forcedAssetMarkdownList[0] : null;
+        if (assetMarkdownToInject) {
+          updatedContents.push({
+            role: "user" as const,
+            parts: [{
+              text: `IMPORTANT: Include the following asset markdown verbatim in your final response. Do not wrap it in code fences or alter the URL:\n\n${assetMarkdownToInject}`
+            }]
+          });
         }
 
         if (!result.ok) {
@@ -2388,6 +2637,19 @@ export async function POST(request: Request) {
                     console.log(`Final response streamed: ${responseText.length} bytes (after ${chainCount} chained calls)`);
                   } else {
                     console.warn(`No text in final response after ${chainCount} chained calls`);
+                  }
+
+                  if (shouldInjectAssetMarkdown && forcedAssetMarkdownList.length > 0) {
+                    const assetMarkdownsToSend = forcedAssetMarkdownList.slice(0, 1);
+                    const missingAssets = assetMarkdownsToSend.filter(
+                      (markdown) => !responseContainsAssetMarkdown(accumulatedFullText, markdown)
+                    );
+                    if (missingAssets.length > 0) {
+                      const assetSuffix = `\n\n${missingAssets.join("\n\n")}`;
+                      controller.enqueue(encoder.encode(assetSuffix));
+                      accumulatedFullText += assetSuffix;
+                      console.log(`[Assets] Appended ${missingAssets.length} asset markdown(s) to response`);
+                    }
                   }
 
                   if (toolErrorNotices.length > 0) {

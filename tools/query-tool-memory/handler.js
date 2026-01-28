@@ -42,16 +42,31 @@ function handleGetFullResponse(sessionId, callId) {
   const fullResponse = toolMemoryStore.getFullResponse(sessionId, callId);
 
   if (!fullResponse) {
+    const callRecord = toolMemoryStore.getCallRecord(sessionId, callId);
+    if (!callRecord) {
+      return {
+        ok: false,
+        error: {
+          type: ErrorType.NOT_FOUND,
+          message: `No tool call found for call_id: ${callId}.`,
+          retryable: false
+        },
+        intents: [],
+        meta: {}
+      };
+    }
+
     return {
-      ok: false,
-      error: {
-        type: ErrorType.NOT_FOUND,
-        message: `No full response available for call_id: ${callId}. It may have been summarized and the full response cleared to save memory.`,
-        retryable: false,
-        details: {
-          callId,
-          suggestion: 'The summary should still be available in the query results. Only recent calls (last 10) keep full responses.'
-        }
+      ok: true,
+      data: {
+        call_id: callId,
+        tool: callRecord.toolId,
+        args: callRecord.args || {},
+        summary: callRecord.summary || null,
+        full_response_available: false,
+        note: callRecord.summary
+          ? 'Full response was pruned; summary provided.'
+          : 'Full response unavailable; no summary yet. Consider rerunning the tool.'
       },
       intents: [],
       meta: {}

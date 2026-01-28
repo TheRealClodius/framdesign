@@ -83,6 +83,22 @@ function extractBlobIdFromLocalAssetPath(path: string): { blob_id: string; exten
   }
 }
 
+function coerceMediaSrc(value: unknown): string {
+  if (!value) return "";
+  if (typeof value === "string") return value;
+  if (value instanceof URL) return value.toString();
+  if (typeof value === "object") {
+    const recordValue = value as { src?: unknown; href?: unknown; toString?: () => string };
+    if (typeof recordValue.src === "string") return recordValue.src;
+    if (typeof recordValue.href === "string") return recordValue.href;
+    if (typeof recordValue.toString === "function") {
+      const stringified = recordValue.toString();
+      return stringified.startsWith("[object") ? "" : stringified;
+    }
+  }
+  return "";
+}
+
 // Refresh expired GCS signed URL (shared utility)
 async function refreshGcsUrl(blobId: string, extension: string): Promise<string | null> {
   try {
@@ -208,6 +224,7 @@ function ChatImage({
   const normalizeImagePath = (path: string | undefined): string => {
     if (!path) return "";
     if (path.startsWith("http://") || path.startsWith("https://")) return path;
+    if (path.startsWith("blob:") || path.startsWith("data:")) return path;
     const hasEncodedChars = path.includes("%");
     try {
       let pathToEncode = path;
@@ -254,7 +271,8 @@ function ChatImage({
   } else if (typeof src === 'string' || src === undefined) {
     normalizedSrc = normalizeImagePath(src);
   } else {
-    normalizedSrc = "";
+    const coerced = coerceMediaSrc(src);
+    normalizedSrc = normalizeImagePath(coerced || undefined);
   }
 
   const imageHasFailed = failedImages.has(normalizedSrc);
@@ -403,12 +421,19 @@ export default function MarkdownWithMermaid({ content, className = "", isStreami
       
       // Handle code blocks - detect mermaid
       code: ({ className: codeClassName, children, ...props }) => {
-        const match = /language-(\w+)/.exec(codeClassName || "");
-        const language = match ? match[1] : "";
+        const classNameString = Array.isArray(codeClassName)
+          ? codeClassName.join(" ")
+          : (codeClassName || "");
+        const match = /language-([^\s]+)/.exec(classNameString);
+        const nodeLanguage = typeof (props as any).node?.lang === "string"
+          ? (props as any).node.lang
+          : "";
+        const language = (match ? match[1] : nodeLanguage || "").toString();
         const codeContent = String(children).replace(/\n$/, "");
 
         // Check if this is a mermaid code block
-        if (language === "mermaid") {
+        const normalizedLanguage = language.toLowerCase();
+        if (normalizedLanguage === "mermaid" || normalizedLanguage.startsWith("mermaid")) {
           mermaidBlockCount++;
 
           // Enforce limit on mermaid blocks per message
@@ -574,6 +599,9 @@ export default function MarkdownWithMermaid({ content, className = "", isStreami
           normalizedSrc = undefined;
         } else if (typeof src === 'string') {
           normalizedSrc = src;
+        } else {
+          const coerced = coerceMediaSrc(src);
+          normalizedSrc = coerced || undefined;
         }
         
         return <VideoWithError src={normalizedSrc} controls={controls} {...props}>{children}</VideoWithError>;
@@ -593,6 +621,7 @@ export default function MarkdownWithMermaid({ content, className = "", isStreami
         <ReactMarkdown 
           remarkPlugins={[remarkGfm]} 
           rehypePlugins={[rehypeRaw]}
+          remarkRehypeOptions={{ allowDangerousHtml: true }}
           components={components}
         >
           {content}

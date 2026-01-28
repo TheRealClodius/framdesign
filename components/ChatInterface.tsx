@@ -1257,6 +1257,18 @@ export default function ChatInterface() {
             console.error("Stream error:", error);
             setIsLoading(false);
             setLoadingStatus(null);
+            setMessages((prev) => {
+              const updated = [...prev];
+              const lastIndex = updated.length - 1;
+              if (lastIndex >= 0 && updated[lastIndex].id === assistantMessageId) {
+                updated[lastIndex] = {
+                  ...updated[lastIndex],
+                  content: `ERROR: ${error.message}. PLEASE TRY AGAIN.`,
+                  streaming: false,
+                };
+              }
+              return updated;
+            });
           },
           (status) => {
             setLoadingStatus(status);
