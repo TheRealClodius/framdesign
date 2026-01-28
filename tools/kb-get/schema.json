@@ -2,7 +2,7 @@
   "toolId": "kb_get",
   "version": "1.0.0",
   "category": "retrieval",
-  "description": "Retrieve complete KB document by exact ID. Faster than search when entity ID is known. Returns full document with all metadata.",
+  "description": "Retrieve complete KB document by exact ID. For visual assets (photo, diagram, gif), this tool is the ONLY way to actually 'see' the pixels for multimodal analysis by setting include_image_data to true. Returns full document with all metadata. IMPORTANT: Do not describe colors or visual details based on metadata descriptions; you must see the pixels to ensure absolute accuracy.",
   "parameters": {
     "type": "object",
     "additionalProperties": false,
@@ -12,8 +12,13 @@
         "type": "string",
         "description": "Exact entity ID from kb_search results. NEVER construct or guess IDs - always use the 'id' field from kb_search response.",
         "minLength": 3,
-        "maxLength": 100,
-        "pattern": "^[a-z_]+:[a-zA-Z0-9_]+$"
+        "maxLength": 200,
+        "pattern": "^[a-z_]+:[a-zA-Z0-9_\\-/.]+$"
+      },
+      "include_image_data": {
+        "type": "boolean",
+        "description": "Include base64 image data for visual assets (photo, diagram, gif). Use ONLY when you need to analyze the actual pixels (multimodal analysis). For just displaying the image, the metadata.markdown field is sufficient. DO NOT guess colors or details without this set to true.",
+        "default": false
       }
     }
   },
