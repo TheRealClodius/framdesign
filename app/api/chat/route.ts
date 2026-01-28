@@ -1,4 +1,15 @@
 import { NextResponse } from "next/server";
+
+// Configure proxy for Node.js native fetch (required in containerized environments)
+if (process.env.HTTPS_PROXY) {
+  try {
+    const { setGlobalDispatcher, ProxyAgent } = require('undici');
+    setGlobalDispatcher(new ProxyAgent(process.env.HTTPS_PROXY));
+  } catch (e) {
+    console.warn('Failed to configure proxy:', e);
+  }
+}
+
 import { GoogleGenAI, type Content, type Part, type FunctionCall, type FunctionResponse } from "@google/genai";
 import { FRAM_SYSTEM_PROMPT } from "@/lib/config";
 import { createHash } from "crypto";
