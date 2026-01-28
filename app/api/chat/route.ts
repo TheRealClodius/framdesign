@@ -601,13 +601,13 @@ async function getConversationCache(
   ai: GoogleGenAI,
   conversationHash: string,
   summary: string | null,
-  recentMessages: Array<{ role: string; parts: Array<{ text: string }> }>,
+  recentMessages: Array<{ role: string; parts: Array<{ text?: string; functionCall?: any; functionResponse?: any }> }>,
   summaryUpToIndex: number,
   providerSchemas: ProviderSchema[]
-): Promise<{ 
-  cacheName: string | null; 
+): Promise<{
+  cacheName: string | null;
   summaryCacheName: string | null;
-  contentsToSend: Array<{ role: string; parts: Array<{ text: string }> }>;
+  contentsToSend: Array<{ role: string; parts: Array<{ text?: string; functionCall?: any; functionResponse?: any }> }>;
   summary: string | null;
 }> {
   const cached = conversationCacheStore.get(conversationHash);
@@ -947,8 +947,8 @@ export async function POST(request: Request) {
 
     // Implement message windowing: keep last MAX_RAW_MESSAGES messages
     const totalMessages = messages.length;
-    let rawMessages: Array<{ role: string; content: string }>;
-    let messagesToSummarize: Array<{ role: string; content: string }> = [];
+    let rawMessages: Array<{ role: string; content: string; toolCalls?: any[]; toolResults?: any[] }>;
+    let messagesToSummarize: Array<{ role: string; content: string; toolCalls?: any[]; toolResults?: any[] }> = [];
     let summary: string | null = null;
     let summaryUpToIndex = 0;
 
@@ -984,7 +984,7 @@ export async function POST(request: Request) {
     }
 
     // Build recent messages in Gemini format (last MAX_RAW_MESSAGES)
-    const recentMessages: Array<{ role: string; parts: Array<{ text: string }> }> = [];
+    const recentMessages: Array<{ role: string; parts: Array<{ text?: string; functionCall?: any; functionResponse?: any }> }> = [];
 
     // Inject Tool Memory Summary (Point B/C from tool-memory.md)
     // This ensures the agent is always aware of its "vision status" before answering
@@ -1144,7 +1144,7 @@ export async function POST(request: Request) {
 
     // Try to use caching for better performance and cost savings
     // OPTIMIZATION: Use fast path with existing cache, update in background
-    let contentsToSend: Array<{ role: string; parts: Array<{ text: string }> }>;
+    let contentsToSend: Array<{ role: string; parts: Array<{ text?: string; functionCall?: any; functionResponse?: any }> }>;
     let cachedContent: string | undefined;
 
     if (ENABLE_CACHING) {
