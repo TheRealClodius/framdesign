@@ -67,10 +67,10 @@ class ToolMemoryStore {
   /**
    * Queries tool calls with optional filters
    * @param {string} sessionId - Session identifier
-   * @param {object} filters - Query filters
-   * @param {string} filters.toolId - Filter by specific tool ID
-   * @param {string} filters.timeRange - 'last_turn' | 'last_3_turns' | 'all'
-   * @param {boolean} filters.includeErrors - Include failed calls
+   * @param {object} [filters] - Query filters
+   * @param {string} [filters.toolId] - Filter by specific tool ID
+   * @param {string} [filters.timeRange] - 'last_turn' | 'last_3_turns' | 'all'
+   * @param {boolean} [filters.includeErrors] - Include failed calls
    * @returns {Array} - Array of matching tool call records
    */
   queryToolCalls(sessionId, filters = {}) {

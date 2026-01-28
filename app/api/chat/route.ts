@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, type Content, type Part, type FunctionCall, type FunctionResponse } from "@google/genai";
 import { FRAM_SYSTEM_PROMPT } from "@/lib/config";
 import { createHash } from "crypto";
 import { handleServerError, isRetryableError, isCacheError } from "@/lib/errors";
@@ -44,14 +44,22 @@ type GeminiConfig = {
   systemInstruction?: string;
 };
 
-type FunctionCall = {
-  name: string;
-  args: Record<string, unknown>;
+type ContentPart = Part;
+type ContentMessage = {
+  role: string;
+  parts: Part[];
 };
 
 type FunctionCallPart = {
   functionCall: FunctionCall;
   thoughtSignature?: string; // Must be sibling of functionCall, not inside it
+};
+
+type RawMessage = {
+  role: string;
+  content: string;
+  toolCalls?: Array<{ name: string; args: Record<string, unknown> }>;
+  toolResults?: Array<{ name: string; result: unknown }>;
 };
 
 type ObservabilityContextStack = {
@@ -455,15 +463,22 @@ function encodeStatusEvent(status: string): string {
   return `\n---STATUS---\n${JSON.stringify({ status })}\n---ENDSTATUS---\n`;
 }
 
+function toRecord(value: unknown): Record<string, unknown> {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  return { value };
+}
+
 /**
  * Enforce token budget by trimming summary and dropping oldest context items.
  */
 function enforceTokenBudget(
-  contents: Array<{ role: string; parts: Array<{ text: string }> }>,
+  contents: ContentMessage[],
   summary: string | null,
   maxTokens: number
 ): {
-  contents: Array<{ role: string; parts: Array<{ text: string }> }>;
+  contents: ContentMessage[];
   summary: string | null;
   droppedMessages: number;
   summaryTrimmed: boolean;
@@ -601,13 +616,13 @@ async function getConversationCache(
   ai: GoogleGenAI,
   conversationHash: string,
   summary: string | null,
-  recentMessages: Array<{ role: string; parts: Array<{ text: string }> }>,
+  recentMessages: ContentMessage[],
   summaryUpToIndex: number,
   providerSchemas: ProviderSchema[]
 ): Promise<{ 
   cacheName: string | null; 
   summaryCacheName: string | null;
-  contentsToSend: Array<{ role: string; parts: Array<{ text: string }> }>;
+  contentsToSend: ContentMessage[];
   summary: string | null;
 }> {
   const cached = conversationCacheStore.get(conversationHash);
@@ -661,7 +676,7 @@ async function getConversationCache(
       if (!ai.caches || typeof ai.caches.create !== 'function') {
         console.warn("Cache API not available in this SDK version");
         // Build contents with summary context
-        const contentsToSend: Array<{ role: string; parts: Array<{ text: string }> }> = [
+        const contentsToSend: ContentMessage[] = [
           {
             role: "user",
             parts: [{ text: `PREVIOUS CONVERSATION SUMMARY:\n\n${summary}\n\n---\n\nCONTINUING WITH RECENT MESSAGES:` }],
@@ -726,7 +741,7 @@ async function getConversationCache(
         console.warn("Stack trace:", errorStack);
       }
       // Fall back to non-cached approach with summary
-      const contentsToSend: Array<{ role: string; parts: Array<{ text: string }> }> = [
+      const contentsToSend: ContentMessage[] = [
         {
           role: "user",
           parts: [{ text: `PREVIOUS CONVERSATION SUMMARY:\n\n${summary}\n\n---\n\nCONTINUING WITH RECENT MESSAGES:` }],
@@ -947,8 +962,8 @@ export async function POST(request: Request) {
 
     // Implement message windowing: keep last MAX_RAW_MESSAGES messages
     const totalMessages = messages.length;
-    let rawMessages: Array<{ role: string; content: string }>;
-    let messagesToSummarize: Array<{ role: string; content: string }> = [];
+    let rawMessages: RawMessage[];
+    let messagesToSummarize: RawMessage[] = [];
     let summary: string | null = null;
     let summaryUpToIndex = 0;
 
@@ -984,12 +999,12 @@ export async function POST(request: Request) {
     }
 
     // Build recent messages in Gemini format (last MAX_RAW_MESSAGES)
-    const recentMessages: Array<{ role: string; parts: Array<{ text: string }> }> = [];
+    const recentMessages: ContentMessage[] = [];
 
     // Inject Tool Memory Summary (Point B/C from tool-memory.md)
     // This ensures the agent is always aware of its "vision status" before answering
     const sessionId = userId || 'anonymous-text-session';
-    const pastToolCalls = toolMemoryStore.queryToolCalls(sessionId, { timeRange: 'all' });
+    const pastToolCalls = toolMemoryStore.queryToolCalls(sessionId, { toolId: "", timeRange: 'all', includeErrors: false });
     
     if (pastToolCalls.length > 0) {
       const summaryLines = pastToolCalls.map(call => 
@@ -1033,7 +1048,7 @@ export async function POST(request: Request) {
       const messageIndexInFullConversation = summaryUpToIndex + i;
       const currentTurnNumber = Math.ceil((messageIndexInFullConversation + 1) / 2);
       
-      const parts: Array<{text?: string; functionCall?: any; functionResponse?: any}> = [];
+      const parts: ContentPart[] = [];
       
       // Add text content if present
       let content = typeof msg.content === 'string' ? msg.content : String(msg.content || '');
@@ -1051,7 +1066,7 @@ export async function POST(request: Request) {
             parts.push({
               functionCall: {
                 name: call.name,
-                args: call.args
+                args: toRecord(call.args)
               }
             });
           }
@@ -1061,11 +1076,11 @@ export async function POST(request: Request) {
       // Add structured tool results if present (for user messages after tool execution)
       if (msg.role === 'user' && msg.toolResults && Array.isArray(msg.toolResults)) {
         msg.toolResults.forEach((result: any) => {
-          if (result.name && result.result) {
+          if (result.name && result.result !== undefined) {
             parts.push({
               functionResponse: {
                 name: result.name,
-                response: result.result
+                response: toRecord(result.result)
               }
             });
           }
@@ -1108,11 +1123,11 @@ export async function POST(request: Request) {
             
             // Add functionCall message (model role)
             if (group.call) {
-              const callParts: Array<{ functionCall?: any }> = [];
+              const callParts: ContentPart[] = [];
               callParts.push({
                 functionCall: {
                   name: group.call.toolName,
-                  args: group.call.args || {}
+                  args: toRecord(group.call.args || {})
                 }
               });
               recentMessages.push({
@@ -1124,11 +1139,11 @@ export async function POST(request: Request) {
             
             // Add functionResponse message (user role)
             if (group.result) {
-              const resultParts: Array<{ functionResponse?: any }> = [];
+              const resultParts: ContentPart[] = [];
               resultParts.push({
                 functionResponse: {
                   name: group.result.toolName,
-                  response: group.result.result
+                  response: toRecord(group.result.result)
                 }
               });
               recentMessages.push({
@@ -1144,7 +1159,7 @@ export async function POST(request: Request) {
 
     // Try to use caching for better performance and cost savings
     // OPTIMIZATION: Use fast path with existing cache, update in background
-    let contentsToSend: Array<{ role: string; parts: Array<{ text: string }> }>;
+    let contentsToSend: ContentMessage[];
     let cachedContent: string | undefined;
 
     if (ENABLE_CACHING) {
@@ -1536,6 +1551,8 @@ export async function POST(request: Request) {
         );
         const duration = Date.now() - startTime;
 
+        const ignoreUserArgs = toRecord(ignoreUserCall.args || {});
+
         // Record tool result
         recordToolResult(
           conversationHash,
@@ -1557,7 +1574,7 @@ export async function POST(request: Request) {
             position: observability.toolCalls.length + 1,
             chainPosition: 0,
             toolId: 'ignore_user',
-            args: ignoreUserCall.args,
+            args: ignoreUserArgs,
             thoughtSignature: ignoreUserPart?.thoughtSignature,
             startTime: startTime,
             duration: duration,
@@ -1583,9 +1600,9 @@ export async function POST(request: Request) {
         // Return response based on result
         if (result.ok) {
           const response = {
-            message: result.data.farewellMessage || ignoreUserCall.args.farewell_message,
+            message: result.data.farewellMessage || ignoreUserArgs.farewell_message,
             timeout: {
-              duration: result.data.durationSeconds || ignoreUserCall.args.duration_seconds,
+              duration: result.data.durationSeconds || ignoreUserArgs.duration_seconds,
               until: result.data.timeoutUntil
             }
           };

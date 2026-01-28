@@ -47,7 +47,7 @@ export function countTokens(text: string): number {
  * @returns Total token count
  */
 export function countMessageTokens(
-  messages: Array<{ role: string; parts: Array<{ text: string }> }>
+  messages: Array<{ role: string; parts: Array<{ text?: string }> }>
 ): number {
   let total = 0;
   for (const msg of messages) {
@@ -73,7 +73,7 @@ export function estimateTokens(text: string): number {
  * Kept for backward compatibility
  */
 export function estimateMessageTokens(
-  messages: Array<{ role: string; parts: Array<{ text: string }> }>
+  messages: Array<{ role: string; parts: Array<{ text?: string }> }>
 ): number {
   return countMessageTokens(messages);
 }
