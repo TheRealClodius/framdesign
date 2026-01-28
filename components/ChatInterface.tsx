@@ -1207,7 +1207,7 @@ export default function ChatInterface() {
   const handleStarterClick = (text: string, currentMessages?: Message[]) => {
     if (isLoading || isVoiceMode || isBlocked) return;
 
-    const baseMessages = currentMessages || messages;
+    const baseMessages = (currentMessages && currentMessages.length > 0) ? currentMessages : messages;
 
     // Directly submit the starter text (bypass input state)
     const newUserMessage = { id: generateMessageId(), role: "user" as const, content: text };

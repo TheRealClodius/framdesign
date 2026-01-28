@@ -1,6 +1,6 @@
 ---
 id: project:clubaperitif
-type: brand
+type: project
 title: ClubAperitif
 aliases:
   - Club Aperitif

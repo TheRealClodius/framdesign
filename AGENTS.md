@@ -11,7 +11,7 @@ This document provides AI agents with a quick architectural overview of the fram
 - **Knowledge Base**: Qdrant vector database + Google Cloud Storage for assets
 - **Deployment**: Vercel (text/frontend) + Railway (voice server)
 
-**Technology Stack**: Next.js 16, Node.js 22, Google Gemini API, Qdrant, GCS, WebSocket
+**Technology Stack**: Next.js 16, Node.js 24, Google Gemini API, Qdrant, GCS, WebSocket
 
 ---
 
@@ -329,7 +329,7 @@ ALLOWED_ORIGINS=<comma-separated-origins>
 ## Development Setup
 
 ### Prerequisites
-- **Node.js 22.x** (specified in [.nvmrc](.nvmrc) and [package.json](package.json))
+- **Node.js 24.x** (specified in [.nvmrc](.nvmrc) and [package.json](package.json))
 - **npm** (included with Node.js)
 - **Environment files**: `.env` in root and `voice-server/.env`
 

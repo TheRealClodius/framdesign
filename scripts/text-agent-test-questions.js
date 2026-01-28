@@ -26,6 +26,9 @@ export const TEST_QUESTIONS = [
   "Show me an image of Desktop Agent",
   "Describe the image visuals",
   
+  "Show me any other project image",
+  "Describe this image",
+  
   // Negative cases
   "Tell me about a project that doesn't exist",
   "Who is John Smith?",

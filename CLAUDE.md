@@ -7,7 +7,7 @@ This document provides essential context for Claude and other AI assistants work
 **FRAM** is a dual-agent conversational AI system providing text and voice interfaces for accessing a curated knowledge base about people, labs, and design projects.
 
 - **Repository**: TheRealClodius/framdesign
-- **Node Version**: 22.x (see `.nvmrc`)
+- **Node Version**: 24.x (see `.nvmrc`)
 - **Framework**: Next.js 16 with React 19
 - **Language**: TypeScript 5 + JavaScript (ES modules)
 
@@ -15,7 +15,7 @@ This document provides essential context for Claude and other AI assistants work
 
 ### Core
 - **Frontend**: Next.js 16.1.1, React 19.2.3, Tailwind CSS 4
-- **Backend**: Node.js 22.x, Next.js API routes, Express (voice server)
+- **Backend**: Node.js 24.x, Next.js API routes, Express (voice server)
 - **AI/LLM**: Google Gemini 3 Flash (text), Gemini Live API (voice)
 - **Embeddings**: Google `gemini-embedding-001` (768 dimensions)
 

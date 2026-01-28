@@ -6,7 +6,7 @@ This document provides instructions for cloud agents (automated AI coding assist
 
 ### Node.js Version
 
-- **Required:** Node.js 22.x (specified in `package.json` engines)
+- **Required:** Node.js 24.x (specified in `package.json` engines)
 - Check version: `node --version`
 - If using nvm: `nvm use` (uses `.nvmrc`)
 
