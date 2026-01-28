@@ -989,7 +989,7 @@ export async function POST(request: Request) {
     // Inject Tool Memory Summary (Point B/C from tool-memory.md)
     // This ensures the agent is always aware of its "vision status" before answering
     const sessionId = userId || 'anonymous-text-session';
-    const pastToolCalls = toolMemoryStore.queryToolCalls(sessionId, { timeRange: 'all' });
+    const pastToolCalls = toolMemoryStore.queryToolCalls(sessionId, { toolId: '', timeRange: 'all', includeErrors: false });
     
     if (pastToolCalls.length > 0) {
       const summaryLines = pastToolCalls.map(call => 
