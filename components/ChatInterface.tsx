@@ -628,38 +628,36 @@ export default function ChatInterface() {
       // Preload audio elements first
       preloadAudioElements();
 
-      // Play and immediately pause to unlock audio context on mobile
-      // This must happen during a user interaction
       const unlockPromises: Promise<void>[] = [];
 
+      // Helper to unlock an audio element silently
+      const unlockElement = async (audio: HTMLAudioElement | null) => {
+        if (!audio) return;
+        
+        const originalVolume = audio.volume;
+        try {
+          audio.volume = 0; // Silence for unlock
+          await audio.play();
+          audio.pause();
+          audio.currentTime = 0;
+        } catch (error) {
+          // Ignore play errors
+        } finally {
+          audio.volume = originalVolume; // Restore original volume
+        }
+      };
+
       if (startAudioRef.current) {
-        const promise = startAudioRef.current.play().then(() => {
-          startAudioRef.current?.pause();
-          if (startAudioRef.current) {
-            startAudioRef.current.currentTime = 0;
-          }
-        }).catch(() => {
-          // Ignore errors during unlock attempt
-        });
-        unlockPromises.push(promise);
+        unlockPromises.push(unlockElement(startAudioRef.current));
       }
 
       if (endAudioRef.current) {
-        const promise = endAudioRef.current.play().then(() => {
-          endAudioRef.current?.pause();
-          if (endAudioRef.current) {
-            endAudioRef.current.currentTime = 0;
-          }
-        }).catch(() => {
-          // Ignore errors during unlock attempt
-        });
-        unlockPromises.push(promise);
+        unlockPromises.push(unlockElement(endAudioRef.current));
       }
 
       await Promise.all(unlockPromises);
       audioUnlockedRef.current = true;
     } catch (error) {
-      // Silently handle unlock errors
       console.warn('Audio unlock attempt failed:', error);
     }
   }, [preloadAudioElements]);
@@ -1827,6 +1825,9 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
                                   // Don't show popups when loading, in voice mode, or blocked
                                   if (isLoading || isVoiceMode || isBlocked) return;
 
+                                  // Capture rect before any async calls to avoid React event pooling/nullification issues
+                                  const buttonRect = e.currentTarget.getBoundingClientRect();
+
                                   // Mark this suggestion as the active hover target
                                   activeHoverKeyRef.current = suggestion;
 
@@ -1850,7 +1851,6 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
 
                                   // Only show popup if we still hover this suggestion
                                   if (activeHoverKeyRef.current === suggestion && imageInfo) {
-                                    const buttonRect = e.currentTarget.getBoundingClientRect();
                                     setHoveredSuggestion({
                                       index: idx,
                                       imagePath: imageInfo.url,

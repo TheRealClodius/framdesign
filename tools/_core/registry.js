@@ -14,10 +14,9 @@
  * - NO provider SDK imports (Type.* enums, etc.)
  */
 
-import { readFileSync, existsSync } from 'fs';
-import { join, dirname, resolve } from 'path';
+import { readFileSync, existsSync, watch } from 'fs';
+import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { createRequire } from 'module';
 import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
 import { ErrorType, ToolError } from './error-types.js';
@@ -33,10 +32,6 @@ import { toolMemoryStore } from './tool-memory-store.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REGISTRY_PATH = join(__dirname, '..', 'tool_registry.json');
-// Create require function for resolving modules  
-const require = createRequire(import.meta.url);
-// Project root is two levels up from _core
-const PROJECT_ROOT = resolve(__dirname, '..', '..');
 
 // Static import map for Webpack compatibility
 // Webpack can statically analyze these imports at build time
@@ -87,17 +82,24 @@ class ToolRegistry {
     let registry;
     
     // Approach 1: Try dynamic import (works in bundled environments)
-    try {
-      console.log('[Registry] Attempting dynamic import...');
-      // Use dynamic import with JSON assertion - Webpack will bundle this
-      const registryModule = await import('../tool_registry.json', { with: { type: 'json' } });
-      registry = registryModule.default;
-      console.log('[Registry] ✓ Loaded via dynamic import');
-    } catch (importError) {
-      console.log(`[Registry] Dynamic import failed: ${importError.message}`);
-      console.log('[Registry] Falling back to file system read...');
-      
-      // Approach 2: File system read (works in Node.js)
+    // NOTE: In development, we prefer file system read (Approach 2) to avoid 
+    // tsx/next-dev automatically restarting the entire process when the registry 
+    // file changes, allowing our own hot-reload logic to handle it faster.
+    if (process.env.NODE_ENV !== 'development') {
+      try {
+        console.log('[Registry] Attempting dynamic import...');
+        // Use dynamic import with JSON assertion - Webpack will bundle this
+        const registryModule = await import('../tool_registry.json', { with: { type: 'json' } });
+        registry = registryModule.default;
+        console.log('[Registry] ✓ Loaded via dynamic import');
+      } catch (importError) {
+        console.log(`[Registry] Dynamic import failed or skipped: ${importError.message}`);
+        console.log('[Registry] Falling back to file system read...');
+      }
+    }
+
+    // Approach 2: File system read (works in Node.js)
+    if (!registry) {
       if (!existsSync(REGISTRY_PATH)) {
         const errorMessage = `Tool registry file not found at ${REGISTRY_PATH}. ` +
           `This file should be generated during build by running 'npm run build:tools'. ` +
@@ -160,13 +162,18 @@ class ToolRegistry {
       try {
         let handlerModule;
         
-        // Check if we have a static import map entry (for Webpack compatibility)
-        if (HANDLER_IMPORTS[tool.toolId]) {
-          // Use static import map - Webpack can analyze these at build time
+        // Check if we have a static import map entry (for Webpack/Turbopack compatibility)
+        // In bundled environments (Next.js/Vercel), we MUST use the static map because
+        // bundlers cannot analyze truly dynamic imports with variables + cache busters.
+        // We detect bundled environments by checking process.env.NEXT_RUNTIME or if NOT in development.
+        const isBundled = !!process.env.NEXT_RUNTIME || process.env.NODE_ENV !== 'development';
+        
+        if (HANDLER_IMPORTS[tool.toolId] && isBundled) {
+          // Use static import map - Webpack/Turbopack can analyze these at build time
           console.log(`[Registry] Loading ${tool.toolId} from static import map`);
           handlerModule = await HANDLER_IMPORTS[tool.toolId]();
         } else {
-          // Fallback: dynamic import with path resolution
+          // Fallback: dynamic import with path resolution (for raw Node.js like voice-server)
           // Convert file:// URLs to file paths for webpack compatibility
           if (importPath.startsWith('file://')) {
             const url = new URL(importPath);
@@ -193,12 +200,25 @@ class ToolRegistry {
           }
           
           // Log the resolved path for debugging
-          console.log(`[Registry] Loading ${tool.toolId} from: ${importPath}`);
+          console.log(`[Registry] Loading ${tool.toolId} from dynamic import: ${importPath}`);
           
           // Use dynamic import (works in both Next.js and Node.js)
-          // This fallback path should not be reached if HANDLER_IMPORTS is complete
-          // Webpack warning is expected here but harmless - all tools should use static imports above
-          handlerModule = await import(/* webpackMode: "lazy" */ importPath);
+          // Add cache buster in development to allow hot-reloading
+          const cacheBuster = process.env.NODE_ENV === 'development' ? `?v=${Date.now()}` : '';
+          
+          // IMPORTANT: To prevent Turbopack/Webpack from complaining about "too dynamic" imports
+          // when we are in a bundled environment but hit this fallback (e.g. new tool not in map),
+          // we use the Function constructor to hide the import from the static analyzer.
+          // This allows raw Node.js (voice-server) to still use dynamic loading with cache busting.
+          try {
+            const importDynamic = new Function('p', 'return import(p)');
+            handlerModule = await importDynamic(importPath + cacheBuster);
+          } catch (importError) {
+            // If the Function-based import fails (e.g. in some strict environments), 
+            // try the direct import as a last resort
+            console.warn(`[Registry] Dynamic import via Function failed, trying direct import for ${tool.toolId}`);
+            handlerModule = await import(/* webpackIgnore: true */ importPath + cacheBuster);
+          }
         }
         
         // Debug: Log what we got from the module
@@ -619,7 +639,9 @@ class ToolRegistry {
       throw new Error('Cannot reload locked registry');
     }
 
-    // Clear all maps
+    console.log('[Registry] Reloading tool registry...');
+    
+    // Clear maps but keep the Map objects
     this.tools.clear();
     this.handlers.clear();
     this.validators.clear();
@@ -628,6 +650,44 @@ class ToolRegistry {
 
     // Reload
     await this.load();
+  }
+
+  /**
+   * Watch registry file for changes (DEV ONLY)
+   * 
+   * @param {Function} onChange - Optional callback when reload completes
+   */
+  watch(onChange = null) {
+    if (this.locked) {
+      console.warn('[Registry] Cannot watch locked registry');
+      return;
+    }
+
+    if (!existsSync(REGISTRY_PATH)) {
+      console.warn(`[Registry] Registry file not found at ${REGISTRY_PATH}, cannot watch`);
+      return;
+    }
+
+    console.log(`[Registry] 👀 Watching ${REGISTRY_PATH} for changes...`);
+    
+    let debounceTimer;
+    const watcher = watch(REGISTRY_PATH, async (event) => {
+      if (event === 'change') {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(async () => {
+          console.log('[Registry] tool_registry.json changed, reloading...');
+          try {
+            await this.reload();
+            if (onChange) await onChange();
+            console.log(`[Registry] ✓ Hot-reloaded: v${this.version}`);
+          } catch (error) {
+            console.error('[Registry] ✗ Hot-reload failed:', error.message);
+          }
+        }, 100);
+      }
+    });
+
+    return watcher;
   }
 }
 

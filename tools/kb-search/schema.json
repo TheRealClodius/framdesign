@@ -2,7 +2,7 @@
   "toolId": "kb_search",
   "version": "1.0.0",
   "category": "retrieval",
-  "description": "Semantic search over knowledge base. Searches people, labs, projects, and visual assets (photos, diagrams, videos, GIFs) using natural language queries. Returns relevant documents with citations. For assets, returns ready-to-use markdown in the metadata.markdown field.",
+  "description": "Semantic search over knowledge base. Searches people, labs, projects, and visual assets (photos, diagrams, videos, GIFs) using natural language queries. Returns relevant documents with citations. For assets, returns ready-to-use markdown in the metadata.markdown field. IMPORTANT: Metadata descriptions are for reference only; do not use them to describe specific visual details like colors or text layout.",
   "parameters": {
     "type": "object",
     "additionalProperties": false,
@@ -23,13 +23,13 @@
       },
       "filters": {
         "type": "object",
-        "description": "Optional metadata filters",
+        "description": "Optional metadata filters. Each filter accepts a SINGLE value, not arrays.",
         "additionalProperties": false,
         "properties": {
           "type": {
             "type": "string",
             "enum": ["person", "lab", "project", "photo", "diagram", "video", "gif"],
-            "description": "Filter by entity type. Use photo/diagram/video/gif to search for visual assets."
+            "description": "Filter by entity type (SINGLE value only). Use photo/diagram/video/gif to search for visual assets."
           }
         }
       },
@@ -40,7 +40,7 @@
       },
       "include_image_data": {
         "type": "boolean",
-        "description": "When searching for visual assets, include image data for the top result (text mode only). Use sparingly for multimodal analysis.",
+        "description": "When searching for visual assets, include image data for the top result (text mode only). Use sparingly for multimodal analysis. DO NOT guess colors or details without this set to true.",
         "default": false
       }
     }

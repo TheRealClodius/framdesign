@@ -14,19 +14,22 @@ import { searchSimilar } from '../../../lib/services/vector-store-service';
 config({ path: path.join(process.cwd(), '.env.local') });
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const EMBEDDING_MODEL = 'text-embedding-004';
+// Note: text-embedding-004 was shut down Jan 14, 2026
+const EMBEDDING_MODEL = 'gemini-embedding-001';
+const EMBEDDING_DIMENSION = 768;
 
 if (!GEMINI_API_KEY) {
   console.error('❌ GEMINI_API_KEY not found');
   process.exit(1);
 }
 
-const genAI = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+const genAI = new GoogleGenAI({ apiKey: GEMINI_API_KEY, vertexai: false });
 
 async function generateEmbedding(text: string): Promise<number[]> {
   const result = await genAI.models.embedContent({
     model: EMBEDDING_MODEL,
     contents: [text],
+    config: { outputDimensionality: EMBEDDING_DIMENSION }
   });
 
   if (result.embeddings && result.embeddings.length > 0 && result.embeddings[0].values) {

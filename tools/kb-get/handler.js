@@ -70,10 +70,14 @@ function isServiceUnavailable(error) {
  * @returns {Promise<ToolResponse>} - Result envelope
  */
 export async function execute(context) {
-  const { args } = context;
+  const { args, capabilities } = context;
   const startTime = Date.now();
   const rawEntityId = args.id;
   const entityId = normalizeEntityId(rawEntityId);
+
+  // Check capabilities.voice or fallback to checking meta/context for voice mode
+  const isVoiceMode = capabilities?.voice === true;
+  const includeImageData = Boolean(args.include_image_data) && !isVoiceMode;
 
   if (rawEntityId !== entityId) {
     console.log(`[kb_get] Normalized entity id "${rawEntityId}" -> "${entityId}"`);
@@ -177,6 +181,7 @@ export async function execute(context) {
       let assetUrl = '';
       let markdown = '';
       let imageData = null; // For multimodal analysis
+      let imageDataFetchError = null; // Track why image data wasn't fetched
 
       if (blobId && extension) {
         try {
@@ -194,12 +199,19 @@ export async function execute(context) {
             // Images and GIFs use markdown image syntax
             markdown = `![${caption}](${assetUrl})`;
 
-            // For visual assets (photo, diagram, gif), fetch image data for multimodal analysis
-            // This allows the agent to analyze actual pixels while being grounded in metadata context
-            if (['photo', 'diagram', 'gif'].includes(entityType)) {
+            // For visual assets (photo, diagram, gif), fetch image data ONLY if requested for multimodal analysis
+            // This avoids oversized payloads and expensive token costs when pixels aren't needed
+            if (includeImageData && ['photo', 'diagram', 'gif'].includes(entityType)) {
+              console.log(`[kb_get] Attempting image data fetch for ${entityId}`, {
+                blobId,
+                extension,
+                entityType
+              });
+
               try {
                 if (!blobService.fetchAssetBuffer) {
-                  throw new Error('fetchAssetBuffer not available');
+                  imageDataFetchError = 'fetchAssetBuffer service not available';
+                  throw new Error(imageDataFetchError);
                 }
                 const imageBuffer = await blobService.fetchAssetBuffer(blobId, extension);
 
@@ -220,6 +232,7 @@ export async function execute(context) {
 
                 console.log(`[kb_get] Fetched image data for ${entityId} (${Math.round(imageBuffer.length / 1024)}KB)`);
               } catch (imageError) {
+                imageDataFetchError = imageError.message;
                 console.warn(`[kb_get] Failed to fetch image buffer for ${entityId}:`, imageError.message);
                 // Continue without image data - metadata is still useful
               }
@@ -271,7 +284,7 @@ export async function execute(context) {
           related_entities: tryParseJSON(metadata.related_entities) || [],
           tags: tryParseJSON(metadata.tags) || [],
           metadata: extractRelevantMetadata(metadata),
-          _instructions: "Use the 'markdown' field directly in your response",
+          _instructions: buildImageInstructions(entityId, entityType, imageData, includeImageData, imageDataFetchError, blobId, extension, markdown),
           _timing: finalTiming,
           _imageData: imageData // Image data for multimodal analysis (internal, excluded from display)
         },
@@ -364,4 +377,33 @@ function tryParseJSON(jsonString) {
   } catch {
     return undefined;
   }
+}
+
+/**
+ * Build detailed instructions for asset retrieval results
+ * Includes specific failure reasons when image data couldn't be fetched
+ */
+function buildImageInstructions(entityId, entityType, imageData, includeImageData, imageDataFetchError, blobId, extension, markdown) {
+  let imageDataStatus = '';
+
+  if (imageData) {
+    imageDataStatus = '✅ Pixel data included for multimodal analysis.';
+  } else if (includeImageData) {
+    // User requested image data but it wasn't included - explain why
+    const reasons = [];
+    if (!blobId) reasons.push('missing blob_id in metadata');
+    if (!extension) reasons.push('missing file_extension in metadata');
+    if (!['photo', 'diagram', 'gif'].includes(entityType)) {
+      reasons.push(`entity_type '${entityType}' does not support pixel data (only photo, diagram, gif)`);
+    }
+    if (imageDataFetchError) reasons.push(imageDataFetchError);
+
+    const reasonText = reasons.length > 0 ? reasons.join('; ') : 'unknown error';
+    imageDataStatus = `❌ Pixel data requested but NOT included. Reason: ${reasonText}. To retry, call kb_get with include_image_data: true for ID: '${entityId}'.`;
+  } else {
+    // User didn't request image data
+    imageDataStatus = `❌ Pixel data not requested. For visual analysis (colors, labels, details), call kb_get with include_image_data: true for ID: '${entityId}'.`;
+  }
+
+  return `Asset metadata retrieved. ${imageDataStatus} To display the asset, include this markdown: ${markdown}`;
 }

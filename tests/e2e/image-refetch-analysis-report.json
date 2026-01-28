@@ -5,14 +5,14 @@
     {
       "toolId": "kb_search",
       "args": {
-        "query": "Vector Watch",
         "filters": {
           "type": "photo"
         },
+        "query": "Vector Watch",
         "top_k": 1
       },
       "ok": true,
-      "durationMs": 598,
+      "durationMs": 525,
       "hasImageData": false,
       "entityId": null,
       "entityType": null,
@@ -21,7 +21,7 @@
       "searchResults": [
         {
           "id": "asset:vector_watch_luna_001",
-          "score": 0.6215106,
+          "score": 0.71712756,
           "blob_id": null
         }
       ]
@@ -29,15 +29,16 @@
     {
       "toolId": "kb_get",
       "args": {
-        "id": "asset:vector_watch_luna_001"
+        "include_image_data": true,
+        "id": "asset:vector_vector-watch-luna"
       },
-      "ok": true,
-      "durationMs": 1019,
-      "hasImageData": true,
-      "entityId": "asset:vector_watch_luna_001",
-      "entityType": "photo",
-      "blobId": "vector/vector-watch-luna",
-      "markdown": "![Vector Watch Luna and mobile companion app](https://storage.googleapis.com/framdesign-assets/asset",
+      "ok": false,
+      "durationMs": 295,
+      "hasImageData": false,
+      "entityId": null,
+      "entityType": null,
+      "blobId": null,
+      "markdown": null,
       "searchResults": null
     }
   ]

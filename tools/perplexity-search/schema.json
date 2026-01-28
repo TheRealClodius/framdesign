@@ -2,7 +2,7 @@
   "toolId": "perplexity_search",
   "version": "1.0.0",
   "category": "retrieval",
-  "description": "Search the web for real-time information using Perplexity AI. Use this when you need current information, recent events, or facts not in the knowledge base.",
+  "description": "Search the web for real-time information. MUST use for: 'latest developments', 'recent news', 'as of [year]', current events, or any request for up-to-date information beyond the knowledge base. Never refuse current events queries - always search.",
   "parameters": {
     "type": "object",
     "additionalProperties": false,

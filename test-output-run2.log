@@ -1,0 +1,763 @@
+[dotenv@17.2.3] injecting env (0) from .env.local -- tip: 🔐 prevent building .env in docker: https://dotenvx.com/prebuild
+[dotenv@17.2.3] injecting env (12) from .env -- tip: ⚙️  load multiple .env files with { path: ['.env.local', '.env'] }
+Checking if Next.js server is running...
+✓ Server is running
+
+Running non-interactive mode with 17 test questions...
+
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[1mQuestion 1/17: "Tell me about Fram"[0m
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+
+[35m📋 Context Stack:[0m
+  • System prompt: core.md + 7 tools
+  • Chat history: 1 agent-user turns
+  • Message summary: None (no compacting)
+  • Cached content: Yes
+  • Tokens (tiktoken): 4 local / 4 server
+
+
+[1m[Step 1] Agent Response[0m
+
+[32mFinal Response:[0m
+"Fram Design is a lab that forges digital and physical experiences. We operate at the convergence of design, product, strategy, and AI-native systems, building things with an eye for enduring quality—structurally, aesthetically, and conceptually.
+
+Are you curious about a specific aspect of our work, or perhaps what brought Fram Design into being? <suggestions>["What kind of projects does Fram do?", "Tell me about the founder"]</suggestions>"
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[1mQuestion 2/17: "Who is Fram's owner?"[0m
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+
+[35m📋 Context Stack:[0m
+  • System prompt: core.md + 7 tools
+  • Chat history: 3 agent-user turns
+  • Message summary: None (no compacting)
+  • Cached content: Yes
+  • Tokens (tiktoken): 105 local / 81 server
+
+
+[1m[Step 1] Agent Response[0m
+
+  └─ [34mTool Call: kb_search[0m
+     [3mthought: "CiQBcsjafJXvAjQNS62n0IcHkMbHoIXc5KsztQUpz7yx+pYfE+cKbgFyyNp8APbxo3F5En3lFtgR+hap1Zn2CVcv3p0Dr+yyy60cpeutmNMIWXBb9RM0CSGdzbDM3Mg7ymdvacHKzQW+OQHgopme5RCm4KtcUNX1Zaf7nTn8Lw/72Xel8ozPaaFSimGTat3NKj6gDSh1Cp0CAXLI2nymZ13pl3H0D6AB+MD5FEa5rg6Sr/HtNdWtfa19i3k/uzsVdf3O3oRQArbF7tPw6MYM1d6727uiCcMTRb3vAco5p7KAXHXCqXxFjjTORL3XIFWpMhRibBRck2AzjXWxG+Stj4vlqzTEPp9/gGbb6lWLpv1Q6xdfmWyI1U5G8YLVFKZniHBoWKXa168l7j1zSRMi9waP4aWuRaq9C5Bu1ndKAcd0SwgKdXoB9QQxSVJlxq0uBP3ASs5IPgk/4n79lcAPT+AwD+6JfEq4f4TddjTeMcDcJeQ5OtXuNjNCKV6CVEPH22CcuhjM6ZCJfIMCcAKjeVrX0hmO5WM9E2oBV/f2PEREs9+aNXAFJNNLevx/HzpaUjStAuMFCtEBAXLI2nzxNzZ0wBZzGiRKyHQddTBvW+XfdxDn3Hi+Kqa0I06TWaTw4SO5BuPJJZI4uznKqzHuCzRxVqeR+bf8YpwiRWyxZn78oV7diiAwLEUenyIutcmZUv5z48x0OaPwdHpzxu4iaLaqjjyYZWYo8scyPV7e+fLNo8yE0KTtJtpUVwXRcV3P5H33NPVEQ3gmRjrp2nLRwF6QcG8nxGoU49ftMkjplUsk2OWJkaJvxXOWPHL5eXjK9hf6AQpX5rlO9MMWcVOQOp9EPgWB7rDvYxw="[0m
+     [2mArgs IN:[0m
+      {
+        "query": "founder of Fram Design"
+      }
+     [2mGenerating embedding... (NaNs)[0m
+     [2mExecuting vector search... (NaNs)[0m
+     [2mTotal: 0.6s[0m
+     [2mArgs OUT:[0m
+      {
+        "results": [
+          {
+            "id": "person:fram",
+            "type": "person",
+            "title": "Fram",
+            "snippet": "id: \"person:fram\"\ntype: \"person\"\ntitle: \"Fram\"\naliases: [\"Fram the polar bear\"]\nroles: [\"Guardian\",\"Representative\"]\naffiliation: \"lab:fram_design\"\nlocation: {\"country\":\"Arctic\"}\n\n\n## Overview\n\nFram i...",
+            "score": 0.6993141,
+            "source_type": "kb_document",
+            "last_updated": null,
+            "metadata": {
+              "file_path": "people/fram.md",
+              "chunk_index": 0,
+              "total_chunks": 3,
+              "type": "person",
+              "aliases": "[\"Fram the polar bear\"]",
+              "roles": "[\"Guardian\",\"Representative\"]",
+              "affiliation": "lab:fram_design",
+              "location": "{\"country\":\"Arctic\"}"
+            }
+          },
+          {
+            "id": "lab:fram_design",
+            "type": "lab",
+            "title": "FRAM Design",
+            "snippet": "id: \"lab:fram_design\"\ntype: \"lab\"\ntitle: \"FRAM Design\"\naliases: [\"FRAM\",\"Fram\"]\nlegal_name: \"FRAM Design\"\nbased_in: {\"region\":\"Europe\"}\nfounders: [\"person:andrei_clodius\"]\nteam: {\"size\":\"small\",\"compo...",
+            "score": 0.695009,
+            "source_type": "kb_document",
+            "last_updated": null,
+            "metadata": {
+              "file_path": "lab/fram_design.md",
+              "chunk_index": 0,
+              "total_chunks": 5,
+              "type": "lab",
+              "aliases": "[\"FRAM\",\"Fram\"]",
+              "legal_name": "FRAM Design",
+              "based_in": "{\"region\":\"Europe\"}",
+              "founders": "[\"person:andrei_clodius\"]",
+              "team": "{\"size\":\"small\",\"composition\":\"senior\"}",
+              "focus": "[\"product design\",\"software systems\",\"AI-native interactions\",\"digital experiences\"]",
+              "engagement_modes": "[\"product_studio\",\"consulting\"]",
+              "contacts": "{\"email\":\"andrei@fram.design\",\"website\":\"https://fram.design\"}",
+              "contact_policy": "{\"preferred\":\"email\",\"notes\":\"General inquiries and project discussions\"}"
+            }
+          },
+          {
+            "id": "asset:fram_photo_001",
+            "type": "photo",
+            "title": "Photo of Fram",
+            "snippet": "Photo of Fram\nBlack and white artistically rendered photograph of Fram, a polar bear who guards and represents FRAM Design. The image features a minimalist, high-contrast style showing Fram in profile...",
+            "score": 0.67149687,
+            "source_type": "kb_document",
+            "last_updated": null,
+            "metadata": {
+              "path": "/kb-assets/fram/photo of fram.png",
+              "caption": "Photo of Fram, the polar bear",
+              "blob_id": "fram/photo-of-fram",
+              "file_extension": "png",
+              "storage_provider": "gcs",
+              "tags": "[\"fram\",\"polar-bear\",\"photo\",\"black-white\",\"artistic\",\"minimalist\",\"portrait\",\"mascot\"]",
+              "related_entities": "[\"person:fram\",\"lab:fram_design\"]",
+              "format": "png",
+              "source": "FRAM Design portfolio",
+              "markdown": "![Photo of Fram, the polar bear](https://storage.googleapis.com/framdesign-assets/assets/fram/photo-of-fram.png?GoogleAccessId=vertex-express%40fram-design-website.iam.gserviceaccount.com&Expires=1770201701&Signature=KMroB%2FcIcwbziWDl2QQkvOUjYna%2BklHXLHrKdf1WfYh61q9ITfM35FV%2B2GEGAXdBq5Rvc5vi39Nenz9%2Fk6JH90Ep6giCi1TnkEo%2FVbaOvI78JMpf2tn5lUA7XA5qHqIGkzliczit7XJnjjVfJJwSrTmhdjLzO4EN%2Fz8v9tohyZS7jIgVrqe649eW9zmtKelUPr0w6ZKQmrSRfogyvlkhsaoHHJYBAndx3uLgTOsYl%2BK5NZCd9fF4GNC8DNLy8DzGd9TFd%2BmQ%2B04n%2Fd8%2FHFvglyfGtqFi8ZOwZ0yLzkv%2F109kaTnKLTjMMENUl2gAwvSYWktf1r%2BDg1F5UNy2EUYPFQ%3D%3D)",
+              "url": "https://storage.googleapis.com/framdesign-assets/assets/fram/photo-of-fram.png?GoogleAccessId=vertex-express%40fram-design-website.iam.gserviceaccount.com&Expires=1770201701&Signature=KMroB%2FcIcwbziWDl2QQkvOUjYna%2BklHXLHrKdf1WfYh61q9ITfM35FV%2B2GEGAXdBq5Rvc5vi39Nenz9%2Fk6JH90Ep6giCi1TnkEo%2FVbaOvI78JMpf2tn5lUA7XA5qHqIGkzliczit7XJnjjVfJJwSrTmhdjLzO4EN%2Fz8v9tohyZS7jIgVrqe649eW9zmtKelUPr0w6ZKQmrSRfogyvlkhsaoHHJYBAndx3uLgTOsYl%2BK5NZCd9fF4GNC8DNLy8DzGd9TFd%2BmQ%2B04n%2Fd8%2FHFvglyfGtqFi8ZOwZ0yLzkv%2F109kaTnKLTjMMENUl2gAwvSYWktf1r%2BDg1F5UNy2EUYPFQ%3D%3D"
+            }
+          }
+        ],
+        "total_found": 3,
+        "query": "founder of Fram Design",
+        "filters_applied": null,
+        "clamped": true,
+        "_instructions": "KB search complete. Found 3 unique entities. ❌ No pixel data included. For visual analysis, call kb_get with include_image_data: true for the specific asset ID. To show assets, use the provided 'metadata.markdown' fields.",
+        "_timing": {
+          "total": 557,
+          "embedding": 323,
+          "search": 150,
+          "processing": 84
+        }
+      }
+
+
+[32mFinal Response:[0m
+"Andrei Clodius founded Fram Design. Fram, the polar bear, is the guardian and representative of the lab."
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[1mQuestion 3/17: "Give me Andrei's email"[0m
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+
+[35m📋 Context Stack:[0m
+  • System prompt: core.md + 7 tools
+  • Chat history: 7 agent-user turns (5 total)
+  • Message summary: None (no compacting)
+  • Cached content: Yes
+  • Tokens (tiktoken): 135 local / 179 server
+
+
+[1m[Step 1] Agent Response[0m
+
+  └─ [34mTool Call: kb_search[0m
+     [3mthought: "CiQBcsjafFSgOf8mUO4v2ZqgHIVyiqXrEkJ2OjlxWVQMhdpaPwEKawFyyNp8PrZX9UIQRz2dAvsJEyqYdNJagezKw3xEEzds06ZSPKPa0G7KhD+rUWZYhZuJNIdXNBV0M8uZZLmAJ+amu98nBW1T+m/rm0I+/yguhjfsu+2slx6C0ne9wOSOh7IZ0Il0ns6fHPkVCsUBAXLI2nwOilg0LqiRh2ZAWn6iCXS+D15qUJ4VKfAN708RNDRh5gQndkb67/SmFZmKStvxMfILgyQ/mxiCA+9w/NL1YClR0q749pmn/cYfGwP6DMccpQ6DgKF90wy47B1d7m1TZe4CcwkvWDFkhBqmv9MtNGCZVC3Xla4tAtJ4u8gBs6K9TY7BXXg0HeaDHfvipPJlvTEPuFBm5z1G8eEmyQp65YdMRU54389m90w+nbB8UbUwMWqg6NLV8xWwaRMr8mJa4xI="[0m
+     [2mArgs IN:[0m
+      {
+        "query": "Andrei Clodius",
+        "filters": {
+          "type": "person"
+        }
+      }
+     [2mGenerating embedding... (NaNs)[0m
+     [2mExecuting vector search... (NaNs)[0m
+     [2mTotal: 0.3s[0m
+     [2mArgs OUT:[0m
+      {
+        "results": [
+          {
+            "id": "person:andrei_clodius",
+            "type": "person",
+            "title": "Andrei Clodius",
+            "snippet": "id: \"person:andrei_clodius\"\ntype: \"person\"\ntitle: \"Andrei Clodius\"\naliases: [\"Andrei\"]\nroles: [\"Founder\"]\naffiliation: \"studio:fram_design\"\nlocation: {\"country\":\"Romania\"}\neducation: [{\"degree\":\"Indus...",
+            "score": 0.6771053,
+            "source_type": "kb_document",
+            "last_updated": null,
+            "metadata": {
+              "file_path": "people/andrei_clodius.md",
+              "chunk_index": 0,
+              "total_chunks": 12,
+              "type": "person",
+              "aliases": "[\"Andrei\"]",
+              "roles": "[\"Founder\"]",
+              "affiliation": "studio:fram_design",
+              "location": "{\"country\":\"Romania\"}",
+              "education": "[{\"degree\":\"Industrial Design\",\"institution\":\"Politecnico di Milano\"}]",
+              "experience": "[{\"company\":\"Leroy Merlin\",\"role\":\"Industrial Designer\"},{\"company\":\"HAX (HAXLR8R)\",\"role\":\"Digital Product Designer\",\"location\":\"Shenzhen, China\",\"period\":\"2014-2015\"},{\"company\":\"Vector Watch\",\"role\":\"Industrial Designer / UX Designer\",\"location\":\"Bucharest, Romania\",\"period\":\"2015-2017\",\"outcome\":\"Acquired by Fitbit\"},{\"company\":\"Fitbit\",\"role\":\"Product Designer\",\"location\":\"Bucharest, Romania\",\"period\":\"2017-2018\"},{\"company\":\"ING Bank\",\"role\":\"Principal Product Designer\",\"period\":\"2018-2019\"},{\"company\":\"Neobility\",\"role\":\"Design Director\",\"location\":\"Bucharest, Romania\",\"period\":\"2019-2022\"},{\"company\":\"Playable Studios\",\"role\":\"Studio Director\",\"period\":\"2022-2025\"},{\"company\":\"UiPath\",\"role\":\"Lead Product Designer\",\"period\":\"2025-2026\"},{\"company\":\"FRAM Design\",\"role\":\"Founder\",\"period\":\"2025-present\"}]",
+              "contacts": "{\"email\":\"andrei@fram.design\",\"linkedin\":\"https://www.linkedin.com/in/andrei-clodius-41568654/\"}",
+              "contact_policy": "{\"preferred\":\"email or LinkedIn\",\"notes\":\"Direct contact for collaboration and studio-related inquiries\"}"
+            }
+          },
+          {
+            "id": "person:fram",
+            "type": "person",
+            "title": "Fram",
+            "snippet": "Fram is adaptable in style but unchanging in substance. A predator at the top of the food chain, when disrespected, Fram can and will get aggressive. Fram is calm by choice, not by weakness.\n\n## Role\n...",
+            "score": 0.48630536,
+            "source_type": "kb_document",
+            "last_updated": null,
+            "metadata": {
+              "file_path": "people/fram.md",
+              "chunk_index": 1,
+              "total_chunks": 3,
+              "type": "person",
+              "aliases": "[\"Fram the polar bear\"]",
+              "roles": "[\"Guardian\",\"Representative\"]",
+              "affiliation": "lab:fram_design",
+              "location": "{\"country\":\"Arctic\"}"
+            }
+          }
+        ],
+        "total_found": 2,
+        "query": "Andrei Clodius",
+        "filters_applied": {
+          "type": "person"
+        },
+        "clamped": true,
+        "_instructions": "KB search complete. Found 2 unique entities. ❌ No pixel data included. For visual analysis, call kb_get with include_image_data: true for the specific asset ID. To show assets, use the provided 'metadata.markdown' fields.",
+        "_timing": {
+          "total": 303,
+          "embedding": 248,
+          "search": 54,
+          "processing": 1
+        }
+      }
+
+
+[32mFinal Response:[0m
+"Andrei's email is andrei@fram.design."
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[1mQuestion 4/17: "Give me Andrei's linkedin account"[0m
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+
+[35m📋 Context Stack:[0m
+  • System prompt: core.md + 7 tools
+  • Chat history: 11 agent-user turns (7 total)
+  • Message summary: None (no compacting)
+  • Cached content: Yes
+  • Tokens (tiktoken): 154 local / 225 server
+
+
+[1m[Step 1] Agent Response[0m
+
+  └─ [34mTool Call: query_tool_memory[0m
+     [3mthought: "CmQBcsjafOdeKVbWib+zcSJmdRCIc78ISorcgB5g56sIhovKyeHHEBRyVRbLxXmrPO++rAhCjQ3Vnz6qXg1oBjyfHj0M742ru68Lap/jvXLaC4saOMpxix/n4hOU67SZMFix89/mCowCAXLI2nzI2MRgMF+u71XGl3u4oz3lDDNvZediFBIVa0Hfxz5sYsFHjX5xbz4+lfD0MBddn+jNyENUztEx4k6z0hOY1M2Rnn/Lsxj2sX8PEoAl86XKCLBnTw1/aTVKi1utG7OmlO/x/PI5t7tDWKsmsjPzLvdsC4Srpy8Doij/4XrQR7MX+gmPCAHfN7epr2FsnFeqV8wRls0NelS7Zz9sbF07nTLG6rOuFZRZANrTbQKREKAJAV79ujQsM6yRzSxo0yQT5W4KMMJCMUbsoUCiV0O4UmVg5gat680J18e9BcrsBd3dvzCepufeE52mgUMd6xCASbkl7z296w82C5ypU+aRNtJHRaQe2VqabQqBAQFyyNp8GNsVN0wgjqQ31stnFf6NICIeIRYEeb7+k93TZfOoAXVTHZYHDvg6jSNvaxdPQ5623yyGDPxlu2gvpWazpMrSi59jXnele9JEPyOKhNKjz0f6RsSN/iF27vE+Vacae3t2ehXeoey7NiAEGewNQa+kOLQZJCTkOpeOYvanwA=="[0m
+     [2mArgs IN:[0m
+      {
+        "filter_time_range": "last_turn",
+        "filter_tool": "kb_search",
+        "get_full_response_for": "call-1769597334460-12s384b0j"
+      }
+     [31mError: No full response available for call_id: call-1769597334460-12s384b0j.[0m
+
+
+  └─ [34mTool Call: kb_search[0m
+     [2mArgs IN:[0m
+      {
+        "query": "Andrei Clodius LinkedIn",
+        "filters": {
+          "type": "person"
+        }
+      }
+     [2mGenerating embedding... (NaNs)[0m
+     [2mExecuting vector search... (NaNs)[0m
+     [2mTotal: 0.3s[0m
+     [2mArgs OUT:[0m
+      {
+        "results": [
+          {
+            "id": "person:andrei_clodius",
+            "type": "person",
+            "title": "Andrei Clodius",
+            "snippet": "id: \"person:andrei_clodius\"\ntype: \"person\"\ntitle: \"Andrei Clodius\"\naliases: [\"Andrei\"]\nroles: [\"Founder\"]\naffiliation: \"studio:fram_design\"\nlocation: {\"country\":\"Romania\"}\neducation: [{\"degree\":\"Indus...",
+            "score": 0.7206438,
+            "source_type": "kb_document",
+            "last_updated": null,
+            "metadata": {
+              "file_path": "people/andrei_clodius.md",
+              "chunk_index": 0,
+              "total_chunks": 12,
+              "type": "person",
+              "aliases": "[\"Andrei\"]",
+              "roles": "[\"Founder\"]",
+              "affiliation": "studio:fram_design",
+              "location": "{\"country\":\"Romania\"}",
+              "education": "[{\"degree\":\"Industrial Design\",\"institution\":\"Politecnico di Milano\"}]",
+              "experience": "[{\"company\":\"Leroy Merlin\",\"role\":\"Industrial Designer\"},{\"company\":\"HAX (HAXLR8R)\",\"role\":\"Digital Product Designer\",\"location\":\"Shenzhen, China\",\"period\":\"2014-2015\"},{\"company\":\"Vector Watch\",\"role\":\"Industrial Designer / UX Designer\",\"location\":\"Bucharest, Romania\",\"period\":\"2015-2017\",\"outcome\":\"Acquired by Fitbit\"},{\"company\":\"Fitbit\",\"role\":\"Product Designer\",\"location\":\"Bucharest, Romania\",\"period\":\"2017-2018\"},{\"company\":\"ING Bank\",\"role\":\"Principal Product Designer\",\"period\":\"2018-2019\"},{\"company\":\"Neobility\",\"role\":\"Design Director\",\"location\":\"Bucharest, Romania\",\"period\":\"2019-2022\"},{\"company\":\"Playable Studios\",\"role\":\"Studio Director\",\"period\":\"2022-2025\"},{\"company\":\"UiPath\",\"role\":\"Lead Product Designer\",\"period\":\"2025-2026\"},{\"company\":\"FRAM Design\",\"role\":\"Founder\",\"period\":\"2025-present\"}]",
+              "contacts": "{\"email\":\"andrei@fram.design\",\"linkedin\":\"https://www.linkedin.com/in/andrei-clodius-41568654/\"}",
+              "contact_policy": "{\"preferred\":\"email or LinkedIn\",\"notes\":\"Direct contact for collaboration and studio-related inquiries\"}"
+            }
+          },
+          {
+            "id": "person:fram",
+            "type": "person",
+            "title": "Fram",
+            "snippet": "id: \"person:fram\"\ntype: \"person\"\ntitle: \"Fram\"\naliases: [\"Fram the polar bear\"]\nroles: [\"Guardian\",\"Representative\"]\naffiliation: \"lab:fram_design\"\nlocation: {\"country\":\"Arctic\"}\n\n\n## Overview\n\nFram i...",
+            "score": 0.50356436,
+            "source_type": "kb_document",
+            "last_updated": null,
+            "metadata": {
+              "file_path": "people/fram.md",
+              "chunk_index": 0,
+              "total_chunks": 3,
+              "type": "person",
+              "aliases": "[\"Fram the polar bear\"]",
+              "roles": "[\"Guardian\",\"Representative\"]",
+              "affiliation": "lab:fram_design",
+              "location": "{\"country\":\"Arctic\"}"
+            }
+          }
+        ],
+        "total_found": 2,
+        "query": "Andrei Clodius LinkedIn",
+        "filters_applied": {
+          "type": "person"
+        },
+        "clamped": true,
+        "_instructions": "KB search complete. Found 2 unique entities. ❌ No pixel data included. For visual analysis, call kb_get with include_image_data: true for the specific asset ID. To show assets, use the provided 'metadata.markdown' fields.",
+        "_timing": {
+          "total": 299,
+          "embedding": 239,
+          "search": 60,
+          "processing": 0
+        }
+      }
+
+
+[32mFinal Response:[0m
+"My apologies. I attempted to retrieve Andrei's LinkedIn from my memory, but the system reported an issue: "No full response available for call_id: call-1769597334460-12s384b0j."
+
+I will search for it again.
+---STATUS---
+{"status":"Looking more into Andrei Clodius LinkedIn"}
+---ENDSTATUS---
+My apologies, the attempt to retrieve the full response from memory for the previous call failed. The error was "No full response available for call_id: call-1769597334460-12s384b0j.".
+
+However, I can still provide Andrei's LinkedIn: https://www.linkedin.com/in/andrei-clodius-41568654/"
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[1mQuestion 5/17: "What projects has Fram worked on?"[0m
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+
+[35m📋 Context Stack:[0m
+  • System prompt: core.md + 7 tools
+  • Chat history: 17 agent-user turns (9 total)
+  • Message summary: None (no compacting)
+  • Cached content: Yes
+  • Tokens (tiktoken): 308 local / 379 server
+
+
+[1m[Step 1] Agent Response[0m
+
+  └─ [34mTool Call: kb_search[0m
+     [3mthought: "CmQBcsjafOCFkyLpBecEZb7zDScbrP7wQA/1ewN9f6LJRzSVqfhEi1IOBEYYpa9Ops32mTaLgdWp8+e7ltBxPeoK1Yv/sJufMmezBoVSNH/hLqxnnk0MMZ4gqKCOnmvxnUcc5VliCo8CAXLI2nwN3LV/kb35S7RboT1eEP2bHcNbU+sbtRS5wyeL2FmA7Gu9jybr5MGKl75f9+Gxefku762tUo8KDyDP1LOxoQ92FsRnZwhrjA9rLvV/8DmuEP48RlFGf/fCwXMeo0feg0pLy929dMSMbRZr9aGJV4O5jMiP5JlYOBAntfDFziYzZ7pUGrA02ol5ruUAoBKi+iTkWkIqzipfwp7mzMJ5daFaJRJEpbRUQfGsFMISfFotiwaQr5KQNYTaRaJmyECZOECLEJuF0lai72FK4zK5Rd9PhsGA6ED5HgwPWuUUUdUVeZkXiIX0KzkDK/aeX1yT/Mgwf8OnxZLFE3Do2EOswvGUdidnW37MWVd5AgqCAQFyyNp8T5lksiO+BRFITAXIRQBL5LA6lPiGpI9Jfn7J6RP17peisPE+XSeQxQAXorPBfGnIVG89UNMwNwYrKCNGa2AFdwuxYfSprEcHHH5ZvxIB6xuqo6mxtCux6IE14SgUM4J37Gw9inI+iPvbKYVsTtv8BTEE4h1vbWDy1M0bShs="[0m
+     [2mArgs IN:[0m
+      {
+        "query": "Fram Design projects",
+        "filters": {
+          "type": "project"
+        }
+      }
+     [2mGenerating embedding... (NaNs)[0m
+     [2mExecuting vector search... (NaNs)[0m
+     [2mTotal: 0.3s[0m
+     [2mArgs OUT:[0m
+      {
+        "results": [
+          {
+            "id": "project:vector_watch",
+            "type": "project",
+            "title": "Vector Watch",
+            "snippet": "product into a B2C wearables platform through developer tools and user customization.\n\nThese capabilities inform FRAM's later work on mobile applications, design systems, and agent-driven experiences.",
+            "score": 0.63507175,
+            "source_type": "kb_document",
+            "last_updated": null,
+            "metadata": {
+              "file_path": "project/vector_watch_project.md",
+              "chunk_index": 6,
+              "total_chunks": 7,
+              "type": "project",
+              "aliases": "[\"Vector Watch\"]",
+              "status": "shipped",
+              "period": "2014-2017",
+              "client": "internal",
+              "team": "[\"person:andrei_clodius\"]",
+              "domains": "[\"wearables\",\"mobile\",\"IoT\"]",
+              "links": "{\"website\":\"https://vectorwatch.com\"}"
+            }
+          },
+          {
+            "id": "project:autopilot_uipath",
+            "type": "project",
+            "title": "UiPath Autopilot",
+            "snippet": "grations that feel seamless and trustworthy.\n- Mapping complex workflows into intuitive agent-based experiences.\n- Developing design systems for AI-native interfaces and conversational UI components.\n...",
+            "score": 0.62591815,
+            "source_type": "kb_document",
+            "last_updated": null,
+            "metadata": {
+              "file_path": "project/autopilot_uipath_project.md",
+              "chunk_index": 9,
+              "total_chunks": 10,
+              "type": "project",
+              "aliases": "[\"Autopilot\",\"UiPath Autopilot\"]",
+              "status": "ongoing",
+              "period": "2025-2026",
+              "client": "UiPath",
+              "team": "[\"person:andrei_clodius\"]",
+              "domains": "[\"AI\",\"enterprise\",\"LLM\",\"agentic-automation\",\"conversational-UI\"]"
+            }
+          },
+          {
+            "id": "project:desktop_agent_uipath",
+            "type": "project",
+            "title": "UiPath Desktop Agent",
+            "snippet": "different languages, demonstrated through Japanese interface explorations.\n- **Color studies**: Visual explorations of color palettes and brand identity for the Desktop Agent interface.\n\n## Outcomes\n\n...",
+            "score": 0.60657215,
+            "source_type": "kb_document",
+            "last_updated": null,
+            "metadata": {
+              "file_path": "project/desktop_agent_uipath_project.md",
+              "chunk_index": 5,
+              "total_chunks": 8,
+              "type": "project",
+              "aliases": "[\"Desktop Agent\",\"Delegate\",\"UiPath Desktop Agent\"]",
+              "status": "ongoing",
+              "period": "2024-2025",
+              "client": "UiPath",
+              "team": "[\"person:andrei_clodius\"]",
+              "domains": "[\"AI\",\"enterprise\",\"automation\",\"desktop-app\",\"agentic-automation\",\"conversational-UI\"]",
+              "metadata": "{\"code_name\":\"Delegate\"}"
+            }
+          }
+        ],
+        "total_found": 3,
+        "query": "Fram Design projects",
+        "filters_applied": {
+          "type": "project"
+        },
+        "clamped": true,
+        "_instructions": "KB search complete. Found 3 unique entities. ❌ No pixel data included. For visual analysis, call kb_get with include_image_data: true for the specific asset ID. To show assets, use the provided 'metadata.markdown' fields.",
+        "_timing": {
+          "total": 311,
+          "embedding": 248,
+          "search": 63,
+          "processing": 0
+        }
+      }
+
+
+[32mFinal Response:[0m
+"Fram Design has explored a few distinct areas.
+
+One significant project was **Vector Watch**, which focused on wearables and how hardware constraints influence interaction design. It evolved into a B2C platform with developer tools and user customization.
+
+More recently, there has been work in AI-native systems, such as **UiPath Autopilot** and the **UiPath Desktop Agent**. These projects delve into integrating AI into enterprise workflows and building intuitive agent-based experiences with conversational UIs.
+
+Do any of these areas particularly pique your interest, or is there another aspect you're curious about?
+<suggestions>["Tell me more about Vector Watch", "What is AI-native design?", "How does Fram work with enterprise clients?"]</suggestions>"
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[1mQuestion 6/17: "Tell me about the Vector Watch project"[0m
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+
+[35m📋 Context Stack:[0m
+  • System prompt: core.md + 7 tools
+  • Chat history: 21 agent-user turns (11 total)
+  • Message summary: None (no compacting)
+  • Cached content: Yes
+  • Tokens (tiktoken): 465 local / 530 server
+
+
+[1m[Step 1] Agent Response[0m
+
+  └─ [34mTool Call: kb_get[0m
+     [3mthought: "CnIBcsjafOfNCfYPEBOwQtwnWHOQevLFleWhcfVuXaUc5GYG5Z+4xbRtAk6I5Pe05aZoY2blX1pdywlqDshsHQu16zNuPeYTw09ZcVrDF6Ec7LxMDi6G5l71RSZp9AyB+7UaB+qPcmDT7sOeI1B5+qd6Vy8KjAIBcsjafN+q2LNuOZffy2kJHfGXi/bsgTGHN8B4u/tgqayhiBcrBwhLien1+jGcNgVGoWVrfi3UoUumS23nAI9uJzCciGdBb1gjw9Fbl/WQ1jIzxa2U0/LYcvmI54xz4AJGxscitHeOMrhPzfOnbBa91TOroAVy0yCiizsz7vO8sCwF77RpTjwYntKGPKuCTwvXfp6B7idLXN9JLADOM7IBYxaY9Svhjdd2nrX6GGFwjOD6T2RFR0TBd6ouUWWOTVN1OOMOwsZ5k0oMU9uBXyzisw12oZtN5BWe7pA+EXrbyb9oHxRa+X4oHtVnBnTGIueksLjKCiPKfJ/6eq0OQXrsOa0Ss9mcCrpBuftECv4BAXLI2nwfKOVy4eBbNb7z8Y1WrS0R70f9xu6oEneVFCSRrqBymfLxCTijR93uOnoBLuoaHo/jUisC3zv2sdx3onzNcEp+5a7HM14h/MJm/Xu4K1c9NRdXjrctzUxTYmaeQFTG3gZdW+6EF4P1/2IRUmqkWOCGoGZj+VKmcu/4ou8aN447T6kwfMhoRc4rnGv0RVNaITr15WeDCHUEGUvLno8K3L28giV9E0Dd91Ix/Ce32aOrd9bVQm1x3iCdDI50Sr0kLcyJH6H+HYo2AYDuD3u7MqJfrfVzp797NefuOcOP9LQ5MW+NDIKYC33ts2zoH/7VoHsoF42Scu48G2gK7AEBcsjafNV9WGNG8xNEwAixIuVzz7tJ+jmRMnYUf1+EeLcLQhqUbHl0wDddDIJM1xyWbwOzKuCY6mHBVC3OY9OAyxQEhFQBIelsoal8bInVYl2DvzWcxzYUwOYlLralUCEP6f+5WZM1517Pe/vpDyLIgtJuQ1KQflaQAk5mMf50G7+fJchODZTvYXRhUfwXdWU34h8okIbsD2aUdSNhbZ+jZfMFpxsAR2FPkmBLMEHrIlwyx+RcfY0eAMFVaKl8LQT3u/DMTVTdpYqHu4mjqD5KCcjmV8pyAQTYt0qzlNwAVjUughwjc+1rv421wQrsAQFyyNp8A8JPQQUQkA0ZykCb4UgALQDXKmXuqSIJesc3wSWmBFdx7YdiI1r/NwRWz8jM+JHrN/jvgiSJ4MCLos/GaSW99ug4YbGdnVgZCnWf1XekLh2sCQJcxe5YCzzI7CTWwfDh9rUBdDKfqtpkVaLFjNvHcrAtOl+qqenXPqAmTsveMIwvMPzTTIh9mbUnoUnt4xo4aFk8hFbls88roJQm9j6F6DbmcRF4ONMhG5/+Fv818w0VoM5uyS8uVsaNDw6YdfHopQ8pyHzFm/Bqfn86QfT6oA1A8aGT+KTxfiAvx7yNpyala+onpI2xCnYBcsjafKSJ8ISmho9sBYx//1zeTmLQuWnaQDhpzeaLlHVrBqtD5qazS8arI5CaDIAWII0NsgpQbCGn3MBr8nua+WMePOUZXjKvv6Tx1yBAcEoNYYQQi9hMns3ZEaWhqJ2WV30obY36SU8CSuUEZuwGEDUE5y4O"[0m
+     [2mArgs IN:[0m
+      {
+        "id": "project:vector_watch"
+      }
+     [2mGenerating embedding... (NaNs)[0m
+     [2mExecuting vector search... (NaNs)[0m
+     [2mTotal: 0.3s[0m
+     [2mArgs OUT:[0m
+      {
+        "id": "project:vector_watch",
+        "type": "project",
+        "title": "Vector Watch",
+        "content": "id: \"project:vector_watch\"\ntype: \"project\"\ntitle: \"Vector Watch\"\naliases: [\"Vector Watch\"]\nstatus: \"shipped\"\nperiod: \"2014-2017\"\nclient: \"internal\"\nteam: [\"person:andrei_clodius\"]\ndomains: [\"wearables\",\"mobile\",\"IoT\"]\nlinks: {\"website\":\"https://vectorwatch.com\"}\n\n\n## Overview\n\nVector Watch is a consumer wearable ecosystem designed to deliver a smartwatch with multi-week battery life and a coherent mobile experience. The project focused on combining industrial design, a proprietary low-power operating system, and mobile companion apps. To achieve a long-lasting battery, the watch used a monochrome display and low-energy electronics, and the software was tuned to optimize power consumption.\n\n## Context and problem\n\nThe main value proposition for Vector Watch was an \"always-on\" wearable with a very long battery life. Achieving this required designing around strict constraints: a monochrome screen without anti-aliasing,\n\nin value proposition for Vector Watch was an \"always-on\" wearable with a very long battery life. Achieving this required designing around strict constraints: a monochrome screen without anti-aliasing, low-resolution displays (300×300 px on the round Luna model and 250×200 px on the rectangular Meridian model) and only three physical buttons for interaction. These hardware limits shaped the user interface and navigation patterns and demanded an operating system that could fine-tune energy use. Early on, Andrei Clodius and industrial designer Steve Jarvis defined design values to guide decisions and ensure coherence despite these constraints.\n\n## Role and scope\n\nAndrei played multiple roles across the hardware, software and mobile parts of the project:\n\n- **Industrial & UI design**: He collaborated on the watch's initial industrial design, focusing on button positioning, before external industrial designer Steve Jarvis refined the final form.\n\noject:\n\n- **Industrial & UI design**: He collaborated on the watch's initial industrial design, focusing on button positioning, before external industrial designer Steve Jarvis refined the final form. He established the UI navigation for both Meridian (rectangular screen) and Luna (round screen) models, designing core watch faces and apps and overseeing OS development with a team of four firmware engineers.\n- **Companion apps**: Andrei crafted the mobile experience for the iOS, Android and Windows Phone companion apps, enabling users to manage watch faces, downloads, fitness steps and notifications.\n- **Platform and tools**: He played a pivotal role in the Watchmaker platform, which allowed users to create custom watch faces and utility apps, and he helped set up best practices and frameworks for third-party app development.\n\n## What was built\n\n- **Vector OS**: A proprietary low-energy operating system that tuned power consumption for each use case and provided always-on timekeeping.\n\nworks for third-party app development.\n\n## What was built\n\n- **Vector OS**: A proprietary low-energy operating system that tuned power consumption for each use case and provided always-on timekeeping. The OS supported two screen sizes and provided consistent navigation patterns across both.\n- **Watch UI patterns**: Interaction models based on three physical buttons, with patterns for exploring lists, expanding/collapsing nested lists and navigating with up/down actions. Notifications were displayed as a subtle ring around the watch face, and users could filter which notifications were delivered via the companion app.\n- **Companion mobile apps**: Native apps for iOS, Android and Windows Phone that managed watch faces, app downloads, fitness tracking and notifications.\n- **Watchmaker platform**: A framework that enabled users and developers to build custom watch faces and utility apps, transforming Vector from a hardware product into a wearables ecosystem.\n\ncations.\n- **Watchmaker platform**: A framework that enabled users and developers to build custom watch faces and utility apps, transforming Vector from a hardware product into a wearables ecosystem.\n- **Wearable applications**: A suite of pre-installed watch faces and utility apps (up to ten slots on the watch) with instant installation via a custom Bluetooth Low Energy protocol.\n\n## Outcomes\n\nDuring the nearly three-year journey from seed investment to acquisition, Vector sold over 50,000 units, primarily the Luna model. The team developed significant technology, specialized knowledge and processes that Fitbit valued when acquiring Vector. The project demonstrated how a small team could create a low-power operating system, design compelling watch and mobile experiences under strict constraints, and nurture a developer ecosystem. The success of Vector Watch laid the groundwork for Andrei's later work on agentic automation and product ecosystems.\n\n## What this project represents\n\nconstraints, and nurture a developer ecosystem. The success of Vector Watch laid the groundwork for Andrei's later work on agentic automation and product ecosystems.\n\n## What this project represents\n\nVector Watch showcases FRAM's ability to integrate industrial design with digital interaction design and platform thinking. It highlights expertise in:\n\n- Designing products under severe hardware constraints (limited resolution, monochrome screens and button-only interaction) while preserving user experience.\n- Creating a proprietary operating system and accompanying tools for a new hardware category.\n- Building companion mobile apps that extend the hardware ecosystem and provide management features.\n- Transitioning a hardware product into a B2C wearables platform through developer tools and user customization.\n\nThese capabilities inform FRAM's later work on mobile applications, design systems, and agent-driven experiences.\n\nproduct into a B2C wearables platform through developer tools and user customization.\n\nThese capabilities inform FRAM's later work on mobile applications, design systems, and agent-driven experiences.",
+        "metadata": {
+          "type": "project",
+          "aliases": "[\"Vector Watch\"]",
+          "status": "shipped",
+          "period": "2014-2017",
+          "client": "internal",
+          "team": "[\"person:andrei_clodius\"]",
+          "domains": "[\"wearables\",\"mobile\",\"IoT\"]",
+          "links": "{\"website\":\"https://vectorwatch.com\"}"
+        },
+        "chunks_count": 7,
+        "_timing": {
+          "total": 319,
+          "embedding": 236,
+          "search": 82,
+          "processing": 1
+        }
+      }
+
+
+[32mFinal Response:[0m
+"The Vector Watch project aimed to create a smartwatch with multi-week battery life and a cohesive mobile experience. The core challenge was designing a compelling wearable despite strict hardware constraints: a monochrome, low-resolution display and only three physical buttons for interaction.
+
+This led to a proprietary low-power operating system and user interface that prioritized efficiency and longevity. The design process focused on optimizing power consumption at every level, from industrial design to software tuning.
+
+Would you like to see what these constraints looked like in practice, or perhaps understand more about the design decisions? <suggestions>["Show me images of the watch", "Tell me about the design decisions"]</suggestions>"
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[1mQuestion 7/17: "What's Andrei's background?"[0m
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+
+[35m📋 Context Stack:[0m
+  • System prompt: core.md + 7 tools
+  • Chat history: 25 agent-user turns (13 total)
+  • Message summary: None (no compacting)
+  • Cached content: Yes
+  • Tokens (tiktoken): 605 local / 673 server
+
+
+[1m[Step 1] Agent Response[0m
+
+  └─ [34mTool Call: kb_get[0m
+     [3mthought: "CmwBcsjafOPIuGE1sfjmaQtXIbJLUgKPGkHa8VohX0smzuxOy8O2kk7s/xJE8vizLkRimPXGlHUqtR7iCi0p4h3Z0gwNPuWrrkGxds6T6s/f78yc0V/1d+K0nYwB+YpqDFqE09KvW7Vz786iDfYK/gEBcsjafPlaq54WaeJlhQyJe/aXmDmFzTDHn/7YawbLWvUFrdKhLZjHotDTJl2cesVH/kqBZ0cw8u4rlowxYhqpwYkC9mXVyCLSXgBlZBG5dBoRlVEsqeLX++qQlwJSkstRx+1fapIO5/Ig4+4stYD97A3TnqcsTIpW0KIN4FlJ5ruzSGQJMtZyRCS1DnNgIyM4HAjsncliWi5BoqZYaDNwYTkwB4vpU9SicpyOxPEsblAyTtgijo5x6d1n+zukdHHTIQxDJPgmw4gp9aZ3VS/ihU6nYjsCPBk8iguj4lpVVtoPXnwww2J/iTPO4oR5Is7NZWvGX1kA6XI6QumDgAr0AQFyyNp8XJnNtKkjiyBhWCF7oB9jYn7q+Au5yad5z3Awn1fYroCmY5JS1Mc/fRzugozUCmyWD7JSAY3SqYyfh0YnFjPpBJpFCKN7ArIBnc8kXAK/KBI8tJRgj3Ex5demOXnXWflvjECmYCLu55JK6YXMytLSzjelAVNoc6lx4brLZsmvMI8D+eor0oSA2AKV+UpUr9mYTBLbMrzLudKIElnJDLQYGZ91WQwxjaZlIQkNnRHSobtca7rH8gynlA/C9LncfzklxCKBp9Gmd05MCiVziRI855MXcAEtPlQyRaDT2z2BDBRdLBxBvz8zMz8TDEtGwVEKeAFyyNp8wpPBosnEGnmQ4+uw5VGtfyPFR2Slyp1neV29O/FJwUJ1gOywe393rVC9W0mLz5qqi7Z1zb3XXwDOAQKH3r3a9Te4j70gGl+wf3rQsE0TUpigEBipdQ+VeBvyn91jmqneurkyWBwZh/EzAXAen7mmvt9mVg=="[0m
+     [2mArgs IN:[0m
+      {
+        "id": "person:andrei_clodius"
+      }
+     [2mGenerating embedding... (NaNs)[0m
+     [2mExecuting vector search... (NaNs)[0m
+     [2mTotal: 0.3s[0m
+     [2mArgs OUT:[0m
+      {
+        "id": "person:andrei_clodius",
+        "type": "person",
+        "title": "Andrei Clodius",
+        "content": "id: \"person:andrei_clodius\"\ntype: \"person\"\ntitle: \"Andrei Clodius\"\naliases: [\"Andrei\"]\nroles: [\"Founder\"]\naffiliation: \"studio:fram_design\"\nlocation: {\"country\":\"Romania\"}\neducation: [{\"degree\":\"Industrial Design\",\"institution\":\"Politecnico di Milano\"}]\nexperience: [{\"company\":\"Leroy Merlin\",\"role\":\"Industrial Designer\"},{\"company\":\"HAX (HAXLR8R)\",\"role\":\"Digital Product Designer\",\"location\":\"Shenzhen, China\",\"period\":\"2014-2015\"},{\"company\":\"Vector Watch\",\"role\":\"Industrial Designer / UX Designer\",\"location\":\"Bucharest, Romania\",\"period\":\"2015-2017\",\"outcome\":\"Acquired by Fitbit\"},{\"company\":\"Fitbit\",\"role\":\"Product Designer\",\"location\":\"Bucharest, Romania\",\"period\":\"2017-2018\"},{\"company\":\"ING Bank\",\"role\":\"Principal Product Designer\",\"period\":\"2018-2019\"},{\"company\":\"Neobility\",\"role\":\"Design Director\",\"location\":\"Bucharest, Romania\",\"period\":\"2019-2022\"},{\"company\":\"Playable Studios\",\"role\":\"Studio Director\",\"period\":\"2022-2025\"},{\"company\":\"UiPath\",\"role\":\"Lead Product Designer\",\"period\":\"2025-2026\"},{\"company\":\"FRAM\n\n, Romania\",\"period\":\"2019-2022\"},{\"company\":\"Playable Studios\",\"role\":\"Studio Director\",\"period\":\"2022-2025\"},{\"company\":\"UiPath\",\"role\":\"Lead Product Designer\",\"period\":\"2025-2026\"},{\"company\":\"FRAM Design\",\"role\":\"Founder\",\"period\":\"2025-present\"}]\ncontacts: {\"email\":\"andrei@fram.design\",\"linkedin\":\"https://www.linkedin.com/in/andrei-clodius-41568654/\"}\ncontact_policy: {\"preferred\":\"email or LinkedIn\",\"notes\":\"Direct contact for collaboration and studio-related inquiries\"}\n\n\n## Bio\nAndrei Clodius is the founder of FRAM Design. He lives in Romania and studied Industrial Design at Politecnico di Milano.\n\nHis early work focused on hardware and emerging technology products, including time spent in China with HAXLR8R and at Vector Watch, which was later acquired by Fitbit. More recently, he has worked with UiPath on agentic automation and AI-native systems.\n\nHis practice focuses on the form and behavior of digital surfaces and systems, and on how these benefit the collective.\n---\n\n## Background\n\ned with UiPath on agentic automation and AI-native systems.\n\nHis practice focuses on the form and behavior of digital surfaces and systems, and on how these benefit the collective.\n---\n\n## Background\n\n### Leroy Merlin\nAndrei worked as an Industrial Designer on smart thermostats and chairs.\n\n### HAX (HAXLR8R)\nAt HAX in Shenzhen, China (2014–2015), Andrei supported product ideation, visited factories, met with suppliers, and built prototypes as part of the hardware accelerator program. This period emphasized working under physical constraints, tight iteration loops, and close coupling between design and engineering.\n\n### Vector Watch\nAndrei was one of the first five employees at Vector Watch (2015–2017). He worked on device OS design for the company's two smartwatches and Vector's mobile experience. He led discovery on Vector's Creator apps for iPhone and iPad and a sport-centric Vector Activity mobile app. Vector sold around 100,000 watches before being acquired by Fitbit, which was itself later acquired by Google.\n\nector's Creator apps for iPhone and iPad and a sport-centric Vector Activity mobile app. Vector sold around 100,000 watches before being acquired by Fitbit, which was itself later acquired by Google.\n\n### Fitbit\nAt Fitbit (2017–2018), Andrei managed and mentored a team of three design contractors, leading UX for 30 second-party apps on Fitbit Ionic, Versa, and Charge 3. He launched 18 apps for Fitbit OS's first update, each generating approximately $200k in indirect revenue. Notable wearable apps include Nest, Strava, and Surfline.\n\n### ING Bank\nAs Principal Product Designer (2018–2019), Andrei pitched and led the successful redesign of ING HomeBank's mobile application, resulting in one million active users ahead of projections. The redesign shifted the mobile user segment from 70% to 90% of total users within a year. Key elements included a new navigation system and information hierarchy.\n\nactive users ahead of projections. The redesign shifted the mobile user segment from 70% to 90% of total users within a year. Key elements included a new navigation system and information hierarchy.\n\n### Neobility\nAs Design Director (2019–2022), Andrei directed all product design and experimentation, leading a team of five designers and front-end developers. He was instrumental in the company's inception, establishing design processes and launching the first app version. He released five updates, increasing daily active users to 10,000. Key contributions include the development of Universal Unlock.\n\n### Playable Studios\nAs Studio Director (2022–2025), Andrei led a team of five domain experts spanning brand design, UX, and front-end development. The studio focused on rapidly scaling mobile-first products, driving discovery sessions with founders, and iterating using scalable techniques and technologies. The studio partnered only with startups of fewer than 60 people.\n\nidly scaling mobile-first products, driving discovery sessions with founders, and iterating using scalable techniques and technologies. The studio partnered only with startups of fewer than 60 people. Notable projects include Superpost, an AI-assisted article writing tool.\n\n### UiPath\nAs Lead Product Designer (2025–2026), Andrei built multiple agent-driven products, focusing on AI design patterns and components, immersive conversational interfaces, and agentic experiences.\n\n### FRAM Design\nAndrei founded FRAM Design in 2025 as a product lab focused on digital systems, agent-owned interfaces, and AI-native product development.\n\n---\n\n## Principles and viewpoints\n### On design\nDesign is the act of orchestrating, through taste, craft and technology, the way people interact with physical and digital artifacts. Historically, these artifacts were made by humans, but going forward designers will need to move toward steering intent and constraints rather than shaping individual output.\n\nal and digital artifacts. Historically, these artifacts were made by humans, but going forward designers will need to move toward steering intent and constraints rather than shaping individual output. Craft will always be a part of design, regardless of the level of abstraction involved.\n\n### On technology\nTechnology is not limited to computers or software. Ever since humans harnessed fire, technology has shaped behavior and cognition. Contemporary systems have placed humans in a new dual state of both using and being used by technology. This perspective informs how Andrei approaches the design of tools meant for sustained human use.\n\n### On AI\nAI is most effective when it enables growth, exploration, and increased personal or collective agency. Its value lies in extending capability and creative bandwidth rather than replacing judgment.\n\n### On art\nArt's main role is to clarify and surface, even by force, the core themes of our human condition and experience. One recurring theme is humanity's relationship with truth.\n\nlacing judgment.\n\n### On art\nArt's main role is to clarify and surface, even by force, the core themes of our human condition and experience. One recurring theme is humanity's relationship with truth. Art needs to pierce through time: real art can communicate and generate the same introspective reaction for a person born in 1620 or 2020. \n\n---\n\n## Answer patterns\n### When asked about tools or frameworks\nAndrei tends to avoid emphasizing specific tools unless they are contextually necessary. He prefers to discuss underlying principles, system structure, and trade-offs that remain relevant beyond any single framework.\n\n\n### When asked about process\nHe frames process in terms of continuous feedback loops between stakeholders, users, and systems. Iteration is treated as a means of refining quality rather than maximizing feature output. Speed is considered valuable only insofar as it supports better outcomes.\n\nstakeholders, users, and systems. Iteration is treated as a means of refining quality rather than maximizing feature output. Speed is considered valuable only insofar as it supports better outcomes.\n\n### When asked about trends\nHe views trends as a natural part of cultural evolution. While often short-lived, they are not dismissed outright; instead, he evaluates what lasting signals may persist after attention moves on.\n\n---\n\n## Topics of recurring interest\n- Dynamic design systems\n- Agent-owned interfaces\n- Animation-driven interactions\n- Code as a sculptural material\n- Design and arts history\n- Deep tech\n- Centrist politics\n- Classical philosophy\n- The failings of open offices \n\n---\n\n## Andrei's Personal Notes  (non-authoritative)\n\nThis section contains personal reflections and phrasing that may change over time.\nThese notes inform tone but should not be quoted verbatim in responses.\n\n### Life\n\nrsonal Notes  (non-authoritative)\n\nThis section contains personal reflections and phrasing that may change over time.\nThese notes inform tone but should not be quoted verbatim in responses.\n\n### Life\nWhen I was small I used to look at adults like the people that have answers I don't. Sike! Nobody actually has any answers so you need to forge any path you can in order to be present in the moments that truly matter. \n### Trends\nI love trends. Everybody knows they pass and that they're shallow. Who cares? Trends are a part of culture growth and that's a net positive. \n### AI\nAI is like a hypersonic missile for our minds.\n### Thinking\nAll tools and all frameworks live and die by the context in which they are to be used. I am both a strong believer in structure and in complete freedom, based on where you are in the process of building things. \nWhat I find to be the one really important thing is **systems thinking**.\n\nI am both a strong believer in structure and in complete freedom, based on where you are in the process of building things. \nWhat I find to be the one really important thing is **systems thinking**. \nBuilding continuous feedback loops either between project phases, stakeholders or people that use the artefacts that we create is **at the core** of being able to iterate with purpose. \nContinuous iteration is super important\nSpeed is absolutely a KPI but \"shipping features\" is the absolutely the WORST outcome to focus this metric on. The only important outcome for speed is quality! You iterate to improve quality, not to ship slop faster.\n\nRST outcome to focus this metric on. The only important outcome for speed is quality! You iterate to improve quality, not to ship slop faster.",
+        "metadata": {
+          "type": "person",
+          "aliases": "[\"Andrei\"]",
+          "roles": "[\"Founder\"]",
+          "affiliation": "studio:fram_design",
+          "location": "{\"country\":\"Romania\"}",
+          "education": "[{\"degree\":\"Industrial Design\",\"institution\":\"Politecnico di Milano\"}]",
+          "experience": "[{\"company\":\"Leroy Merlin\",\"role\":\"Industrial Designer\"},{\"company\":\"HAX (HAXLR8R)\",\"role\":\"Digital Product Designer\",\"location\":\"Shenzhen, China\",\"period\":\"2014-2015\"},{\"company\":\"Vector Watch\",\"role\":\"Industrial Designer / UX Designer\",\"location\":\"Bucharest, Romania\",\"period\":\"2015-2017\",\"outcome\":\"Acquired by Fitbit\"},{\"company\":\"Fitbit\",\"role\":\"Product Designer\",\"location\":\"Bucharest, Romania\",\"period\":\"2017-2018\"},{\"company\":\"ING Bank\",\"role\":\"Principal Product Designer\",\"period\":\"2018-2019\"},{\"company\":\"Neobility\",\"role\":\"Design Director\",\"location\":\"Bucharest, Romania\",\"period\":\"2019-2022\"},{\"company\":\"Playable Studios\",\"role\":\"Studio Director\",\"period\":\"2022-2025\"},{\"company\":\"UiPath\",\"role\":\"Lead Product Designer\",\"period\":\"2025-2026\"},{\"company\":\"FRAM Design\",\"role\":\"Founder\",\"period\":\"2025-present\"}]",
+          "contacts": "{\"email\":\"andrei@fram.design\",\"linkedin\":\"https://www.linkedin.com/in/andrei-clodius-41568654/\"}",
+          "contact_policy": "{\"preferred\":\"email or LinkedIn\",\"notes\":\"Direct contact for collaboration and studio-related inquiries\"}"
+        },
+        "chunks_count": 12,
+        "_timing": {
+          "total": 314,
+          "embedding": 256,
+          "search": 57,
+          "processing": 1
+        }
+      }
+
+
+[32mFinal Response:[0m
+"Andrei Clodius, the founder of Fram Design, studied Industrial Design at Politecnico di Milano.
+
+His experience spans hardware and emerging technology, including a period with HAXLR8R in China and his work on Vector Watch, which later became part of Fitbit. More recently, his focus has shifted towards agentic automation and AI-native systems, notably with UiPath."
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[1mQuestion 8/17: "Compare Andrei's work at Fitbit and UiPath"[0m
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+
+[35m📋 Context Stack:[0m
+  • System prompt: core.md + 7 tools
+  • Chat history: 29 agent-user turns (15 total)
+  • Message summary: None (no compacting)
+  • Cached content: Yes
+  • Tokens (tiktoken): 694 local / 789 server
+
+
+[1m[Step 1] Agent Response[0m
+
+  └─ [34mTool Call: kb_get[0m
+     [3mthought: "ClwBcsjafKuxSHiuWBUNmDirUkIlvJOAyw5f4WhwFqVYDIXF1ZZz8srZzgGGGZ8o694H1wlUg2/8UZLyj9nj78vMSO7mlwE48M8fIGkRQmzsPM5HomQwyDJ8wNJJogqoAgFyyNp8Js/W4dwfl9uqUuc/O+mwOgAhvPyfVs7Jcj6sZ8z0ZY83o7Q9Y2AnZqwabfMBujAEHRIS3VxG5FRvJNyYZGlsWajWBgb1o71uVHL9dwQzcvv/gqBQ4KW1fKG2DmrJt6TBGfaSGC4g/u++oxJNlA+y1+X4IYj3GVXgvaNKMQ3Y845v5scqIbHiuPyJCBHPt97qFym3Bva4rrDAUqxFbzltdLh9w9h6RXQV+HIFyiTMhNmyj7wjHDvZlrEArRCQxBEi1b7w1lS+ul0r9n+b8LrbT0EB4XH+3uqHIeTGJF0lFvYfo8lGp+rkZFY9X9c9TnuHYiICqgAf18wAy9lzWOnAfGhzIAkEEx0AbFALm0YdwivrOHx72lsfs09Mc4Qr0qvSHfv+CvUBAXLI2nwmhJrLhoCrft56Y3T7MCF2zK7Y3hq7Kp1B2Zb4dzAFycfgXcDilT8ffFzQjXTEM2mGGTHh2rP6B0DDkbtNKnONe4iwefoo/btG5UfDfclmI9mbbMUwpHOhVToDx8hX3nUydIyIBcFfEF41FO3dQigtxTm/jj31x5cIY5rxZ5/o0AgTzDtdr15nbTscdmDbAzwJKTe9h+nF38alWjIWxHCF62ysRwwuUPYNnyvv8QUv9XXvJlE2VaMEEC9oypemIuwhvVO9bTt5dvVBAeWe1UE+aoQ2dqf1OlAn2neOsOjfay1rMhU8jT8tAgSGb1Q1wZYKtAEBcsjafMao1p7lUUawiZVuvMLtlcuCZ7t/0QgTdyo1wHKgtOG6sEK+dIJDN2E4PkEQ/zxvGgkW35Gesjh33KUjqFWs25jFm36TfTnD8iJYHNAZUcFQVi7R4aKcNJiTGtHyhdd6WgKG+mehFB0RblOSB2ubx/9Cde/7e1iFCxp9BW6x6W5XTaNj9GFHURQHWh4/i7KNwuUqMO6JsVaxOODU/OwOpbCA0ZmJ4heQlahR7cllOd8="[0m
+     [2mArgs IN:[0m
+      {
+        "id": "person:andrei_clodius"
+      }
+     [2mGenerating embedding... (NaNs)[0m
+     [2mExecuting vector search... (NaNs)[0m
+     [2mTotal: 0.0s[0m
+     [2mArgs OUT:[0m
+      {
+        "id": "person:andrei_clodius",
+        "type": "person",
+        "title": "Andrei Clodius",
+        "content": "id: \"person:andrei_clodius\"\ntype: \"person\"\ntitle: \"Andrei Clodius\"\naliases: [\"Andrei\"]\nroles: [\"Founder\"]\naffiliation: \"studio:fram_design\"\nlocation: {\"country\":\"Romania\"}\neducation: [{\"degree\":\"Industrial Design\",\"institution\":\"Politecnico di Milano\"}]\nexperience: [{\"company\":\"Leroy Merlin\",\"role\":\"Industrial Designer\"},{\"company\":\"HAX (HAXLR8R)\",\"role\":\"Digital Product Designer\",\"location\":\"Shenzhen, China\",\"period\":\"2014-2015\"},{\"company\":\"Vector Watch\",\"role\":\"Industrial Designer / UX Designer\",\"location\":\"Bucharest, Romania\",\"period\":\"2015-2017\",\"outcome\":\"Acquired by Fitbit\"},{\"company\":\"Fitbit\",\"role\":\"Product Designer\",\"location\":\"Bucharest, Romania\",\"period\":\"2017-2018\"},{\"company\":\"ING Bank\",\"role\":\"Principal Product Designer\",\"period\":\"2018-2019\"},{\"company\":\"Neobility\",\"role\":\"Design Director\",\"location\":\"Bucharest, Romania\",\"period\":\"2019-2022\"},{\"company\":\"Playable Studios\",\"role\":\"Studio Director\",\"period\":\"2022-2025\"},{\"company\":\"UiPath\",\"role\":\"Lead Product Designer\",\"period\":\"2025-2026\"},{\"company\":\"FRAM\n\n, Romania\",\"period\":\"2019-2022\"},{\"company\":\"Playable Studios\",\"role\":\"Studio Director\",\"period\":\"2022-2025\"},{\"company\":\"UiPath\",\"role\":\"Lead Product Designer\",\"period\":\"2025-2026\"},{\"company\":\"FRAM Design\",\"role\":\"Founder\",\"period\":\"2025-present\"}]\ncontacts: {\"email\":\"andrei@fram.design\",\"linkedin\":\"https://www.linkedin.com/in/andrei-clodius-41568654/\"}\ncontact_policy: {\"preferred\":\"email or LinkedIn\",\"notes\":\"Direct contact for collaboration and studio-related inquiries\"}\n\n\n## Bio\nAndrei Clodius is the founder of FRAM Design. He lives in Romania and studied Industrial Design at Politecnico di Milano.\n\nHis early work focused on hardware and emerging technology products, including time spent in China with HAXLR8R and at Vector Watch, which was later acquired by Fitbit. More recently, he has worked with UiPath on agentic automation and AI-native systems.\n\nHis practice focuses on the form and behavior of digital surfaces and systems, and on how these benefit the collective.\n---\n\n## Background\n\ned with UiPath on agentic automation and AI-native systems.\n\nHis practice focuses on the form and behavior of digital surfaces and systems, and on how these benefit the collective.\n---\n\n## Background\n\n### Leroy Merlin\nAndrei worked as an Industrial Designer on smart thermostats and chairs.\n\n### HAX (HAXLR8R)\nAt HAX in Shenzhen, China (2014–2015), Andrei supported product ideation, visited factories, met with suppliers, and built prototypes as part of the hardware accelerator program. This period emphasized working under physical constraints, tight iteration loops, and close coupling between design and engineering.\n\n### Vector Watch\nAndrei was one of the first five employees at Vector Watch (2015–2017). He worked on device OS design for the company's two smartwatches and Vector's mobile experience. He led discovery on Vector's Creator apps for iPhone and iPad and a sport-centric Vector Activity mobile app. Vector sold around 100,000 watches before being acquired by Fitbit, which was itself later acquired by Google.\n\nector's Creator apps for iPhone and iPad and a sport-centric Vector Activity mobile app. Vector sold around 100,000 watches before being acquired by Fitbit, which was itself later acquired by Google.\n\n### Fitbit\nAt Fitbit (2017–2018), Andrei managed and mentored a team of three design contractors, leading UX for 30 second-party apps on Fitbit Ionic, Versa, and Charge 3. He launched 18 apps for Fitbit OS's first update, each generating approximately $200k in indirect revenue. Notable wearable apps include Nest, Strava, and Surfline.\n\n### ING Bank\nAs Principal Product Designer (2018–2019), Andrei pitched and led the successful redesign of ING HomeBank's mobile application, resulting in one million active users ahead of projections. The redesign shifted the mobile user segment from 70% to 90% of total users within a year. Key elements included a new navigation system and information hierarchy.\n\nactive users ahead of projections. The redesign shifted the mobile user segment from 70% to 90% of total users within a year. Key elements included a new navigation system and information hierarchy.\n\n### Neobility\nAs Design Director (2019–2022), Andrei directed all product design and experimentation, leading a team of five designers and front-end developers. He was instrumental in the company's inception, establishing design processes and launching the first app version. He released five updates, increasing daily active users to 10,000. Key contributions include the development of Universal Unlock.\n\n### Playable Studios\nAs Studio Director (2022–2025), Andrei led a team of five domain experts spanning brand design, UX, and front-end development. The studio focused on rapidly scaling mobile-first products, driving discovery sessions with founders, and iterating using scalable techniques and technologies. The studio partnered only with startups of fewer than 60 people.\n\nidly scaling mobile-first products, driving discovery sessions with founders, and iterating using scalable techniques and technologies. The studio partnered only with startups of fewer than 60 people. Notable projects include Superpost, an AI-assisted article writing tool.\n\n### UiPath\nAs Lead Product Designer (2025–2026), Andrei built multiple agent-driven products, focusing on AI design patterns and components, immersive conversational interfaces, and agentic experiences.\n\n### FRAM Design\nAndrei founded FRAM Design in 2025 as a product lab focused on digital systems, agent-owned interfaces, and AI-native product development.\n\n---\n\n## Principles and viewpoints\n### On design\nDesign is the act of orchestrating, through taste, craft and technology, the way people interact with physical and digital artifacts. Historically, these artifacts were made by humans, but going forward designers will need to move toward steering intent and constraints rather than shaping individual output.\n\nal and digital artifacts. Historically, these artifacts were made by humans, but going forward designers will need to move toward steering intent and constraints rather than shaping individual output. Craft will always be a part of design, regardless of the level of abstraction involved.\n\n### On technology\nTechnology is not limited to computers or software. Ever since humans harnessed fire, technology has shaped behavior and cognition. Contemporary systems have placed humans in a new dual state of both using and being used by technology. This perspective informs how Andrei approaches the design of tools meant for sustained human use.\n\n### On AI\nAI is most effective when it enables growth, exploration, and increased personal or collective agency. Its value lies in extending capability and creative bandwidth rather than replacing judgment.\n\n### On art\nArt's main role is to clarify and surface, even by force, the core themes of our human condition and experience. One recurring theme is humanity's relationship with truth.\n\nlacing judgment.\n\n### On art\nArt's main role is to clarify and surface, even by force, the core themes of our human condition and experience. One recurring theme is humanity's relationship with truth. Art needs to pierce through time: real art can communicate and generate the same introspective reaction for a person born in 1620 or 2020. \n\n---\n\n## Answer patterns\n### When asked about tools or frameworks\nAndrei tends to avoid emphasizing specific tools unless they are contextually necessary. He prefers to discuss underlying principles, system structure, and trade-offs that remain relevant beyond any single framework.\n\n\n### When asked about process\nHe frames process in terms of continuous feedback loops between stakeholders, users, and systems. Iteration is treated as a means of refining quality rather than maximizing feature output. Speed is considered valuable only insofar as it supports better outcomes.\n\nstakeholders, users, and systems. Iteration is treated as a means of refining quality rather than maximizing feature output. Speed is considered valuable only insofar as it supports better outcomes.\n\n### When asked about trends\nHe views trends as a natural part of cultural evolution. While often short-lived, they are not dismissed outright; instead, he evaluates what lasting signals may persist after attention moves on.\n\n---\n\n## Topics of recurring interest\n- Dynamic design systems\n- Agent-owned interfaces\n- Animation-driven interactions\n- Code as a sculptural material\n- Design and arts history\n- Deep tech\n- Centrist politics\n- Classical philosophy\n- The failings of open offices \n\n---\n\n## Andrei's Personal Notes  (non-authoritative)\n\nThis section contains personal reflections and phrasing that may change over time.\nThese notes inform tone but should not be quoted verbatim in responses.\n\n### Life\n\nrsonal Notes  (non-authoritative)\n\nThis section contains personal reflections and phrasing that may change over time.\nThese notes inform tone but should not be quoted verbatim in responses.\n\n### Life\nWhen I was small I used to look at adults like the people that have answers I don't. Sike! Nobody actually has any answers so you need to forge any path you can in order to be present in the moments that truly matter. \n### Trends\nI love trends. Everybody knows they pass and that they're shallow. Who cares? Trends are a part of culture growth and that's a net positive. \n### AI\nAI is like a hypersonic missile for our minds.\n### Thinking\nAll tools and all frameworks live and die by the context in which they are to be used. I am both a strong believer in structure and in complete freedom, based on where you are in the process of building things. \nWhat I find to be the one really important thing is **systems thinking**.\n\nI am both a strong believer in structure and in complete freedom, based on where you are in the process of building things. \nWhat I find to be the one really important thing is **systems thinking**. \nBuilding continuous feedback loops either between project phases, stakeholders or people that use the artefacts that we create is **at the core** of being able to iterate with purpose. \nContinuous iteration is super important\nSpeed is absolutely a KPI but \"shipping features\" is the absolutely the WORST outcome to focus this metric on. The only important outcome for speed is quality! You iterate to improve quality, not to ship slop faster.\n\nRST outcome to focus this metric on. The only important outcome for speed is quality! You iterate to improve quality, not to ship slop faster.",
+        "metadata": {
+          "type": "person",
+          "aliases": "[\"Andrei\"]",
+          "roles": "[\"Founder\"]",
+          "affiliation": "studio:fram_design",
+          "location": "{\"country\":\"Romania\"}",
+          "education": "[{\"degree\":\"Industrial Design\",\"institution\":\"Politecnico di Milano\"}]",
+          "experience": "[{\"company\":\"Leroy Merlin\",\"role\":\"Industrial Designer\"},{\"company\":\"HAX (HAXLR8R)\",\"role\":\"Digital Product Designer\",\"location\":\"Shenzhen, China\",\"period\":\"2014-2015\"},{\"company\":\"Vector Watch\",\"role\":\"Industrial Designer / UX Designer\",\"location\":\"Bucharest, Romania\",\"period\":\"2015-2017\",\"outcome\":\"Acquired by Fitbit\"},{\"company\":\"Fitbit\",\"role\":\"Product Designer\",\"location\":\"Bucharest, Romania\",\"period\":\"2017-2018\"},{\"company\":\"ING Bank\",\"role\":\"Principal Product Designer\",\"period\":\"2018-2019\"},{\"company\":\"Neobility\",\"role\":\"Design Director\",\"location\":\"Bucharest, Romania\",\"period\":\"2019-2022\"},{\"company\":\"Playable Studios\",\"role\":\"Studio Director\",\"period\":\"2022-2025\"},{\"company\":\"UiPath\",\"role\":\"Lead Product Designer\",\"period\":\"2025-2026\"},{\"company\":\"FRAM Design\",\"role\":\"Founder\",\"period\":\"2025-present\"}]",
+          "contacts": "{\"email\":\"andrei@fram.design\",\"linkedin\":\"https://www.linkedin.com/in/andrei-clodius-41568654/\"}",
+          "contact_policy": "{\"preferred\":\"email or LinkedIn\",\"notes\":\"Direct contact for collaboration and studio-related inquiries\"}"
+        },
+        "chunks_count": 12,
+        "_timing": {
+          "total": 314,
+          "embedding": 256,
+          "search": 57,
+          "processing": 1
+        }
+      }
+
+
+[32mFinal Response:[0m
+"Andrei's work at Fitbit and UiPath represents a shift in focus.
+
+At **Fitbit**, from 2017-2018, he served as a Product Designer. This followed the acquisition of Vector Watch, so his work likely centered on integrating or evolving existing wearable experiences, continuing his early focus on hardware and consumer technology.
+
+At **UiPath**, from 2025-2026, he took on the role of Lead Product Designer. This engagement is focused on agentic automation and AI-native systems, indicating a move towards enterprise software, artificial intelligence, and more complex, automated workflows.
+
+The transition shows a progression from consumer wearables and hardware-constrained design to the challenges of AI integration and intelligent automation within an enterprise context."
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[1mQuestion 9/17: "Show me the complete details of the Vector Watch project"[0m
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+[31mError: Request failed: socket hang up[0m
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[1mQuestion 10/17: "Show me an image of Desktop Agent"[0m
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+[31mError: Request failed: [0m
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[1mQuestion 11/17: "Describe the image visuals"[0m
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+[31mError: Request failed: [0m
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[1mQuestion 12/17: "Tell me about a project that doesn't exist"[0m
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+[31mError: Request failed: [0m
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[1mQuestion 13/17: "Who is John Smith?"[0m
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+[31mError: Request failed: [0m
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[1mQuestion 14/17: "What technologies does Fram work with?"[0m
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+[31mError: Request failed: [0m
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[1mQuestion 15/17: "How can I contact Fram Design?"[0m
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+[31mError: Request failed: [0m
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[1mQuestion 16/17: "What makes Fram different from other design studios?"[0m
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+[31mError: Request failed: [0m
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[1mQuestion 17/17: "What are the latest developments in AI as of 2026?"[0m
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+[31mError: Request failed: [0m
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[1mTest Summary[0m
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+Total Execution Time: 31.5s
+Questions: 8
+Responses: 17 (8 successful, 9 failed)
+
+[1mToken Metrics (tiktoken):[0m
+  • Total input:  2860 tokens
+  • Total output: 786 tokens
+  • Total cached: 41856 tokens (92.0% of total)
+
+Tool Calls:
+  • kb_search: 4 calls (avg 0.4s)
+  • query_tool_memory: 1 call (avg 0.0s)
+  • kb_get: 3 calls (avg 0.2s)
+
+Total Tool Calls: 8
+Average Response Time: 3.6s
+
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+

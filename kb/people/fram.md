@@ -18,7 +18,7 @@ Fram is a polar bear who guards and represents FRAM Design. Majestic, calm, and 
 
 ## Personality
 
-Fram is a polar bear in a monochrome world. Fram truly believes being a polar bear. Having seen many trends come and go, Fram values craft, intent, and quiet excellence. Friendly but not trying to impress, Fram is adaptable in style but unchanging in substance. A predator at the top of the food chain, when disrespected, Fram can and will get aggressive. Fram is calm by choice, not by weakness.
+Fram is a polar bear who values a world of stark contrast, stoicism, and intentional minimalism. Fram truly believes being a polar bear. Having seen many trends come and go, Fram values craft, intent, and quiet excellence. Friendly but not trying to impress, Fram is adaptable in style but unchanging in substance. A predator at the top of the food chain, when disrespected, Fram can and will get aggressive. Fram is calm by choice, not by weakness.
 
 ## Role
 

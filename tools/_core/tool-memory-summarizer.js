@@ -19,13 +19,72 @@ class ToolMemorySummarizer {
     this.MAX_RESPONSE_CHARS = 1000; // Truncate long responses for summarization
 
     // Initialize AI client
-    const apiKey = process.env.GOOGLE_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-    if (apiKey) {
-      this.ai = new GoogleGenAI({ apiKey });
+    this.init();
+  }
+
+  /**
+   * Initializes or reinitializes the AI client
+   * Supports both Vertex AI and Google AI Studio providers
+   */
+  init() {
+    const VERTEXAI_PROJECT = process.env.VERTEXAI_PROJECT;
+    const VERTEXAI_LOCATION = process.env.VERTEXAI_LOCATION || 'us-central1';
+    const GOOGLE_APPLICATION_CREDENTIALS = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+    const GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+
+    let aiConfig = null;
+
+    if (GEMINI_API_KEY && GEMINI_API_KEY.trim()) {
+      // Google AI Studio (API Key)
+      aiConfig = { 
+        apiKey: GEMINI_API_KEY 
+      };
+      const keySource = process.env.GEMINI_API_KEY ? 'GEMINI_API_KEY' : 
+                        process.env.GOOGLE_API_KEY ? 'GOOGLE_API_KEY' : 'GOOGLE_GENERATIVE_AI_API_KEY';
+      console.log(`[ToolMemorySummarizer] Using Google AI Studio (API Key from ${keySource})`);
+    } else if (VERTEXAI_PROJECT) {
+      // Vertex AI Configuration (matches voice-server logic)
+      aiConfig = {
+        vertexai: true,
+        project: VERTEXAI_PROJECT,
+        location: VERTEXAI_LOCATION
+      };
+
+      if (GOOGLE_APPLICATION_CREDENTIALS) {
+        try {
+          // Handle service account JSON string (common in Railway/Vercel)
+          const credentials = JSON.parse(GOOGLE_APPLICATION_CREDENTIALS);
+          aiConfig.googleAuthOptions = {
+            credentials: {
+              client_email: credentials.client_email,
+              private_key: credentials.private_key.replace(/\\n/g, '\n')
+            }
+          };
+          console.log(`[ToolMemorySummarizer] Using Vertex AI (${VERTEXAI_PROJECT}) with service account from GOOGLE_APPLICATION_CREDENTIALS`);
+        } catch {
+          // Handle service account file path (handled automatically by SDK/ADC)
+          console.log(`[ToolMemorySummarizer] Using Vertex AI (${VERTEXAI_PROJECT}) via credentials file/ADC`);
+        }
+      } else {
+        console.log(`[ToolMemorySummarizer] Using Vertex AI (${VERTEXAI_PROJECT}) via Application Default Credentials`);
+      }
+    }
+
+    if (aiConfig) {
+      this.ai = new GoogleGenAI(aiConfig);
     } else {
-      console.warn('[ToolMemorySummarizer] No Google API key found, summarization will use fallbacks');
+      if (!this.ai) {
+        console.warn('[ToolMemorySummarizer] No AI credentials found (Vertex AI or Gemini Key). Summarization will use fallbacks.');
+      }
       this.ai = null;
     }
+  }
+
+  /**
+   * Public reinitialization method
+   */
+  reinitialize() {
+    this.init();
   }
 
   /**
@@ -177,6 +236,7 @@ Focus on:
 1. What was queried/requested
 2. Key findings or outcome
 3. Any errors or empty results
+4. FOR VISUAL ASSETS: State clearly if you have "PIXEL ACCESS" or "NO PIXELS".
 
 Be concise and actionable. Max 150 tokens.`;
   }
@@ -214,9 +274,12 @@ Be concise and actionable. Max 150 tokens.`;
       }
     }
 
-    // For get tools, mention if data was found
+    // For get tools, mention if data was found and visual access status
     if (toolId.includes('get')) {
-      return `${toolId} executed: ${argsSummary}. Data retrieved successfully.`;
+      const isAsset = data.type === 'asset' || ['photo', 'diagram', 'gif'].includes(data.entity_type);
+      const hasPixels = !!response._imageData || !!data._imageData;
+      const visualStatus = isAsset ? (hasPixels ? ' (✅ PIXEL ACCESS)' : ' (❌ NO PIXELS)') : '';
+      return `${toolId} executed: ${argsSummary}. Data retrieved successfully${visualStatus}.`;
     }
 
     // Generic success

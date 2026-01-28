@@ -161,6 +161,109 @@ const conversationCacheStore = new Map<string, {
   createdAt: number 
 }>();
 
+// In-memory store for tool call/result events per conversation
+// Key: conversation hash, Value: { lastAccess: number, eventsByTurn: Map<turnNumber, ToolEvent[]> }
+type ToolEvent = {
+  type: 'call' | 'result';
+  toolName: string;
+  args?: Record<string, unknown>;
+  thoughtSignature?: string;
+  result?: Record<string, unknown> | { error: boolean; type: string; message: string; retryable: boolean; details?: unknown };
+  chainPosition: number;
+};
+const toolSessionStore = new Map<string, {
+  lastAccess: number;
+  eventsByTurn: Map<number, ToolEvent[]>;
+}>();
+
+// TTL for tool session store: 60 minutes idle
+const TOOL_SESSION_TTL_MS = 60 * 60 * 1000;
+
+/**
+ * Clean up expired tool session entries
+ */
+function cleanupToolSessions(): void {
+  const now = Date.now();
+  for (const [hash, session] of toolSessionStore.entries()) {
+    if (now - session.lastAccess > TOOL_SESSION_TTL_MS) {
+      toolSessionStore.delete(hash);
+      console.log(`[ToolSession] Cleaned up expired session: ${hash}`);
+    }
+  }
+}
+
+/**
+ * Get or create tool session for a conversation hash
+ */
+function getOrCreateToolSession(conversationHash: string): { lastAccess: number; eventsByTurn: Map<number, ToolEvent[]> } {
+  cleanupToolSessions(); // Clean up on access
+  
+  if (!toolSessionStore.has(conversationHash)) {
+    toolSessionStore.set(conversationHash, {
+      lastAccess: Date.now(),
+      eventsByTurn: new Map()
+    });
+  }
+  
+  const session = toolSessionStore.get(conversationHash)!;
+  session.lastAccess = Date.now();
+  return session;
+}
+
+/**
+ * Record a tool call event
+ */
+function recordToolCall(
+  conversationHash: string,
+  turnNumber: number,
+  toolName: string,
+  args: Record<string, unknown>,
+  thoughtSignature?: string,
+  chainPosition: number = 0
+): void {
+  const session = getOrCreateToolSession(conversationHash);
+  if (!session.eventsByTurn.has(turnNumber)) {
+    session.eventsByTurn.set(turnNumber, []);
+  }
+  
+  const events = session.eventsByTurn.get(turnNumber)!;
+  events.push({
+    type: 'call',
+    toolName,
+    args,
+    thoughtSignature,
+    chainPosition
+  });
+  
+  console.log(`[ToolSession] Recorded tool call: ${toolName} (turn ${turnNumber}, chain ${chainPosition})`);
+}
+
+/**
+ * Record a tool result event
+ */
+function recordToolResult(
+  conversationHash: string,
+  turnNumber: number,
+  toolName: string,
+  result: Record<string, unknown> | { error: boolean; type: string; message: string; retryable: boolean; details?: unknown },
+  chainPosition: number = 0
+): void {
+  const session = getOrCreateToolSession(conversationHash);
+  if (!session.eventsByTurn.has(turnNumber)) {
+    session.eventsByTurn.set(turnNumber, []);
+  }
+  
+  const events = session.eventsByTurn.get(turnNumber)!;
+  events.push({
+    type: 'result',
+    toolName,
+    result,
+    chainPosition
+  });
+  
+  console.log(`[ToolSession] Recorded tool result: ${toolName} (turn ${turnNumber}, chain ${chainPosition})`);
+}
+
 // Shared system prompt cache (created once, reused)
 let systemPromptCache: string | null = null;
 let systemPromptCachePromise: Promise<string | null> | null = null;
@@ -713,6 +816,11 @@ export async function POST(request: Request) {
     console.log("GEMINI_API_KEY present:", !!apiKey);
     console.log("GEMINI_API_KEY length:", apiKey ? apiKey.length : 0);
 
+    // Ensure the tool memory summarizer is initialized with the API key
+    if (apiKey) {
+      toolMemorySummarizer.reinitialize();
+    }
+
     if (!apiKey) {
       // Return a mock response if no API key is configured
       console.error("GEMINI_API_KEY is missing!");
@@ -878,6 +986,28 @@ export async function POST(request: Request) {
     // Build recent messages in Gemini format (last MAX_RAW_MESSAGES)
     const recentMessages: Array<{ role: string; parts: Array<{ text: string }> }> = [];
 
+    // Inject Tool Memory Summary (Point B/C from tool-memory.md)
+    // This ensures the agent is always aware of its "vision status" before answering
+    const sessionId = userId || 'anonymous-text-session';
+    const pastToolCalls = toolMemoryStore.queryToolCalls(sessionId, { timeRange: 'all' });
+    
+    if (pastToolCalls.length > 0) {
+      const summaryLines = pastToolCalls.map(call => 
+        `- ID: ${call.id} | Tool: ${call.toolId} | Turn: ${call.turn || '?'}${call.summary ? ` | Summary: ${call.summary}` : ''}`
+      ).reverse(); // Oldest first
+
+      const toolMemoryContext = `SESSION TOOL HISTORY:\n${summaryLines.join('\n')}\n\nUse 'query_tool_memory' with a specific ID to retrieve the full response if needed.`;
+      
+      recentMessages.push({
+        role: "user",
+        parts: [{ text: `[SYSTEM CONTEXT: ${toolMemoryContext}]` }],
+      });
+      recentMessages.push({
+        role: "model",
+        parts: [{ text: "ACKNOWLEDGED. I have the history of tool executions for this session." }],
+      });
+    }
+
     // If a timeout just expired, add context about it BEFORE the recent messages
     if (timeoutExpired) {
       recentMessages.push({
@@ -890,22 +1020,125 @@ export async function POST(request: Request) {
       });
     }
 
-    // Convert recent raw messages to Gemini format
-    for (const msg of rawMessages) {
-      // Ensure content is a non-empty string (safety net for malformed client data)
+    // Convert recent raw messages to Gemini format with structured tool parts
+    // Track turn numbers to inject stored tool events
+    const session = getOrCreateToolSession(conversationHash);
+    
+    for (let i = 0; i < rawMessages.length; i++) {
+      const msg = rawMessages[i];
+      
+      // Calculate turn number based on position in full conversation
+      // rawMessages[i] corresponds to messages[summaryUpToIndex + i]
+      // Turn number = Math.ceil((summaryUpToIndex + i + 1) / 2)
+      const messageIndexInFullConversation = summaryUpToIndex + i;
+      const currentTurnNumber = Math.ceil((messageIndexInFullConversation + 1) / 2);
+      
+      const parts: Array<{text?: string; functionCall?: any; functionResponse?: any}> = [];
+      
+      // Add text content if present
       let content = typeof msg.content === 'string' ? msg.content : String(msg.content || '');
-
-      // Strip any suggestion markup from assistant messages
-      // This handles cases where the client sends unstripped content due to React's async state updates
       if (msg.role === 'assistant') {
         content = stripSuggestionsFromContent(content);
       }
-
       if (content.trim()) {
+        parts.push({ text: content });
+      }
+      
+      // Add structured tool calls if present (for assistant/model messages)
+      if (msg.role === 'assistant' && msg.toolCalls && Array.isArray(msg.toolCalls)) {
+        msg.toolCalls.forEach((call: any) => {
+          if (call.name && call.args) {
+            parts.push({
+              functionCall: {
+                name: call.name,
+                args: call.args
+              }
+            });
+          }
+        });
+      }
+      
+      // Add structured tool results if present (for user messages after tool execution)
+      if (msg.role === 'user' && msg.toolResults && Array.isArray(msg.toolResults)) {
+        msg.toolResults.forEach((result: any) => {
+          if (result.name && result.result) {
+            parts.push({
+              functionResponse: {
+                name: result.name,
+                response: result.result
+              }
+            });
+          }
+        });
+      }
+      
+      // Only add message if it has content
+      if (parts.length > 0) {
         recentMessages.push({
           role: msg.role === "assistant" ? "model" : "user",
-          parts: [{ text: content }],
+          parts
         });
+      }
+      
+      // After processing a user message, inject stored tool events for this turn
+      // Skip if message already has toolResults (client sent them)
+      if (msg.role === 'user' && (!msg.toolResults || !Array.isArray(msg.toolResults) || msg.toolResults.length === 0)) {
+        const turnEvents = session.eventsByTurn.get(currentTurnNumber);
+        if (turnEvents && turnEvents.length > 0) {
+          // Sort events by chainPosition to maintain order
+          const sortedEvents = [...turnEvents].sort((a, b) => a.chainPosition - b.chainPosition);
+          
+          // Group events by chain position to create proper call/result pairs
+          const chainGroups = new Map<number, { call?: ToolEvent; result?: ToolEvent }>();
+          for (const event of sortedEvents) {
+            if (!chainGroups.has(event.chainPosition)) {
+              chainGroups.set(event.chainPosition, {});
+            }
+            const group = chainGroups.get(event.chainPosition)!;
+            if (event.type === 'call') {
+              group.call = event;
+            } else if (event.type === 'result') {
+              group.result = event;
+            }
+          }
+          
+          // Inject tool call/result pairs in order
+          for (const chainPos of Array.from(chainGroups.keys()).sort((a, b) => a - b)) {
+            const group = chainGroups.get(chainPos)!;
+            
+            // Add functionCall message (model role)
+            if (group.call) {
+              const callParts: Array<{ functionCall?: any }> = [];
+              callParts.push({
+                functionCall: {
+                  name: group.call.toolName,
+                  args: group.call.args || {}
+                }
+              });
+              recentMessages.push({
+                role: "model",
+                parts: callParts
+              });
+              console.log(`[ToolSession] Injected stored tool call: ${group.call.toolName} (turn ${currentTurnNumber}, chain ${chainPos})`);
+            }
+            
+            // Add functionResponse message (user role)
+            if (group.result) {
+              const resultParts: Array<{ functionResponse?: any }> = [];
+              resultParts.push({
+                functionResponse: {
+                  name: group.result.toolName,
+                  response: group.result.result
+                }
+              });
+              recentMessages.push({
+                role: "user",
+                parts: resultParts
+              });
+              console.log(`[ToolSession] Injected stored tool result: ${group.result.toolName} (turn ${currentTurnNumber}, chain ${chainPos})`);
+            }
+          }
+        }
       }
     }
 
@@ -1112,6 +1345,7 @@ export async function POST(request: Request) {
       console.log("Messages to send:", contentsToSend.length);
       console.log("Estimated tokens:", estimatedTokens);
       console.log("Using cached content:", cachedContent || "none");
+      console.log("Tools available:", providerSchemas.length);
       console.log("Summary present:", summary ? `Yes (${summary.length} chars)` : "No");
       console.log("Recent messages:", recentMessages.length);
       if (summary) {
@@ -1181,9 +1415,9 @@ export async function POST(request: Request) {
 
     // Check early chunks for function calls, then stream progressively to the client
     // Store the functionCall data (name and args)
-    let functionCalls: FunctionCall[] = [];
+    const functionCalls: FunctionCall[] = [];
     // Store the full functionCallParts with thoughtSignature as sibling (required by Gemini 3)
-    let functionCallParts: FunctionCallPart[] = [];
+    const functionCallParts: FunctionCallPart[] = [];
     const bufferedChunks: unknown[] = [];
 
     try {
@@ -1205,9 +1439,23 @@ export async function POST(request: Request) {
 
         bufferedChunks.push(value);
 
-        const typed = value as { candidates?: Array<{ content?: { parts?: Array<StreamChunkPart> } }> };
-        const candidates = typed.candidates?.[0]?.content?.parts || [];
+        const typed = value as { 
+          candidates?: Array<{ 
+            content?: { parts?: Array<StreamChunkPart> },
+            finishReason?: string,
+            safetyRatings?: Array<{ category: string, probability: string }>
+          }>,
+          usageMetadata?: any,
+          promptFeedback?: any
+        };
         
+        const candidates = typed.candidates?.[0]?.content?.parts || [];
+        const finishReason = typed.candidates?.[0]?.finishReason;
+        
+        if (finishReason && finishReason !== 'STOP') {
+          console.log(`[Gemini API] Chunk finishReason: ${finishReason}`);
+        }
+
         for (const part of candidates) {
           if (part.functionCall) {
             const call = part.functionCall;
@@ -1248,6 +1496,16 @@ export async function POST(request: Request) {
           isActive: true
         }) as StateController;
 
+        // Record tool call
+        recordToolCall(
+          conversationHash,
+          turnNumber,
+          'ignore_user',
+          ignoreUserCall.args || {},
+          ignoreUserPart?.thoughtSignature,
+          0
+        );
+
         // Get tool metadata
         const toolMetadata = toolRegistry.getToolMetadata('ignore_user') as ToolMetadata | null;
 
@@ -1277,6 +1535,21 @@ export async function POST(request: Request) {
           }
         );
         const duration = Date.now() - startTime;
+
+        // Record tool result
+        recordToolResult(
+          conversationHash,
+          turnNumber,
+          'ignore_user',
+          result.ok ? (result.data as Record<string, unknown>) : {
+            error: true,
+            type: result.error.type,
+            message: result.error.message,
+            retryable: result.error.retryable,
+            details: result.error.details
+          },
+          0
+        );
 
         // Collect observability data
         if (observability) {
@@ -1364,6 +1637,16 @@ export async function POST(request: Request) {
           isActive: true
         }) as StateController;
 
+        // Record tool call
+        recordToolCall(
+          conversationHash,
+          turnNumber,
+          'start_voice_session',
+          startVoiceCall.args || {},
+          startVoicePart?.thoughtSignature,
+          0
+        );
+
         const toolMetadata = toolRegistry.getToolMetadata('start_voice_session') as ToolMetadata | null;
 
         const executionContext = {
@@ -1390,6 +1673,21 @@ export async function POST(request: Request) {
           }
         );
         const duration = Date.now() - startTime;
+
+        // Record tool result
+        recordToolResult(
+          conversationHash,
+          turnNumber,
+          'start_voice_session',
+          result.ok ? (result.data as Record<string, unknown>) : {
+            error: true,
+            type: result.error.type,
+            message: result.error.message,
+            retryable: result.error.retryable,
+            details: result.error.details
+          },
+          0
+        );
 
         // Collect observability data
         if (observability) {
@@ -1499,6 +1797,16 @@ export async function POST(request: Request) {
           mode: 'text',
           isActive: true
         }) as StateController;
+
+        // Record tool call
+        recordToolCall(
+          conversationHash,
+          turnNumber,
+          toolName,
+          otherFunctionCall.args || {},
+          otherFunctionPart?.thoughtSignature,
+          0
+        );
 
         // Get tool metadata
         const toolMetadata = toolRegistry.getToolMetadata(toolName) as ToolMetadata | null;
@@ -1696,24 +2004,42 @@ export async function POST(request: Request) {
           }
         }
 
-        // Build response parts - include both functionResponse and imageData if available
-        const responseParts: Array<{ functionResponse?: { name: string; response: Record<string, unknown> }; inlineData?: { mimeType: string; data: string } }> = [
-          {
-            functionResponse: {
-              name: toolName,
-              // Send cleaned data to model
-              response: result.ok ? (cleanedResultData as Record<string, unknown>) : {
-                error: true,
-                type: result.error.type,
-                message: result.error.message,
-                retryable: result.error.retryable,
-                details: result.error.details
-              }
-            }
-          }
-        ];
+        // Record tool result with cleaned data (same as what gets sent to Gemini)
+        recordToolResult(
+          conversationHash,
+          turnNumber,
+          toolName,
+          result.ok ? (cleanedResultData as Record<string, unknown>) : {
+            error: true,
+            type: result.error.type,
+            message: result.error.message,
+            retryable: result.error.retryable,
+            details: result.error.details
+          },
+          0
+        );
 
-        // Add image data as separate part for multimodal analysis if available
+    // Build response parts - include functionResponse
+    const responseParts: any[] = [
+      {
+        functionResponse: {
+          name: toolName,
+          // Send cleaned data to model
+          response: result.ok ? (cleanedResultData as Record<string, unknown>) : {
+            error: true,
+            type: result.error.type,
+            message: result.error.message,
+            retryable: result.error.retryable,
+            details: result.error.details
+          }
+        }
+      }
+    ];
+
+    // Note: Removed sibling text part to avoid confusing Gemini 3 tool-calling logic.
+    // Guidance is already included in tool schemas and core prompt.
+
+    // Add image data as separate part for multimodal analysis if available
         // This enables pixel-level analysis grounded in the metadata context
         if (imageData && imageData.mimeType && imageData.data) {
           responseParts.push({
@@ -1755,11 +2081,22 @@ export async function POST(request: Request) {
 
           if (autoAssetId) {
             const autoToolName = "kb_get";
-            const autoArgs = { id: autoAssetId };
+            // Auto-chain never includes image data by default - we only want the metadata/markdown link
+            const autoArgs = { id: autoAssetId, include_image_data: false };
             const autoToolMetadata = toolRegistry.getToolMetadata(autoToolName) as ToolMetadata | null;
 
             if (autoToolMetadata) {
               console.log(`[AutoChain] Detected visual request, auto-fetching asset ${autoAssetId}`);
+
+              // Record auto-chained tool call
+              recordToolCall(
+                conversationHash,
+                turnNumber,
+                autoToolName,
+                autoArgs,
+                undefined,
+                1
+              );
 
               const autoStartTime = Date.now();
               let autoResult;
@@ -1835,7 +2172,23 @@ export async function POST(request: Request) {
                 delete cleanedAutoResultData._distance;
               }
 
-              const autoResponseParts: Array<{ functionResponse?: { name: string; response: Record<string, unknown> }; inlineData?: { mimeType: string; data: string } }> = [
+              // Record auto-chained tool result
+              recordToolResult(
+                conversationHash,
+                turnNumber,
+                autoToolName,
+                autoResult.ok ? (cleanedAutoResultData as Record<string, unknown>) : {
+                  error: true,
+                  type: autoResult.error.type,
+                  message: autoResult.error.message,
+                  retryable: autoResult.error.retryable,
+                  details: autoResult.error.details
+                },
+                1
+              );
+
+              // Build auto-chained response parts
+              const autoResponseParts: any[] = [
                 {
                   functionResponse: {
                     name: autoToolName,
@@ -1849,6 +2202,8 @@ export async function POST(request: Request) {
                   }
                 }
               ];
+
+              // Note: Removed sibling text part to avoid confusing Gemini 3 tool-calling logic.
 
               if (autoImageData && autoImageData.mimeType && autoImageData.data) {
                 autoResponseParts.push({
@@ -1984,12 +2339,8 @@ export async function POST(request: Request) {
               let accumulatedFullText = "";
 
               try {
-                // Emit status for the initial tool call
-                if (otherFunctionCall) {
-                  const initialStatus = buildToolStatus(toolName, otherFunctionCall.args || {});
-                  const statusEvent = encodeStatusEvent(initialStatus);
-                  controller.enqueue(encoder.encode(statusEvent));
-                }
+                // Note: Initial tool status was already shown during execution.
+                // Only emit status for chained tool calls inside the loop.
 
                 // Phase 3: Track chain metrics
                 const chainMetrics: Array<{
@@ -2084,6 +2435,16 @@ export async function POST(request: Request) {
                     chainCount++;
                     const chainedToolName = nextFunctionCall.name;
                     console.log(`[Chain ${chainCount}/${MAX_CHAIN_LENGTH}] Executing chained function: ${chainedToolName}`);
+
+                    // Record chained tool call
+                    recordToolCall(
+                      conversationHash,
+                      turnNumber,
+                      chainedToolName,
+                      nextFunctionCall.args || {},
+                      nextFunctionCallPart?.thoughtSignature,
+                      chainCount
+                    );
 
                     // Emit status for chained tool call
                     const chainedStatus = buildToolStatus(chainedToolName, nextFunctionCall.args || {});
@@ -2252,8 +2613,23 @@ export async function POST(request: Request) {
                       }
                     }
 
-                    // Build chained response parts - include both functionResponse and imageData if available
-                    const chainedResponseParts: Array<{ functionResponse?: { name: string; response: Record<string, unknown> }; inlineData?: { mimeType: string; data: string } }> = [
+                    // Record chained tool result with cleaned data
+                    recordToolResult(
+                      conversationHash,
+                      turnNumber,
+                      chainedToolName,
+                      chainedResult.ok ? (cleanedChainedResultData as Record<string, unknown>) : {
+                        error: true,
+                        type: chainedResult.error.type,
+                        message: chainedResult.error.message,
+                        retryable: chainedResult.error.retryable,
+                        details: chainedResult.error.details
+                      },
+                      chainCount
+                    );
+
+                    // Build chained response parts - include functionResponse
+                    const chainedResponseParts: any[] = [
                       {
                         functionResponse: {
                           name: chainedToolName,
@@ -2268,6 +2644,8 @@ export async function POST(request: Request) {
                         }
                       }
                     ];
+
+                    // Note: Removed sibling text part to avoid confusing Gemini 3 tool-calling logic.
 
                     // Add image data for chained calls too
                     if (chainedImageData && chainedImageData.mimeType && chainedImageData.data) {
@@ -2504,8 +2882,16 @@ export async function POST(request: Request) {
             let accumulatedFullText = "";
 
             const enqueueTextFromChunk = (chunk: unknown) => {
-              const typed = chunk as { text?: string | (() => string); candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
+              const typed = chunk as { 
+                text?: string | (() => string); 
+                candidates?: Array<{ 
+                  content?: { parts?: Array<{ text?: string, functionCall?: any }> },
+                  finishReason?: string,
+                  safetyRatings?: Array<{ category: string, probability: string }>
+                }> 
+              };
               const candidates = typed.candidates?.[0]?.content?.parts || [];
+              const finishReason = typed.candidates?.[0]?.finishReason;
 
               // Try direct text property first
               let text: string | undefined;
@@ -2533,6 +2919,27 @@ export async function POST(request: Request) {
                 bytesSent += encoded.length;
                 controller.enqueue(encoded);
                 chunksProcessed++;
+              } else {
+                // Check for other important metadata if no text is present
+                const finishReason = typed.candidates?.[0]?.finishReason;
+                const safetyRatings = typed.candidates?.[0]?.safetyRatings;
+
+                if (finishReason && finishReason !== 'STOP') {
+                  console.log(`[Gemini API] Stream chunk finishReason: ${finishReason}`);
+                  if (safetyRatings) {
+                    console.log(`[Gemini API] Safety ratings:`, JSON.stringify(safetyRatings));
+                  }
+                }
+                
+                if (candidates.length > 0 && candidates.some((p: any) => p.functionCall)) {
+                  // This is a function call chunk that wasn't handled in the early detection
+                  // (shouldn't happen for the first turn, but good for debugging)
+                  const calls = candidates.filter((p: any) => p.functionCall).map((p: any) => p.functionCall.name);
+                  debugLog(`[Gemini API] Stream chunk contains function calls: ${calls.join(', ')}`);
+                } else if (candidates.length > 0 && candidates.some((p: any) => p.thoughtSignature)) {
+                  const thoughtPart = candidates.find((p: any) => p.thoughtSignature) as any;
+                  debugLog(`[Gemini API] Stream chunk contains thoughtSignature (length: ${thoughtPart?.thoughtSignature?.length || 0})`);
+                }
               }
             };
 
@@ -2551,6 +2958,17 @@ export async function POST(request: Request) {
               }
 
               console.log(`Stream completed: ${chunksProcessed} chunks, ${bytesSent} bytes`);
+
+              // CRITICAL: Ensure we never return an empty response
+              // If agent produced no text (only thinking blocks), provide a fallback
+              if (!accumulatedFullText.trim()) {
+                const fallbackMessage = "I'm ready to help. Could you please clarify what you'd like to know?";
+                console.warn(`[Empty Response] Agent returned no text - using fallback message`);
+                const encoded = encoder.encode(fallbackMessage);
+                bytesSent += encoded.length;
+                controller.enqueue(encoded);
+                accumulatedFullText = fallbackMessage;
+              }
 
               // T6: Final response sent (plain text path)
               const requestEndTime = Date.now();

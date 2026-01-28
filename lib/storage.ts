@@ -18,6 +18,17 @@ export type Message = {
   citations?: Citation[]; // Citations from web search tools (perplexity_search)
   images?: string[]; // Image markdown from kb_get/kb_search tools (voice mode)
   suggestions?: string[]; // AI-generated suggestions for this message
+  // Structured tool data for accurate conversation reconstruction
+  toolCalls?: Array<{
+    id: string;           // Unique call ID
+    name: string;         // Tool name (e.g., "kb_search")
+    args: Record<string, unknown>; // Tool arguments
+  }>;
+  toolResults?: Array<{
+    callId: string;       // Reference to tool call ID
+    name: string;         // Tool name
+    result: Record<string, unknown>; // Structured tool result (contains asset IDs, etc.)
+  }>;
 };
 
 /**

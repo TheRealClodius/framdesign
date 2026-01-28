@@ -249,6 +249,7 @@ export async function assetExists(blobId: string, extension: string): Promise<bo
  * @param blobId - Stable identifier
  * @param extension - File extension
  * @returns File buffer
+ * @throws Error if blob_id/extension missing, file not found, or empty buffer
  */
 export async function fetchAssetBuffer(
   blobId: string,
@@ -257,11 +258,26 @@ export async function fetchAssetBuffer(
   if (!blobId) {
     throw new Error('blob_id is required');
   }
+  if (!extension) {
+    throw new Error('file_extension is required');
+  }
 
   const fileName = `assets/${blobId}.${extension}`;
   const file = bucket.file(fileName);
 
+  // Check if file exists before downloading
+  const [exists] = await file.exists();
+  if (!exists) {
+    throw new Error(`Asset not found in GCS: ${fileName}`);
+  }
+
   const [buffer] = await file.download();
+
+  // Validate buffer is non-empty
+  if (!buffer || buffer.length === 0) {
+    throw new Error(`Empty buffer returned for asset: ${fileName}`);
+  }
+
   return buffer;
 }
 

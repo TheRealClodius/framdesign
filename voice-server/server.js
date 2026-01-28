@@ -51,12 +51,30 @@ const __dirname = dirname(__filename);
 // Load environment variables from voice-server/.env regardless of cwd
 config({ path: join(__dirname, '.env') });
 
+// Reinitialize tool memory summarizer with the newly loaded environment variables
+toolMemorySummarizer.reinitialize();
+
 // Load tool registry at startup
+let geminiToolSchemas = [];
 try {
   console.log('[STARTUP] Loading tool registry...');
   await toolRegistry.load();
-  toolRegistry.lock(); // Lock registry in production
-  console.log('[STARTUP] ✓ Tool registry loaded successfully');
+  
+  if (process.env.NODE_ENV === 'development') {
+    console.log('[STARTUP] Development mode detected (NODE_ENV=development)');
+    console.log('[STARTUP] Enabling tool registry hot-reload watch...');
+    toolRegistry.watch(() => {
+      // Update the local reference to schemas when registry reloads
+      geminiToolSchemas = toolRegistry.getProviderSchemas('geminiNative');
+      console.log(`[TOOLS] ✓ Hot-reloaded ${geminiToolSchemas.length} tool schemas for future sessions`);
+    });
+  } else {
+    toolRegistry.lock(); // Lock registry in production
+  }
+  
+  // Get Gemini Native provider schemas for session config (loaded from registry)
+  geminiToolSchemas = toolRegistry.getProviderSchemas('geminiNative');
+  console.log(`[STARTUP] ✓ Tool registry loaded successfully`);
 } catch (error) {
   console.error('[STARTUP] ✗ Failed to load tool registry:', error);
   console.error('[STARTUP] Error stack:', error.stack);
@@ -65,13 +83,14 @@ try {
   process.exit(1);
 }
 
-// Get Gemini Native provider schemas for session config (loaded from registry)
-const geminiToolSchemas = toolRegistry.getProviderSchemas('geminiNative');
-console.log(`[TOOLS] Loaded ${geminiToolSchemas.length} tool schemas for Gemini Live:`);
-geminiToolSchemas.forEach((schema, i) => {
-  console.log(`  [${i + 1}] ${schema.name}: ${schema.description?.slice(0, 60)}...`);
-});
-console.log(`[TOOLS] Full schemas:`, JSON.stringify(geminiToolSchemas, null, 2));
+console.log(`[TOOLS] ✓ Initialized with ${geminiToolSchemas.length} tool schemas for Gemini Live`);
+
+if (process.env.DEBUG === 'true') {
+  geminiToolSchemas.forEach((schema, i) => {
+    console.log(`  [${i + 1}] ${schema.name}: ${schema.description?.slice(0, 60)}...`);
+  });
+  console.log(`[TOOLS] Full schemas:`, JSON.stringify(geminiToolSchemas, null, 2));
+}
 
 // Load environment variables
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
@@ -86,10 +105,10 @@ const USE_VERTEX_AI = !!VERTEXAI_PROJECT;
 
 // Log environment status for debugging
 console.log('[ENV] Environment variables check:');
-console.log(`[ENV]   GEMINI_API_KEY: ${GEMINI_API_KEY ? 'SET' : 'NOT SET'}`);
-console.log(`[ENV]   VERTEXAI_PROJECT: ${VERTEXAI_PROJECT || 'NOT SET'}`);
+console.log(`[ENV]   VERTEXAI_PROJECT: ${VERTEXAI_PROJECT || 'NOT SET'} (Main Agent Provider: Vertex AI)`);
+console.log(`[ENV]   GEMINI_API_KEY: ${GEMINI_API_KEY ? 'SET' : 'NOT SET'} (Secondary Provider/Tool Summarizer: AI Studio)`);
 console.log(`[ENV]   VERTEXAI_LOCATION: ${VERTEXAI_LOCATION}`);
-console.log(`[ENV]   GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS ? 'SET' : 'NOT SET'}`);
+console.log(`[ENV]   GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS ? 'SET' : 'NOT SET'} (Vertex AI Auth)`);
 console.log(`[ENV]   PORT: ${PORT}`);
 console.log(`[ENV]   ALLOWED_ORIGINS: ${ALLOWED_ORIGINS.join(', ')}`);
 
@@ -103,7 +122,7 @@ if (!USE_VERTEX_AI && !GEMINI_API_KEY) {
 }
 
 if (USE_VERTEX_AI) {
-  console.log(`Using Vertex AI (Project: ${VERTEXAI_PROJECT}, Location: ${VERTEXAI_LOCATION})`);
+  console.log(`[STARTUP] Using Vertex AI (Project: ${VERTEXAI_PROJECT}, Location: ${VERTEXAI_LOCATION}) for Main Agent`);
   
   // Priority: GOOGLE_APPLICATION_CREDENTIALS > ADC (gcloud auth)
   // VERTEXAI_API_KEY is only used as legacy fallback for service account JSON strings
@@ -114,22 +133,22 @@ if (USE_VERTEX_AI) {
       const tempFile = join(tmpdir(), `gcp-credentials-${Date.now()}.json`);
       writeFileSync(tempFile, GOOGLE_APPLICATION_CREDENTIALS);
       process.env.GOOGLE_APPLICATION_CREDENTIALS = tempFile;
-      console.log('✓ Using service account from GOOGLE_APPLICATION_CREDENTIALS (JSON string)');
-      console.log(`  Service account: ${credentials.client_email}`);
+      console.log('[STARTUP] ✓ Using service account from GOOGLE_APPLICATION_CREDENTIALS (JSON string)');
+      console.log(`[STARTUP]   Service account: ${credentials.client_email}`);
     } catch {
       // Not JSON - it's a file path, which is the standard usage
-      console.log('✓ Using service account credentials file');
-      console.log(`  Path: ${GOOGLE_APPLICATION_CREDENTIALS}`);
+      console.log('[STARTUP] ✓ Using service account credentials file');
+      console.log(`[STARTUP]   Path: ${GOOGLE_APPLICATION_CREDENTIALS}`);
     }
   } else {
     // No explicit credentials - use Application Default Credentials (ADC)
     // This works when: gcloud auth application-default login was run
-    console.log('✓ Using Application Default Credentials (ADC)');
-    console.log('  Note: Run "gcloud auth application-default login" if not authenticated');
+    console.log('[STARTUP] ✓ Using Application Default Credentials (ADC)');
+    console.log('[STARTUP]   Note: Run "gcloud auth application-default login" if not authenticated');
   }
 } else {
-  console.log('Using Google AI Studio authentication (API Key)');
-  console.log('Warning: Live API is NOT available with AI Studio keys - only standard APIs work');
+  console.log('[STARTUP] Using Google AI Studio authentication (API Key) for Main Agent');
+  console.log('[STARTUP] Warning: Live API is NOT available with AI Studio keys - only standard APIs work');
 }
 
 // Create HTTP server for health checks
@@ -469,17 +488,34 @@ wss.on('connection', async (ws, req) => {
         if (!geminiSession) return;
         
         // 1. Inject history if present
-        if (conversationHistory.length > 0) {
+        const pastToolCalls = toolMemoryStore.queryToolCalls(currentUserId || clientId, { timeRange: 'all' });
+        let toolMemoryContext = '';
+        
+        if (pastToolCalls.length > 0) {
+          const summaryLines = pastToolCalls.map(call => 
+            `- ID: ${call.id} | Tool: ${call.toolId} | Turn: ${call.turn || '?'}${call.summary ? ` | Summary: ${call.summary}` : ''}`
+          ).reverse(); // Oldest first
+          
+          toolMemoryContext = `PAST TOOL EXECUTIONS IN THIS SESSION:\n${summaryLines.join('\n')}\n\nUse 'query_tool_memory' with a specific ID to retrieve the full response if needed.`;
+        }
+
+        if (conversationHistory.length > 0 || toolMemoryContext) {
           try {
-            // Add session boundary marker BEFORE history to prevent agent from
-            // interpreting historical "end session" commands as current commands
+            // Add session boundary marker BEFORE history
+            const contextParts = [];
+            if (toolMemoryContext) {
+              contextParts.push({ text: `[SYSTEM CONTEXT: ${toolMemoryContext}]` });
+            }
+            contextParts.push({ text: '[--- NEW VOICE SESSION STARTED ---]\n\nPrevious messages are for context only. Only respond to commands given in THIS voice session, not historical ones.' });
+
             const sessionBoundaryMarker = {
               role: 'user',
-              parts: [{ text: '[--- NEW VOICE SESSION STARTED ---]\n\nPrevious messages are for context only. Only respond to commands given in THIS voice session, not historical ones.' }]
+              parts: contextParts
             };
             
             const historyTurns = [
               sessionBoundaryMarker,
+              ...(conversationHistory.length > 0 ? [{ role: 'model', parts: [{ text: 'ACKNOWLEDGED.' }] }] : []),
               ...conversationHistory.map(turn => ({
                 role: turn.role,
                 parts: turn.parts

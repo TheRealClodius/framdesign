@@ -365,6 +365,7 @@ export async function execute(context) {
       query: args.query,
       filters_applied: args.filters || null,
       clamped: topK !== originalTopK,
+      _instructions: `KB search complete. Found ${uniqueEntities} unique entities. ${imageData ? `✅ Pixel data included for top result: '${imageDataFor?.title}'.` : "❌ No pixel data included. For visual analysis, call kb_get with include_image_data: true for the specific asset ID."} To show assets, use the provided 'metadata.markdown' fields.`,
       _timing: finalTiming
     };
 

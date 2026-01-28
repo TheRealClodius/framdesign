@@ -8,7 +8,9 @@
 import { GoogleGenAI } from '@google/genai';
 
 // Configuration
-const EMBEDDING_MODEL = 'text-embedding-004';
+// Note: text-embedding-004 was shut down on Jan 14, 2026
+// Using gemini-embedding-001 with 768 dimensions for compatibility with existing vector store
+const EMBEDDING_MODEL = 'gemini-embedding-001';
 const EMBEDDING_DIMENSION = 768;
 
 // Lazy-loaded Gemini client
@@ -25,7 +27,9 @@ function getGenAI(): GoogleGenAI {
       throw new Error('GEMINI_API_KEY environment variable is required for embedding generation');
     }
 
-    genAI = new GoogleGenAI({ apiKey });
+    // Always use Google AI Studio (API key) for embeddings
+    // vertexai: false prevents SDK from auto-detecting GOOGLE_APPLICATION_CREDENTIALS
+    genAI = new GoogleGenAI({ apiKey, vertexai: false });
   }
 
   return genAI;
@@ -35,7 +39,7 @@ function getGenAI(): GoogleGenAI {
  * Generate embedding for a single text query
  *
  * @param query - Text to embed
- * @returns 768-dimensional embedding vector
+ * @returns embedding vector (768 dimensions for compatibility with existing vectors)
  * @throws Error if API call fails
  */
 export async function generateQueryEmbedding(query: string): Promise<number[]> {
@@ -48,7 +52,8 @@ export async function generateQueryEmbedding(query: string): Promise<number[]> {
 
     const result = await client.models.embedContent({
       model: EMBEDDING_MODEL,
-      contents: [query]
+      contents: [query],
+      config: { outputDimensionality: EMBEDDING_DIMENSION }
     });
 
     if (result.embeddings && result.embeddings.length > 0 && result.embeddings[0].values) {
@@ -75,7 +80,7 @@ export async function generateQueryEmbedding(query: string): Promise<number[]> {
 /**
  * Get embedding model dimension
  *
- * @returns Vector dimension (768 for text-embedding-004)
+ * @returns Vector dimension (768 for compatibility with existing vectors)
  */
 export function getEmbeddingDimension(): number {
   return EMBEDDING_DIMENSION;

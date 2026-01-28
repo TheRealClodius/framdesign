@@ -144,7 +144,6 @@ async function migrateAssets() {
       
       results.success.push({
         asset: asset.id,
-        url: publicUrl,
       });
     } catch (error) {
       console.error(`  ❌ Upload failed: ${error.message}\n`);

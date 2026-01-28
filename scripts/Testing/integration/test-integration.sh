@@ -91,6 +91,8 @@ echo "-----------------------------------------------"
 # Check if voice server port is already in use
 if check_port 8080; then
     echo -e "${YELLOW}⚠${NC} Port 8080 is already in use. Stopping existing process..."
+    lsof -ti:8080 | xargs kill 2>/dev/null || true
+    sleep 0.5
     lsof -ti:8080 | xargs kill -9 2>/dev/null || true
     sleep 2
 fi
@@ -141,6 +143,8 @@ echo "---------------------------------------------"
 # Check if Next.js port is already in use
 if check_port 3000; then
     echo -e "${YELLOW}⚠${NC} Port 3000 is already in use. Stopping existing process..."
+    lsof -ti:3000 | xargs kill 2>/dev/null || true
+    sleep 0.5
     lsof -ti:3000 | xargs kill -9 2>/dev/null || true
     sleep 2
 fi

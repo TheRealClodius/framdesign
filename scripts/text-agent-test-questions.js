@@ -21,6 +21,10 @@ export const TEST_QUESTIONS = [
   // Chained tool calls
   "Compare Andrei's work at Fitbit and UiPath",
   "Show me the complete details of the Vector Watch project",
+
+  // Multimodal image follow-up (ensure asset is re-fetched with image data)
+  "Show me an image of Desktop Agent",
+  "Describe the image visuals",
   
   // Negative cases
   "Tell me about a project that doesn't exist",

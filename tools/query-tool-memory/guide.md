@@ -8,6 +8,13 @@ Query past tool executions in this conversation to avoid redundant calls and reu
 - **When user asks follow-ups**: Reference what you've already looked up instead of repeating searches
 - **To be faster**: Reusing cached results is much faster than re-executing tools
 
+## When NOT to Use
+
+- **DO NOT** use this tool to fetch information about entities (use kb_get instead)
+- **DO NOT** use this tool for initial searches (use kb_search or perplexity_search instead)
+- **DO NOT** fabricate call_ids - only use call_ids that are returned from an initial query_tool_memory call
+- **DO NOT** query for calls you haven't actually made in this conversation
+
 ## How It Works
 
 Tool executions are stored in memory during your conversation:

@@ -5,14 +5,14 @@
     {
       "toolId": "kb_search",
       "args": {
-        "query": "Vector Watch project",
+        "top_k": 1,
+        "query": "Vector Watch photo",
         "filters": {
           "type": "photo"
-        },
-        "top_k": 1
+        }
       },
       "ok": true,
-      "durationMs": 747,
+      "durationMs": 493,
       "hasImageData": false,
       "imageDataSizeKB": 0,
       "error": null

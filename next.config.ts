@@ -28,13 +28,18 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ['tiktoken'],
   experimental: {
     scrollRestoration: false,
+    // Disable Turbopack persistent caching to avoid "Unable to write SST file" errors 
+    // when running in directories synced with iCloud Drive/OneDrive.
+    // RocksDB (used by Turbopack) struggles with cloud-synced filesystem locks.
+    // Disable Turbopack persistent caching to avoid "Unable to write SST file" errors 
+    // when running in directories synced with iCloud Drive/OneDrive.
+    // RocksDB (used by Turbopack) struggles with cloud-synced filesystem locks.
+    turbopackFileSystemCacheForDev: false,
     // DISABLED: optimizePackageImports causes Next.js to hang during startup
     // on iCloud Drive due to extensive file system scanning of mermaid's large dependency tree
     // optimizePackageImports: ['mermaid', '@google/genai'],
   },
   // Use webpack explicitly for builds that need native module handling
-  // Empty turbopack config to acknowledge we're using webpack intentionally
-  turbopack: {},
   webpack: (config, { isServer, dev }) => {
     // Exclude markdown files from webpack processing
     config.module.rules.push({

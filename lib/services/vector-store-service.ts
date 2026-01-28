@@ -28,7 +28,7 @@ function stringIdToInteger(id: string): number {
 const QDRANT_CLUSTER_ENDPOINT = process.env.QDRANT_CLUSTER_ENDPOINT;
 const QDRANT_API_KEY = process.env.QDRANT_API_KEY;
 const COLLECTION_NAME = 'kb_documents';
-const VECTOR_SIZE = 768; // text-embedding-004 dimension
+const VECTOR_SIZE = 768; // gemini-embedding-001 with outputDimensionality=768
 
 // Lazy-loaded Qdrant client
 let qdrantClient: QdrantClient | null = null;
@@ -125,7 +125,7 @@ async function ensureCollection(): Promise<void> {
  * @param documents - Array of document objects with id, text, embedding, metadata
  *   - id: Unique chunk ID (format: {entity_id}_chunk_{index})
  *   - text: Chunk text content
- *   - embedding: Vector embedding (768 dimensions for text-embedding-004)
+ *   - embedding: Vector embedding (768 dimensions for gemini-embedding-001)
  *   - metadata: Object with file_path, chunk_index, entity_id, etc.
  *     NOTE: Must not contain 'id' field (would overwrite document ID)
  */

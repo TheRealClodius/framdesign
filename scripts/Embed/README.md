@@ -117,7 +117,7 @@ This will catch:
 
 1. **Scans** `kb/` directory for `.md` files (excludes `README.md`)
 2. **Splits** each file into chunks (1000 chars, 200 char overlap)
-3. **Generates** embeddings via Gemini `text-embedding-004` model (768 dimensions)
+3. **Generates** embeddings via Gemini `gemini-embedding-001` model (768 dimensions)
 4. **Stores** in Qdrant Cloud with unique chunk IDs: `{entity_id}_chunk_{index}`
 
 ## See Also

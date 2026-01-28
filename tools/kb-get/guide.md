@@ -8,6 +8,11 @@ Direct ID-based retrieval of KB entities. Returns complete document with all con
   - Must be lowercase
   - Pattern: `^[a-z_]+:[a-z0-9_]+$`
   - Length: 3-100 chars
+- **include_image_data** (optional): Include base64 pixel data for multimodal analysis (default: false)
+  - **Use ONLY for visual assets** (photo, diagram, gif) when you need to analyze the actual pixels
+  - Enables accurate description of colors, text, layouts, UI elements
+  - **DO NOT use** if you just want to display the image (use `metadata.markdown` from kb_search instead)
+  - Text mode only (automatically disabled in voice mode)
 
 ## Examples
 
@@ -34,6 +39,30 @@ Returns complete project documentation.
 }
 ```
 Returns error with `ok: false` and `type: "PERMANENT"` (not retryable).
+
+**Example: Fetch image for multimodal analysis**
+```json
+{
+  "id": "asset:clipboard_ai_first_001",
+  "include_image_data": true
+}
+```
+Returns the asset WITH base64 image data in `_imageData` field for pixel-level analysis.
+
+**Example: Just get metadata**
+```json
+{
+  "id": "asset:clipboard_ai_first_001"
+}
+```
+Returns asset metadata and markdown link WITHOUT pixel data (faster, cheaper).
+
+## Visual Asset Analysis
+
+**When to use include_image_data:**
+- User asks "What does this image show/depict?"
+- User asks about specific visual details (colors, text, layout)
+- You need to verify or correct visual information
 
 ## Watch Out
 

@@ -20,7 +20,9 @@ config({ path: path.join(process.cwd(), '.env') });
 // Configuration
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const KB_DIR = path.join(process.cwd(), 'kb');
-const EMBEDDING_MODEL = 'text-embedding-004'; // Gemini's latest embedding model
+// Note: text-embedding-004 was shut down Jan 14, 2026
+const EMBEDDING_MODEL = 'gemini-embedding-001';
+const EMBEDDING_DIMENSION = 768; // Match existing Qdrant collection
 const CHUNK_SIZE = 1000; // Characters per chunk
 const CHUNK_OVERLAP = 200; // Overlap between chunks
 
@@ -29,8 +31,10 @@ if (!GEMINI_API_KEY) {
   process.exit(1);
 }
 
-// Initialize Gemini client
-const genAI = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+// Initialize Gemini client - always use API key for embeddings
+// vertexai: false prevents SDK from auto-detecting GOOGLE_APPLICATION_CREDENTIALS
+const genAI = new GoogleGenAI({ apiKey: GEMINI_API_KEY, vertexai: false });
+console.log('ℹ️  Using Google AI Studio (API Key) for embeddings');
 
 /**
  * Recursively find all markdown files in a directory
@@ -121,6 +125,7 @@ async function generateEmbedding(text: string): Promise<number[]> {
     const result = await genAI.models.embedContent({
       model: EMBEDDING_MODEL,
       contents: [text],
+      config: { outputDimensionality: EMBEDDING_DIMENSION }
     });
 
     if (result.embeddings && result.embeddings.length > 0 && result.embeddings[0].values) {

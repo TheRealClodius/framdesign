@@ -93,7 +93,7 @@ KB documents are embedded into Qdrant Cloud vector database for semantic search.
 
 1. **Reads all markdown files** from `kb/` directory (excluding `README.md`)
 2. **Splits documents into chunks** (1000 chars with 200 char overlap)
-3. **Generates embeddings** using Gemini's `text-embedding-004` model (768 dimensions)
+3. **Generates embeddings** using Gemini's `gemini-embedding-001` model (768 dimensions)
 4. **Stores in Qdrant Cloud** with unique chunk IDs and metadata
 
 ### Running Embedding

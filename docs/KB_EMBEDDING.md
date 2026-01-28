@@ -22,7 +22,7 @@ The KB embedding system converts markdown files in the `kb/` directory into vect
 
 3. **Embedding Service** (`lib/services/embedding-service.ts`)
    - Centralized embedding generation
-   - Uses Gemini `text-embedding-004` model
+   - Uses Gemini `gemini-embedding-001` model
    - Returns 768-dimensional vectors
 
 ## Embedding Process
@@ -42,7 +42,7 @@ The KB embedding system converts markdown files in the `kb/` directory into vect
 
 3. **Embedding Generation**
    - Generates embedding for each chunk
-   - Uses Gemini `text-embedding-004` model
+   - Uses Gemini `gemini-embedding-001` model
    - 768-dimensional vectors
    - Rate limiting: 100ms delay between chunks
 

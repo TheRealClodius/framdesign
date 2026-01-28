@@ -72,25 +72,45 @@ export function calculateArgsSimilarity(args1, args2) {
 }
 
 /**
- * Extracts all string values from an object (recursively)
- * and tokenizes them
- * @param {any} obj - Object to extract strings from
+ * Extracts all values from an object (recursively)
+ * and tokenizes them, including keys and non-string values
+ * @param {any} obj - Object to extract from
  * @returns {Set} - Set of all tokens
  */
 function extractStrings(obj) {
   const tokens = new Set();
 
-  function extract(value) {
+  function extract(value, key = null) {
+    // Include the key itself (important for different args having same values)
+    if (key) {
+      tokens.add(key.toLowerCase());
+    }
+
     if (typeof value === 'string') {
       const valueTokens = tokenize(value);
       valueTokens.forEach(token => tokens.add(token));
+    } else if (typeof value === 'boolean') {
+      // Include boolean values as tokens (e.g., "include_image_data:true")
+      if (key) {
+        tokens.add(`${key.toLowerCase()}:${value}`);
+      }
+    } else if (typeof value === 'number') {
+      // Include numeric values
+      tokens.add(String(value));
     } else if (Array.isArray(value)) {
-      value.forEach(extract);
+      value.forEach((v, i) => extract(v, null));
     } else if (value && typeof value === 'object') {
-      Object.values(value).forEach(extract);
+      // For objects, recursively extract with keys
+      Object.entries(value).forEach(([k, v]) => extract(v, k));
     }
   }
 
-  extract(obj);
+  // Start extraction with keys for root object
+  if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
+    Object.entries(obj).forEach(([k, v]) => extract(v, k));
+  } else {
+    extract(obj);
+  }
+
   return tokens;
 }
