@@ -27,7 +27,11 @@ export const PROJECT_ENTITY_MAP: Record<string, string> = {
   "Clipboard AI": "project:clipboard_ai_uipath",
   "Desktop Agent": "project:desktop_agent_uipath",
   "Semantic Space": "project:semantic_space",
-  "Fitbit OS": "project:fitbit_os",  // No assets yet, but ready for future
+  "Fitbit OS": "project:fitbit_os",
+  "UrbanAir": "project:urbanair",
+  "UiPath Studio Mobile": "project:uipath_studio_mobile",
+  "That": "project:that_language_app",
+  "Strategie del Design": "project:strategie_del_design_book",
 };
 
 /**

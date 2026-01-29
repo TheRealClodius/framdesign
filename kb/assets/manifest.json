@@ -1393,6 +1393,452 @@
       "blob_id": "vector/watch-os-ui-primitives",
       "file_extension": "png",
       "storage_provider": "gcs"
+    },
+    {
+      "id": "asset:urbanair_neobility_intro_001",
+      "type": "asset",
+      "entity_type": "photo",
+      "title": "UrbanAir (Neobility) Intro and Pitch",
+      "description": "Intro to Neobility (also known as UrbanAir) and the initial pitch for the project, describing the future of multi-modal mobility and the app's role as a mobility aggregator that integrates e-scooters, bikes, and cars for renting.",
+      "path": "/kb-assets/urbanair/neobility intro.png",
+      "related_entities": [
+        "project:urbanair"
+      ],
+      "tags": [
+        "urbanair",
+        "neobility",
+        "mobility",
+        "aggregator",
+        "pitch",
+        "intro",
+        "UI"
+      ],
+      "caption": "Introduction to Neobility/UrbanAir mobility aggregator",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio"
+      },
+      "blob_id": "urbanair/neobility-intro",
+      "file_extension": "png",
+      "storage_provider": "gcs"
+    },
+    {
+      "id": "asset:uipath_studio_mobile_dark_light_001",
+      "type": "asset",
+      "entity_type": "photo",
+      "title": "UiPath Studio Mobile Exploration - Dark/Light",
+      "description": "Exploration into how UiPath Studio would transpose over to mobile, allowing automation builders in the UiPath ecosystem to test and edit workflows on the go. Shows the interface in both dark and light modes.",
+      "path": "/kb-assets/uipath-studio/DARK LIGHT.png",
+      "related_entities": [
+        "project:uipath_studio_mobile"
+      ],
+      "tags": [
+        "uipath",
+        "studio",
+        "mobile",
+        "automation",
+        "dark-mode",
+        "light-mode",
+        "UI",
+        "exploration"
+      ],
+      "caption": "Dark and light mode exploration for UiPath Studio on mobile",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio"
+      },
+      "blob_id": "uipath-studio/dark-light",
+      "file_extension": "png",
+      "storage_provider": "gcs"
+    },
+    {
+      "id": "asset:uipath_studio_mobile_edit_step_001",
+      "type": "asset",
+      "entity_type": "photo",
+      "title": "UiPath Studio Mobile - Edit Step Detail",
+      "description": "Another exploration into the UiPath Studio mobile interface, demonstrating how users can edit a single specific step within an automation workflow while on a mobile device.",
+      "path": "/kb-assets/uipath-studio/SIDE BY SIDE.png",
+      "related_entities": [
+        "project:uipath_studio_mobile"
+      ],
+      "tags": [
+        "uipath",
+        "studio",
+        "mobile",
+        "automation",
+        "editing",
+        "UI",
+        "step-detail"
+      ],
+      "caption": "Interface for editing an automation step on UiPath Studio mobile",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio"
+      },
+      "blob_id": "uipath-studio/side-by-side",
+      "file_extension": "png",
+      "storage_provider": "gcs"
+    },
+    {
+      "id": "asset:that_language_onboarding_001",
+      "type": "asset",
+      "entity_type": "video",
+      "title": "That - Language Learning App Onboarding",
+      "description": "Onboarding video for 'That', a language learning app where users learn new languages by pointing their phone camera at objects and tapping them. The app uses personal photos and gamification to review and reinforce language understanding.",
+      "path": "/kb-assets/that/tap the screen5.mov",
+      "related_entities": [
+        "project:that_language_app"
+      ],
+      "tags": [
+        "that",
+        "language-learning",
+        "AR",
+        "camera",
+        "onboarding",
+        "video",
+        "gamification",
+        "education"
+      ],
+      "caption": "Onboarding video for the 'That' language learning app",
+      "metadata": {
+        "format": "mov",
+        "source": "FRAM Design portfolio"
+      },
+      "blob_id": "that/tap-the-screen5",
+      "file_extension": "mov",
+      "storage_provider": "gcs"
+    },
+    {
+      "id": "asset:strategie_del_design_broad_vs_deep_001",
+      "type": "asset",
+      "entity_type": "diagram",
+      "title": "Strategie del Design - Broad versus Deep",
+      "description": "Illustration from the book 'Strategie del Design' showing how organization members interact horizontally while having deep understanding on a single subject.",
+      "path": "/kb-assets/strategie-del-design-book/broad versus deep.png",
+      "related_entities": [
+        "project:strategie_del_design_book"
+      ],
+      "tags": [
+        "strategie-del-design",
+        "book",
+        "organization",
+        "broad-vs-deep",
+        "collaboration",
+        "expertise",
+        "diagram"
+      ],
+      "caption": "Illustration of horizontal interaction vs deep subject expertise",
+      "metadata": {
+        "format": "png",
+        "source": "Strategie del Design book"
+      },
+      "blob_id": "strategie-del-design-book/broad-versus-deep",
+      "file_extension": "png",
+      "storage_provider": "gcs"
+    },
+    {
+      "id": "asset:strategie_del_design_communication_interference_001",
+      "type": "asset",
+      "entity_type": "diagram",
+      "title": "Strategie del Design - Communication Interference",
+      "description": "Illustration from 'Strategie del Design' showing how concepts can change meaning when going through multiple filters of perception, arriving at the far end completely changed.",
+      "path": "/kb-assets/strategie-del-design-book/communication interference is natural.png",
+      "related_entities": [
+        "project:strategie_del_design_book"
+      ],
+      "tags": [
+        "strategie-del-design",
+        "book",
+        "communication",
+        "perception",
+        "interference",
+        "concept-transformation",
+        "diagram"
+      ],
+      "caption": "Illustration of natural communication interference and perception filters",
+      "metadata": {
+        "format": "png",
+        "source": "Strategie del Design book"
+      },
+      "blob_id": "strategie-del-design-book/communication-interference-is-natural",
+      "file_extension": "png",
+      "storage_provider": "gcs"
+    },
+    {
+      "id": "asset:strategie_del_design_connected_disciplines_001",
+      "type": "asset",
+      "entity_type": "diagram",
+      "title": "Strategie del Design - Connected Disciplines",
+      "description": "Illustration from 'Strategie del Design' depicting the figure of the designer as a connector of multiple viewpoints into products, services, and communication.",
+      "path": "/kb-assets/strategie-del-design-book/connected disciplines.png",
+      "related_entities": [
+        "project:strategie_del_design_book"
+      ],
+      "tags": [
+        "strategie-del-design",
+        "book",
+        "designer-role",
+        "connector",
+        "disciplines",
+        "integration",
+        "diagram"
+      ],
+      "caption": "The designer as a connector of disciplines",
+      "metadata": {
+        "format": "png",
+        "source": "Strategie del Design book"
+      },
+      "blob_id": "strategie-del-design-book/connected-disciplines",
+      "file_extension": "png",
+      "storage_provider": "gcs"
+    },
+    {
+      "id": "asset:strategie_del_design_thinking_and_tools_001",
+      "type": "asset",
+      "entity_type": "diagram",
+      "title": "Strategie del Design - Design Thinking and Design Tools",
+      "description": "Illustration from 'Strategie del Design' showing design thinking and design tools in a T-shaped structure, emphasizing that one cannot have one without the other.",
+      "path": "/kb-assets/strategie-del-design-book/design thinking and design tools.png",
+      "related_entities": [
+        "project:strategie_del_design_book"
+      ],
+      "tags": [
+        "strategie-del-design",
+        "book",
+        "design-thinking",
+        "design-tools",
+        "T-shape",
+        "interdependence",
+        "diagram"
+      ],
+      "caption": "Interdependence of design thinking and design tools",
+      "metadata": {
+        "format": "png",
+        "source": "Strategie del Design book"
+      },
+      "blob_id": "strategie-del-design-book/design-thinking-and-design-tools",
+      "file_extension": "png",
+      "storage_provider": "gcs"
+    },
+    {
+      "id": "asset:strategie_del_design_vertical_roles_001",
+      "type": "asset",
+      "entity_type": "diagram",
+      "title": "Strategie del Design - Vertical Roles and User Needs",
+      "description": "Illustration from 'Strategie del Design' showing how each vertical role in an organization (Manufacturing, Sales, Engineering, Marketing) has its own skewed interpretation of user needs, and how they must work together to build what the client actually wants.",
+      "path": "/kb-assets/strategie-del-design-book/how each vertical role understands user needs.png",
+      "related_entities": [
+        "project:strategie_del_design_book"
+      ],
+      "tags": [
+        "strategie-del-design",
+        "book",
+        "organization",
+        "roles",
+        "user-needs",
+        "collaboration",
+        "client-perspective",
+        "diagram"
+      ],
+      "caption": "Skewed vs collaborative interpretations of user needs by organizational roles",
+      "metadata": {
+        "format": "png",
+        "source": "Strategie del Design book"
+      },
+      "blob_id": "strategie-del-design-book/how-each-vertical-role-understands-user-needs",
+      "file_extension": "png",
+      "storage_provider": "gcs"
+    },
+    {
+      "id": "asset:strategie_del_design_people_001",
+      "type": "asset",
+      "entity_type": "photo",
+      "title": "Strategie del Design - People Illustration",
+      "description": "Illustration from 'Strategie del Design' showing a group of people looking for direction within an organizational or strategic context.",
+      "path": "/kb-assets/strategie-del-design-book/people.jpg",
+      "related_entities": [
+        "project:strategie_del_design_book"
+      ],
+      "tags": [
+        "strategie-del-design",
+        "book",
+        "people",
+        "direction",
+        "illustration",
+        "strategy"
+      ],
+      "caption": "Illustration of a group of people looking for direction",
+      "metadata": {
+        "format": "jpg",
+        "source": "Strategie del Design book"
+      },
+      "blob_id": "strategie-del-design-book/people",
+      "file_extension": "jpg",
+      "storage_provider": "gcs"
+    },
+    {
+      "id": "asset:strategie_del_design_sketch_002",
+      "type": "asset",
+      "entity_type": "diagram",
+      "title": "Strategie del Design - Book Illustration Sketch 2",
+      "description": "Work-in-progress sketch (sketch 2) for the illustrations in the book 'Strategie del Design'.",
+      "path": "/kb-assets/strategie-del-design-book/sketch of book illustration 2.png",
+      "related_entities": [
+        "project:strategie_del_design_book"
+      ],
+      "tags": [
+        "strategie-del-design",
+        "book",
+        "sketch",
+        "work-in-progress",
+        "illustration",
+        "process"
+      ],
+      "caption": "WIP sketch for book illustration (v2)",
+      "metadata": {
+        "format": "png",
+        "source": "Strategie del Design book"
+      },
+      "blob_id": "strategie-del-design-book/sketch-of-book-illustration-2",
+      "file_extension": "png",
+      "storage_provider": "gcs"
+    },
+    {
+      "id": "asset:strategie_del_design_sketch_001",
+      "type": "asset",
+      "entity_type": "diagram",
+      "title": "Strategie del Design - Book Illustration Sketch 1",
+      "description": "Work-in-progress sketch (sketch 1) for the illustrations in the book 'Strategie del Design'.",
+      "path": "/kb-assets/strategie-del-design-book/sketch of book illustration.png",
+      "related_entities": [
+        "project:strategie_del_design_book"
+      ],
+      "tags": [
+        "strategie-del-design",
+        "book",
+        "sketch",
+        "work-in-progress",
+        "illustration",
+        "process"
+      ],
+      "caption": "WIP sketch for book illustration (v1)",
+      "metadata": {
+        "format": "png",
+        "source": "Strategie del Design book"
+      },
+      "blob_id": "strategie-del-design-book/sketch-of-book-illustration",
+      "file_extension": "png",
+      "storage_provider": "gcs"
+    },
+    {
+      "id": "asset:strategie_del_design_sketch_leader_001",
+      "type": "asset",
+      "entity_type": "diagram",
+      "title": "Strategie del Design - Organizational Leader Sketch",
+      "description": "Work-in-progress sketch (sketch 3) for the book 'Strategie del Design', illustrating the concept of an organizational leader.",
+      "path": "/kb-assets/strategie-del-design-book/sketch of organisational leader.png",
+      "related_entities": [
+        "project:strategie_del_design_book"
+      ],
+      "tags": [
+        "strategie-del-design",
+        "book",
+        "sketch",
+        "leader",
+        "organization",
+        "work-in-progress"
+      ],
+      "caption": "WIP sketch of an organizational leader",
+      "metadata": {
+        "format": "png",
+        "source": "Strategie del Design book"
+      },
+      "blob_id": "strategie-del-design-book/sketch-of-organisational-leader",
+      "file_extension": "png",
+      "storage_provider": "gcs"
+    },
+    {
+      "id": "asset:strategie_del_design_communication_interference_detail_001",
+      "type": "asset",
+      "entity_type": "photo",
+      "title": "Strategie del Design - Communication Interference (Detail)",
+      "description": "A zoomed-in detail view from the 'Communication Interference is Natural' illustration in 'Strategie del Design'.",
+      "path": "/kb-assets/strategie-del-design-book/test5.jpg",
+      "related_entities": [
+        "project:strategie_del_design_book"
+      ],
+      "tags": [
+        "strategie-del-design",
+        "book",
+        "detail",
+        "communication",
+        "interference",
+        "zoomed-in"
+      ],
+      "caption": "Detail view from communication interference illustration",
+      "metadata": {
+        "format": "jpg",
+        "source": "Strategie del Design book"
+      },
+      "blob_id": "strategie-del-design-book/test5",
+      "file_extension": "jpg",
+      "storage_provider": "gcs"
+    },
+    {
+      "id": "asset:strategie_del_design_broad_vs_deep_detail_001",
+      "type": "asset",
+      "entity_type": "photo",
+      "title": "Strategie del Design - Broad versus Deep (Detail)",
+      "description": "A zoomed-in detail view of a woman from the 'Broad versus Deep' illustration in 'Strategie del Design'.",
+      "path": "/kb-assets/strategie-del-design-book/woman.jpg",
+      "related_entities": [
+        "project:strategie_del_design_book"
+      ],
+      "tags": [
+        "strategie-del-design",
+        "book",
+        "detail",
+        "woman",
+        "broad-vs-deep",
+        "zoomed-in"
+      ],
+      "caption": "Detail view of a woman from broad vs deep illustration",
+      "metadata": {
+        "format": "jpg",
+        "source": "Strategie del Design book"
+      },
+      "blob_id": "strategie-del-design-book/woman",
+      "file_extension": "jpg",
+      "storage_provider": "gcs"
+    },
+    {
+      "id": "asset:strategie_del_design_leader_goals_001",
+      "type": "asset",
+      "entity_type": "diagram",
+      "title": "Strategie del Design - Leader Communicating Goals",
+      "description": "Sketch illustrating people working together for a common goal, with a leader opening up to show the goal as a symbol for how leaders should communicate goals and action.",
+      "path": "/kb-assets/strategie-del-design-book/zoom in sketch.png",
+      "related_entities": [
+        "project:strategie_del_design_book"
+      ],
+      "tags": [
+        "strategie-del-design",
+        "book",
+        "leader",
+        "communication",
+        "goals",
+        "alignment",
+        "common-goal",
+        "sketch"
+      ],
+      "caption": "Sketch of leader communicating shared goals and action",
+      "metadata": {
+        "format": "png",
+        "source": "Strategie del Design book"
+      },
+      "blob_id": "strategie-del-design-book/zoom-in-sketch",
+      "file_extension": "png",
+      "storage_provider": "gcs"
     }
   ],
   "_schema": {

@@ -480,6 +480,10 @@ const PROJECTS = [
   "Clipboard AI",
   "Desktop Agent",
   "Semantic Space",
+  "UrbanAir",
+  "UiPath Studio Mobile",
+  "That",
+  "Strategie del Design",
 ];
 
 /**
