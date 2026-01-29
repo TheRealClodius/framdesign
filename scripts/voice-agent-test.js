@@ -311,21 +311,28 @@ async function createLiveSession(ai) {
               }
             }
 
-            // Handle turn complete
-            if (turnComplete) {
-              responseData.complete = true;
-              responseData.duration = responseData.startTime
-                ? Date.now() - responseData.startTime
-                : 0;
+            // Handle turn complete - but only resolve if we're not waiting for tool execution
+            if (turnComplete && !isExecutingTools) {
+              // Only resolve if we have content OR if we've already had tool calls
+              // (the model might send turnComplete with no new content after tool results)
+              const hasContent = responseData.transcript || responseData.audioChunks.length > 0;
+              const hadToolCalls = responseData.toolCalls.length > 0;
 
-              if (responseTimeout) {
-                clearTimeout(responseTimeout);
-                responseTimeout = null;
-              }
+              if (hasContent || hadToolCalls) {
+                responseData.complete = true;
+                responseData.duration = responseData.startTime
+                  ? Date.now() - responseData.startTime
+                  : 0;
 
-              if (responseResolver) {
-                responseResolver({ ...responseData });
-                responseResolver = null;
+                if (responseTimeout) {
+                  clearTimeout(responseTimeout);
+                  responseTimeout = null;
+                }
+
+                if (responseResolver) {
+                  responseResolver({ ...responseData });
+                  responseResolver = null;
+                }
               }
             }
           }
@@ -582,7 +589,15 @@ async function processAudioQuestion(sessionHandler, audioQuestion, questionIndex
       response.toolResults.forEach((toolResult) => {
         testSummary.totalToolCalls++;
         const toolName = toolResult.name || 'unknown';
-        testSummary.toolCalls[toolName] = (testSummary.toolCalls[toolName] || 0) + 1;
+
+        // Track tool calls with count and duration (format expected by formatter)
+        if (!testSummary.toolCalls[toolName]) {
+          testSummary.toolCalls[toolName] = { count: 0, totalDuration: 0 };
+        }
+        testSummary.toolCalls[toolName].count++;
+        testSummary.toolCalls[toolName].totalDuration += toolResult.duration || 0;
+        testSummary.toolCalls[toolName].avgDuration =
+          testSummary.toolCalls[toolName].totalDuration / testSummary.toolCalls[toolName].count;
 
         // Format using the shared formatter
         console.log(formatToolCall({
@@ -599,7 +614,11 @@ async function processAudioQuestion(sessionHandler, audioQuestion, questionIndex
         console.log(`    ${idx + 1}. ${toolCall.name || 'unknown'} (not executed - no tool registry)`);
         testSummary.totalToolCalls++;
         const toolName = toolCall.name || 'unknown';
-        testSummary.toolCalls[toolName] = (testSummary.toolCalls[toolName] || 0) + 1;
+
+        if (!testSummary.toolCalls[toolName]) {
+          testSummary.toolCalls[toolName] = { count: 0 };
+        }
+        testSummary.toolCalls[toolName].count++;
       });
     }
 

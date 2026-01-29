@@ -25,9 +25,20 @@ async function testConnection() {
     projectId: projectId,
   };
   
-  // Use explicit key file if provided, otherwise rely on GOOGLE_APPLICATION_CREDENTIALS (ADC)
+  // Use explicit key file if provided
   if (process.env.GCS_KEY_FILE) {
     storageConfig.keyFilename = process.env.GCS_KEY_FILE;
+  }
+  
+  // Handle JSON string in GOOGLE_APPLICATION_CREDENTIALS (common in .env for local dev)
+  if (process.env.GOOGLE_APPLICATION_CREDENTIALS && !storageConfig.keyFilename) {
+    try {
+      storageConfig.credentials = JSON.parse(process.env.GOOGLE_APPLICATION_CREDENTIALS);
+      console.log('✓ Using credentials from JSON string in GOOGLE_APPLICATION_CREDENTIALS');
+    } catch (e) {
+      // Not JSON, SDK will treat it as a file path (ADC)
+      console.log('✓ GOOGLE_APPLICATION_CREDENTIALS is a file path (ADC)');
+    }
   }
   
   // Initialize storage client

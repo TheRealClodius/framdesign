@@ -22,7 +22,7 @@
     "test:watch": "NODE_OPTIONS='--experimental-vm-modules' jest --watch",
     "test:coverage": "NODE_OPTIONS='--experimental-vm-modules' jest --coverage",
     "test:agent": "node scripts/text-agent-test.js",
-    "test:voice": "node scripts/voice-agent-test.js",
+    "test:voice": "tsx scripts/voice-agent-test.js",
     "generate:audio": "node scripts/generate-test-audio.js"
   },
   "dependencies": {

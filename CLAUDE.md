@@ -208,6 +208,42 @@ Tools must return `ToolResponse` objects via `createToolResponse()`.
 - Tool memory via `tool-memory-store.js`
 - Loop detection prevents infinite tool calls
 
+### Tool Memory Architecture
+
+The system uses a two-tier storage approach for tool execution records:
+
+**Server-Side: In-Memory Tool Memory Store** (`tools/_core/tool-memory-store.js`)
+- Session-scoped storage with sliding window policy
+- **Window Configuration**:
+  - Last 10 calls: Full responses retained (`RECENT_COUNT`)
+  - Next 40 calls: Full responses retained, summaries generated for context injection (`SUMMARY_COUNT`)
+  - Total window: 50 calls, auto-expires after 1 hour (`MAX_AGE_MS`)
+- Full responses always available via `getFullResponse(sessionId, callId)`
+- Duplicate detection via similarity matching (85% threshold)
+
+**Server-Side: Async Summarization** (`tools/_core/tool-memory-summarizer.js`)
+- Background FIFO queue processing using Gemini Flash Lite
+- 150-token summaries for older calls (beyond position 10)
+- Fallback rule-based summaries when AI unavailable
+- Summaries auto-injected into conversation context
+
+**Server-Side: Deduplication** (`tools/_core/tool-memory-dedup.js`)
+- Pre-execution duplicate detection for retrieval tools
+- Returns cached results when similarity >= 85%
+- Prevents redundant expensive operations (KB searches, entity lookups)
+
+**Client-Side: localStorage Persistence** (`lib/storage.ts`)
+- Conversation messages with structured tool data:
+  - `toolCalls[]`: Array of `{id, name, args}` for each tool invocation
+  - `toolResults[]`: Array of `{callId, name, result}` with full structured results
+- Enables accurate conversation reconstruction across page reloads
+- Separate from server-side tool memory (client stores messages, server stores execution records)
+
+**Agent Access: query_tool_memory Tool** (`tools/query-tool-memory/`)
+- Query past executions with filters (toolId, timeRange, includeErrors)
+- Retrieve full responses via `get_full_response_for` parameter
+- Returns summaries for older calls, full data for recent calls
+
 ## Environment Variables
 
 Required in `.env`:

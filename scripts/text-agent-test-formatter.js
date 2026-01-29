@@ -189,11 +189,18 @@ export function formatToolCall(toolCall, isChained = false) {
   output += formatJson(toolCall.args, 6);
   
   if (toolCall.result) {
-    // Check for timing breakdown (kb_search)
+    // Check for timing breakdown (kb_search, kb_get)
     if (toolCall.result._timing) {
       const timing = toolCall.result._timing;
-      output += `     ${colors.dim}Generating embedding... (${(timing.embeddingDuration / 1000).toFixed(1)}s)${colors.reset}\n`;
-      output += `     ${colors.dim}Executing vector search... (${(timing.searchDuration / 1000).toFixed(1)}s)${colors.reset}\n`;
+      // Handle both old (embeddingDuration) and new (embedding) field names
+      const embedTime = timing.embeddingDuration || timing.embedding;
+      const searchTime = timing.searchDuration || timing.search;
+      if (embedTime) {
+        output += `     ${colors.dim}Generating embedding... (${(embedTime / 1000).toFixed(1)}s)${colors.reset}\n`;
+      }
+      if (searchTime) {
+        output += `     ${colors.dim}Executing vector search... (${(searchTime / 1000).toFixed(1)}s)${colors.reset}\n`;
+      }
     }
     
     output += `     ${colors.dim}Total: ${(toolCall.duration / 1000).toFixed(1)}s${colors.reset}\n`;
