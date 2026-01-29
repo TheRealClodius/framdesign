@@ -49,6 +49,10 @@ tools/tool_registry.json
 # test reports
 tests/e2e/kb-tools-agent-report.json
 
+# voice agent test artifacts (generated files)
+scripts/test-audio/
+scripts/voice-agent-test-questions.js
+
 # vector-search-api dependencies (deprecated - no longer used)
 vector-search-api/node_modules/
 

@@ -4,9 +4,9 @@ import { calculateArgsSimilarity } from './utils/similarity.js';
  * ToolMemoryStore - Session-scoped in-memory storage for tool execution records
  *
  * Features:
- * - Store tool execution records with full responses
- * - Sliding window: keep last 10 full, next 40 as summaries
- * - Query interface for past executions
+ * - Store tool execution records with full responses for entire session
+ * - Sliding window: keep last 50 calls, auto-summarize older calls (summaries auto-injected in context)
+ * - Query interface for past executions (full responses always available via call_id)
  * - Duplicate detection via similarity matching
  */
 class ToolMemoryStore {
@@ -175,9 +175,9 @@ class ToolMemoryStore {
 
   /**
    * Applies the sliding window policy
-   * - Keep last N calls with full responses
-   * - Keep next M calls with summaries only
-   * - Drop older calls
+   * - Keep last 50 calls with full responses in storage
+   * - Generate summaries for calls beyond position 10 (for context injection)
+   * - Drop calls older than total window (50) or expired (1 hour)
    * @param {string} sessionId - Session identifier
    * @returns {void}
    */
@@ -206,23 +206,13 @@ class ToolMemoryStore {
         return;
       }
 
-      // Recent calls (0 to RECENT_COUNT): keep full response
-      if (index < this.RECENT_COUNT) {
+      // Within window (0 to RECENT_COUNT + SUMMARY_COUNT): keep full response
+      if (index < this.RECENT_COUNT + this.SUMMARY_COUNT) {
         call._keepFull = true;
         return;
       }
 
-      // Older calls (RECENT_COUNT to RECENT_COUNT + SUMMARY_COUNT): summaries only
-      if (index < this.RECENT_COUNT + this.SUMMARY_COUNT) {
-        call._keepFull = false;
-        // Clear full response to save memory (if summary exists)
-        if (call.summary) {
-          call.fullResponse = null;
-        }
-        return;
-      }
-
-      // Beyond window: mark for deletion
+      // Beyond window (50+ calls): mark for deletion
       call._markedForDeletion = true;
     });
 

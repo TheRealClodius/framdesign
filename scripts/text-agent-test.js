@@ -14,11 +14,13 @@ import { sendChatRequest } from './text-agent-test-client.js';
 import {
   formatQuestionHeader,
   formatContextStack,
+  formatDetailedContextBreakdown,
   formatToolCall,
   formatStepHeader,
   formatFinalResponse,
   formatTestSummary,
-  formatError
+  formatError,
+  formatToolUsageAnalysis
 } from './text-agent-test-formatter.js';
 import { TEST_QUESTIONS } from './text-agent-test-questions.js';
 
@@ -31,12 +33,15 @@ config({ path: '.env' });
 const args = process.argv.slice(2);
 const isInteractive = args.includes('--interactive');
 const isNonInteractive = args.includes('--non-interactive');
+const verboseMode = args.includes('--verbose');
 
 if (!isInteractive && !isNonInteractive) {
   console.error(formatError('Please specify --interactive or --non-interactive'));
   console.log('\nUsage:');
   console.log('  node scripts/text-agent-test.js --non-interactive   # Run test questions');
   console.log('  node scripts/text-agent-test.js --interactive       # Manual Q&A loop');
+  console.log('\nOptions:');
+  console.log('  --verbose                                            # Show detailed context breakdown');
   process.exit(1);
 }
 
@@ -65,7 +70,7 @@ let testSummary = {
 /**
  * Process a single question
  */
-async function processQuestion(question, questionIndex = null, totalQuestions = null) {
+async function processQuestion(question, questionIndex = null, totalQuestions = null, verbose = false) {
   const questionStartTime = Date.now();
   
   // Display question header
@@ -94,12 +99,21 @@ async function processQuestion(question, questionIndex = null, totalQuestions = 
 
     // Display context stack with local token count
     if (response.observability?.contextStack) {
+      // Quick summary
       console.log(formatContextStack(response.observability.contextStack, localTokens.total));
-      
+
+      // Detailed breakdown (new!) - only if verbose mode is enabled
+      if (verbose) {
+        console.log(formatDetailedContextBreakdown(
+          response.observability.contextStack,
+          response.observability.contextStack.toolMemoryState
+        ));
+      }
+
       // Track input tokens (server-reported conversation tokens)
       const serverInputTokens = response.observability.contextStack.estimatedTokens || 0;
       testSummary.tokenMetrics.totalInputTokens += serverInputTokens;
-      
+
       // Track cached tokens (system prompt + tools saved per request)
       const cachedTokens = response.observability.contextStack.cachedTokens || 0;
       testSummary.tokenMetrics.totalCachedTokens += cachedTokens;
@@ -108,11 +122,11 @@ async function processQuestion(question, questionIndex = null, totalQuestions = 
     // Display tool calls
     if (response.observability?.toolCalls && response.observability.toolCalls.length > 0) {
       console.log(formatStepHeader(1));
-      
+
       for (const toolCall of response.observability.toolCalls) {
         const isChained = toolCall.chainPosition > 0;
         console.log(formatToolCall(toolCall, isChained));
-        
+
         // Update summary
         if (!testSummary.toolCalls[toolCall.toolId]) {
           testSummary.toolCalls[toolCall.toolId] = {
@@ -123,6 +137,14 @@ async function processQuestion(question, questionIndex = null, totalQuestions = 
         testSummary.toolCalls[toolCall.toolId].count++;
         testSummary.toolCalls[toolCall.toolId].totalDuration += toolCall.duration;
         testSummary.totalToolCalls++;
+      }
+
+      // Display tool usage analysis (new!) - only if verbose mode is enabled
+      if (verbose) {
+        console.log(formatToolUsageAnalysis(
+          response.observability.toolCalls,
+          response.observability.contextStack?.toolMemoryState
+        ));
       }
     } else {
       console.log(formatStepHeader(1));
@@ -171,10 +193,15 @@ async function processQuestion(question, questionIndex = null, totalQuestions = 
  * Non-interactive mode: Run prebaked test questions
  */
 async function runNonInteractive() {
-  console.log(`Running non-interactive mode with ${TEST_QUESTIONS.length} test questions...\n`);
+  console.log(`Running non-interactive mode with ${TEST_QUESTIONS.length} test questions...`);
+  if (verboseMode) {
+    console.log('Verbose mode: ON - Detailed context breakdown will be shown\n');
+  } else {
+    console.log('Verbose mode: OFF - Use --verbose for detailed context breakdown\n');
+  }
 
   for (let i = 0; i < TEST_QUESTIONS.length; i++) {
-    await processQuestion(TEST_QUESTIONS[i], i, TEST_QUESTIONS.length);
+    await processQuestion(TEST_QUESTIONS[i], i, TEST_QUESTIONS.length, verboseMode);
   }
 
   // Display summary
@@ -197,7 +224,12 @@ async function runNonInteractive() {
  * Interactive mode: Manual Q&A loop
  */
 async function runInteractive() {
-  console.log('Running interactive mode. Type your questions (or "exit" to quit).\n');
+  console.log('Running interactive mode. Type your questions (or "exit" to quit).');
+  if (verboseMode) {
+    console.log('Verbose mode: ON - Detailed context breakdown will be shown\n');
+  } else {
+    console.log('Verbose mode: OFF - Use --verbose for detailed context breakdown\n');
+  }
 
   const rl = readline.createInterface({
     input: process.stdin,
@@ -222,7 +254,7 @@ async function runInteractive() {
         process.exit(0);
       }
 
-      await processQuestion(question);
+      await processQuestion(question, null, null, verboseMode);
       askQuestion();
     });
   };

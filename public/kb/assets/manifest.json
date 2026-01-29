@@ -197,7 +197,7 @@
       "type": "asset",
       "entity_type": "diagram",
       "title": "Automated Meeting Follow-up Scenario",
-      "description": "User flow diagram titled 'Automated Meeting Follow-up' illustrating a complete scenario for the UiPath Autopilot assistant. Shows how a user (Sarah) starts from a Slack notification with a meeting summary link, clicks to authenticate Zoom connection, links Zoom to Autopilot, and then generates themes, lists key decisions, and performs other actions related to that specific call. The flow includes: Slack integration showing meeting summary link, UiPath Assistant onboarding with Meeting Notetaker agent, SSO authentication for Zoom, desktop notifications for new meeting summaries, and navigation to Meetings Space (project folder) with custom prompts that ground the agent. The diagram demonstrates how individual conversations are organized within Spaces, with each Space containing agent threads, snapshots, and user-defined context. This specific conversation would be part of a Space with custom prompts that ground the agent for meeting-related tasks.",
+      "description": "Scenario of an automated meeting follow up Autopilot would assist the user with.",
       "path": "/kb-assets/autopilot/Automated Meeting Follow-up.png",
       "related_entities": [
         "project:autopilot_uipath",
@@ -323,41 +323,6 @@
       "_old_path": "/kb-assets/autopilot/Autopilot-Expert-Icon-Exploration.png"
     },
     {
-      "id": "asset:autopilot_modes_exploration_001",
-      "type": "asset",
-      "entity_type": "video",
-      "title": "Autopilot Agent Modes Design Exploration",
-      "description": "Video showing the Chat, Plan, and Act agent modes in the Autopilot prompt input interface, demonstrating how the mode switch animates between the three different interaction modes. Shows the visual design and animation of switching between Chat mode (conversational interaction), Plan mode (structured planning), and Act mode (action execution) within the Autopilot assistant interface. This video captures the interaction design and animation details for the mode selector component.",
-      "path": "/kb-assets/autopilot/autopilot-modes-design-exploration.mov",
-      "related_entities": [
-        "project:autopilot_uipath",
-        "person:andrei_clodius"
-      ],
-      "tags": [
-        "autopilot",
-        "uipath",
-        "video",
-        "modes",
-        "chat",
-        "plan",
-        "act",
-        "animation",
-        "UI",
-        "interaction-design",
-        "andrei-clodius"
-      ],
-      "caption": "Autopilot agent modes animation",
-      "metadata": {
-        "format": "mov",
-        "source": "FRAM Design portfolio",
-        "client": "UiPath"
-      },
-      "blob_id": "autopilot/autopilot-modes-design-exploration",
-      "file_extension": "mov",
-      "storage_provider": "gcs",
-      "_old_path": "/kb-assets/autopilot/autopilot-modes-design-exploration.mov"
-    },
-    {
       "id": "asset:autopilot_structure_sketch_001",
       "type": "asset",
       "entity_type": "diagram",
@@ -427,7 +392,7 @@
       "type": "asset",
       "entity_type": "diagram",
       "title": "Employees Writing Annual Self-Assessment Scenario",
-      "description": "Comprehensive user flow diagram describing a usage scenario where a user can use the Autopilot app to help with their annual performance review and self-assessment process. Shows the complete journey: user goal (efficiently create end-of-year self-assessment), Slack notification from HR about Review Season introducing Self-Assessment Agent, opening Autopilot Assistant in HR Space landing page, connecting Zoom and Workday integrations, viewing deadlines and tasks, accessing recent threads for Self-Assessment Writer and AskFeedback agents, and navigating to main Assistant landing page showing all Spaces (Product Specs, Sales Meetings, HR Space), Clipboard, and Unassigned Threads. The diagram demonstrates how Autopilot integrates with enterprise tools (Slack, Zoom, Workday), leverages specialized agents (Self-Assessment Writer, AskFeedback), and organizes information into Spaces to assist users with complex multi-step tasks like annual performance reviews.",
+      "description": "Schema of a usage scenario: employee writing their self assessment with the help of Autopilot.",
       "path": "/kb-assets/autopilot/Employees writing their annual Self-assessment.png",
       "related_entities": [
         "project:autopilot_uipath",
@@ -457,6 +422,192 @@
       "file_extension": "png",
       "storage_provider": "gcs",
       "_old_path": "/kb-assets/autopilot/Employees writing their annual Self-assessment.png"
+    },
+    {
+      "id": "asset:autopilot_thinking_in_milestones_001",
+      "type": "asset",
+      "entity_type": "diagram",
+      "title": "Autopilot Milestone Planning",
+      "description": "Milestone planning between Andrei and the Autopilot for Everyone product team.",
+      "path": "/kb-assets/autopilot/thinking in milestones.png",
+      "related_entities": [
+        "project:autopilot_uipath",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "autopilot",
+        "uipath",
+        "milestones",
+        "planning",
+        "roadmap",
+        "diagram",
+        "andrei-clodius"
+      ],
+      "caption": "Milestone planning for Autopilot for Everyone",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio",
+        "client": "UiPath"
+      },
+      "blob_id": "autopilot/thinking-in-milestones",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/autopilot/thinking in milestones.png"
+    },
+    {
+      "id": "asset:autopilot_prompt_input_iteration_001",
+      "type": "asset",
+      "entity_type": "diagram",
+      "title": "Autopilot Prompt Input Expansion",
+      "description": "Autopilot prompt input expanding vertically as you add context and prompt.",
+      "path": "/kb-assets/autopilot/Iterating Through Components - Prompt Input.png",
+      "related_entities": [
+        "project:autopilot_uipath",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "autopilot",
+        "uipath",
+        "prompt-input",
+        "component",
+        "expansion",
+        "diagram",
+        "andrei-clodius"
+      ],
+      "caption": "Prompt input expansion exploration",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio",
+        "client": "UiPath"
+      },
+      "blob_id": "autopilot/iterating-through-components-prompt-input",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/autopilot/Iterating Through Components - Prompt Input.png"
+    },
+    {
+      "id": "asset:autopilot_greyboxing_navigation_001",
+      "type": "asset",
+      "entity_type": "diagram",
+      "title": "Autopilot Greyboxing Navigation Exploration",
+      "description": "Grey box navigation structure for Autopilot for Everyone's new Spaces feature.",
+      "path": "/kb-assets/autopilot/Greyboxing Navigation Exploration.png",
+      "related_entities": [
+        "project:autopilot_uipath",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "autopilot",
+        "uipath",
+        "navigation",
+        "spaces",
+        "greyboxing",
+        "diagram",
+        "andrei-clodius"
+      ],
+      "caption": "Greyboxed navigation for Autopilot Spaces",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio",
+        "client": "UiPath"
+      },
+      "blob_id": "autopilot/greyboxing-navigation-exploration",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/autopilot/Greyboxing Navigation Exploration.png"
+    },
+    {
+      "id": "asset:autopilot_pro_icon_001",
+      "type": "asset",
+      "entity_type": "photo",
+      "title": "Autopilot Pro Icon",
+      "description": "Autopilot Pro icon.",
+      "path": "/kb-assets/autopilot/Autopilot Pro.png",
+      "related_entities": [
+        "project:autopilot_uipath",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "autopilot",
+        "uipath",
+        "icon",
+        "pro",
+        "branding",
+        "andrei-clodius"
+      ],
+      "caption": "Autopilot Pro icon",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio",
+        "client": "UiPath"
+      },
+      "blob_id": "autopilot/autopilot-pro",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/autopilot/Autopilot Pro.png"
+    },
+    {
+      "id": "asset:autopilot_component_library_overview_001",
+      "type": "asset",
+      "entity_type": "diagram",
+      "title": "Autopilot Component Library Overview",
+      "description": "Overview of the Autopilot component library planning created by Andrei.",
+      "path": "/kb-assets/autopilot/autopilot design component library.png",
+      "related_entities": [
+        "project:autopilot_uipath",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "autopilot",
+        "uipath",
+        "component-library",
+        "design-system",
+        "overview",
+        "diagram",
+        "andrei-clodius"
+      ],
+      "caption": "Autopilot component library overview",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio",
+        "client": "UiPath"
+      },
+      "blob_id": "autopilot/autopilot-design-component-library",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/autopilot/autopilot design component library.png"
+    },
+    {
+      "id": "asset:autopilot_agent_modes_exploration_001",
+      "type": "asset",
+      "entity_type": "diagram",
+      "title": "Autopilot Agent Modes Exploration",
+      "description": "Agent mode explorations for Autopilot.",
+      "path": "/kb-assets/autopilot/agent modes.png",
+      "related_entities": [
+        "project:autopilot_uipath",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "autopilot",
+        "uipath",
+        "agent-modes",
+        "chat",
+        "plan",
+        "act",
+        "diagram",
+        "andrei-clodius"
+      ],
+      "caption": "Autopilot agent mode explorations",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio",
+        "client": "UiPath"
+      },
+      "blob_id": "autopilot/agent-modes",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/autopilot/agent modes.png"
     },
     {
       "id": "asset:clipboard_ai_first_001",
@@ -563,7 +714,7 @@
       "type": "asset",
       "entity_type": "diagram",
       "title": "Desktop Agent Add Context Button Explorations",
-      "description": "Visual explorations for the 'Add Context Button' within the Desktop Agent chat interface, showcasing six distinct design variations. Each button is a 40-unit rounded square featuring a stylized '@' symbol, presented against a black background. Shows different interactive states: Idle state (dark charcoal gray with white '@' outline), Hover state (lighter gray background), and Click state (light blue/periwinkle background with dark '@' symbol). Also explores various visual treatments for idle state including subtle sheen effect, faint inner glow around the '@' symbol, and prominent glow effect. These explorations demonstrate different visual styles and interaction feedback patterns for incorporating additional context into agent tasks.",
+      "description": "Visual exploration of the add-context button in Desktop Agent (Delegate), showing multiple states and styling variations.",
       "path": "/kb-assets/desktop-agent-uipath/Chat-Interface-Add-Context-Button-Explorations.png",
       "related_entities": [
         "project:desktop_agent_uipath",
@@ -590,41 +741,6 @@
       "file_extension": "png",
       "storage_provider": "gcs",
       "_old_path": "/kb-assets/desktop-agent-uipath/Chat-Interface-Add-Context-Button-Explorations.png"
-    },
-    {
-      "id": "asset:desktop_agent_delegate_gif_001",
-      "type": "asset",
-      "entity_type": "gif",
-      "title": "Desktop Agent UI Components and States",
-      "description": "Animated GIF showing multiple components from the Desktop Agent UI, demonstrating various states, interactions, and theme changes. Shows the dynamic behavior and visual transitions of Desktop Agent interface elements, including component states, hover effects, theme switching between light and dark modes, and interaction patterns across different UI elements.",
-      "path": "/kb-assets/desktop-agent-uipath/delegate.gif",
-      "related_entities": [
-        "project:desktop_agent_uipath",
-        "person:andrei_clodius"
-      ],
-      "tags": [
-        "desktop-agent",
-        "uipath",
-        "delegate",
-        "gif",
-        "animation",
-        "UI",
-        "components",
-        "states",
-        "theme",
-        "andrei-clodius"
-      ],
-      "caption": "Desktop Agent UI components, states, and theme changes",
-      "metadata": {
-        "format": "gif",
-        "source": "FRAM Design portfolio",
-        "client": "UiPath",
-        "code_name": "Delegate"
-      },
-      "blob_id": "desktop-agent-uipath/delegate",
-      "file_extension": "gif",
-      "storage_provider": "gcs",
-      "_old_path": "/kb-assets/desktop-agent-uipath/delegate.gif"
     },
     {
       "id": "asset:desktop_agent_japanese_interface_001",
@@ -667,7 +783,7 @@
       "type": "asset",
       "entity_type": "photo",
       "title": "Desktop Agent Pink Color Study",
-      "description": "Color study exploration for Desktop Agent (Delegate) interface, showcasing a warm pink and red color palette. Features a prominent rounded rectangular input field with placeholder text 'Delegate your task' in medium pink/red color. Shows '@' symbol icon and control buttons (record button and voice input icon) in consistent medium pink/red. Background transitions through various shades of light pastel pink to deeper rose/desaturated red at the bottom. Demonstrates soft, warm, and inviting color scheme with clean minimalist design and rounded corners, contributing to a friendly and modern aesthetic for the Desktop Agent brand identity.",
+      "description": "Desktop Agent color theme exploration.",
       "path": "/kb-assets/desktop-agent-uipath/Desktop-Agent-pink-002.png",
       "related_entities": [
         "project:desktop_agent_uipath",
@@ -700,7 +816,7 @@
       "type": "asset",
       "entity_type": "photo",
       "title": "Desktop Agent Screen Recorder Interface",
-      "description": "Recording mode interface for Desktop Agent showing a floating rectangular UI module with glowing pink border positioned over a dark-themed application window. Features recording control panel with 'Entire Screen MacOS' button at top, instructional text explaining users can give Assistant additional instructions during recording (speak or write), and recording controls at bottom including '+' icon, large 'Recording' button with red circle, and stop button. Background shows dark-mode application with Slack-like interface displaying channels ('agents-dogfooding', 'conversational-agents-dev') and main content area discussing PromptBox, LLM models, and Assistant's internal monologue. Demonstrates the screen recording functionality that allows users to record actions and create repeatable automations, with ability to provide verbal or textual guidance during the recording process.",
+      "description": "Desktop Agent (Delegate) in record mode.",
       "path": "/kb-assets/desktop-agent-uipath/Desktop-Agent-Screen-Recorder.png",
       "related_entities": [
         "project:desktop_agent_uipath",
@@ -730,80 +846,11 @@
       "_old_path": "/kb-assets/desktop-agent-uipath/Desktop-Agent-Screen-Recorder.png"
     },
     {
-      "id": "asset:desktop_agent_subagent_card_001",
-      "type": "asset",
-      "entity_type": "photo",
-      "title": "Desktop Agent Subagent Card",
-      "description": "User interface element showing a subagent card in the Desktop Agent chat feed, specifically an 'Excel Spreadsheet Assistant' with status 'In progress...'. Displays main task description for analyzing email inboxes for spam patterns and suggesting actions. Below the task, shows list of sub-steps representing the agent's reasoning process: searching and analyzing spreadsheet cells, editing columns, checking categorized tabs, performing currency conversion, and planning next steps. Each step has associated icons (magnifying glass, pencil, angle brackets, sparkle). The 'Planning next steps...' item is highlighted in light blue indicating current active step. Demonstrates observability pattern for showing subagent progress and internal reasoning within the chat interface, enabling users to understand what specialized agents are doing and how they're breaking down complex tasks.",
-      "path": "/kb-assets/desktop-agent-uipath/Desktop-Agent-Subagent-Card.png",
-      "related_entities": [
-        "project:desktop_agent_uipath",
-        "person:andrei_clodius"
-      ],
-      "tags": [
-        "desktop-agent",
-        "uipath",
-        "delegate",
-        "subagent",
-        "observability",
-        "chat-interface",
-        "reasoning",
-        "UI",
-        "andrei-clodius"
-      ],
-      "caption": "Subagent card showing progress and reasoning",
-      "metadata": {
-        "format": "png",
-        "source": "FRAM Design portfolio",
-        "client": "UiPath",
-        "code_name": "Delegate"
-      },
-      "blob_id": "desktop-agent-uipath/desktop-agent-subagent-card",
-      "file_extension": "png",
-      "storage_provider": "gcs",
-      "_old_path": "/kb-assets/desktop-agent-uipath/Desktop-Agent-Subagent-Card.png"
-    },
-    {
-      "id": "asset:desktop_agent_subagent_toolcall_001",
-      "type": "asset",
-      "entity_type": "diagram",
-      "title": "Desktop Agent Subagent Tool Call Details",
-      "description": "Three-panel comparison view demonstrating how subagent tool call details are displayed for debugging and observability. Shows progression from collapsed summary view (left) with instruction to 'Hover and click on one of the sub agent steps', to expanded view (middle) revealing full JSON output of tool call results, to expanded view with scrollability indicators (right). The expanded view displays detailed tool result JSON including: tool type ('web.search'), call ID, status ('ok'), search results array with titles, URLs, snippets, stable IDs, hashes, provenance information (kind, stable_id, retrieved_at timestamp), usage metrics (tokens_in, tokens_out), and cache status (hit, ttl_s). The rightmost panel explicitly shows 'MaxWidth + ScrollView' indicator demonstrating how extensive debugging information can be displayed with scrolling capability. This interface provides full observability into subagent tool calls, enabling users to debug agent behavior and understand exactly what tools were called and what results were returned.",
-      "path": "/kb-assets/desktop-agent-uipath/Desktop-Agent-subagent-toolcall-details.png",
-      "related_entities": [
-        "project:desktop_agent_uipath",
-        "person:andrei_clodius"
-      ],
-      "tags": [
-        "desktop-agent",
-        "uipath",
-        "delegate",
-        "subagent",
-        "tool-calls",
-        "debugging",
-        "observability",
-        "JSON",
-        "UI",
-        "andrei-clodius"
-      ],
-      "caption": "Subagent tool call details for debugging",
-      "metadata": {
-        "format": "png",
-        "source": "FRAM Design portfolio",
-        "client": "UiPath",
-        "code_name": "Delegate"
-      },
-      "blob_id": "desktop-agent-uipath/desktop-agent-subagent-toolcall-details",
-      "file_extension": "png",
-      "storage_provider": "gcs",
-      "_old_path": "/kb-assets/desktop-agent-uipath/Desktop-Agent-subagent-toolcall-details.png"
-    },
-    {
       "id": "asset:desktop_agent_flow_automation_001",
       "type": "asset",
       "entity_type": "photo",
       "title": "Desktop Agent Flow Automation Interface",
-      "description": "Screenshot showing Desktop Agent interface for adding a pre-existing recording of steps wrapped in a single callable automation. Features translucent light pink application window with rounded corners overlaying macOS desktop. Central 'Flow Title' card displays a pre-defined automation workflow with steps: Open Google Calendar event, Get Salesforce Contact information, Gather Company News, Structure Attendee Profiles, Generate Meeting Brief, and Send Email. Each step has associated application icons (Google Calendar, Salesforce, Google). Card includes 'Run this flow now' call-to-action and input field with '@' symbol for adding context. Shows toolbar with search, add, and list view icons. Demonstrates how users can manage and execute pre-existing automations (flows) that have been created from recorded actions, enabling reuse of complex multi-step workflows across different contexts.",
+      "description": "Delegate full view with a pre-recorded automation in the prompt input and an animated background for a hyper-personalized experience.",
       "path": "/kb-assets/desktop-agent-uipath/Screenshot 2025-11-05 at 16.23.35.png",
       "related_entities": [
         "project:desktop_agent_uipath",
@@ -833,6 +880,456 @@
       "file_extension": "png",
       "storage_provider": "gcs",
       "_old_path": "/kb-assets/desktop-agent-uipath/Screenshot 2025-11-05 at 16.23.35.png"
+    },
+    {
+      "id": "asset:desktop_agent_voice_mode_tool_usage_001",
+      "type": "asset",
+      "entity_type": "photo",
+      "title": "Delegate Voice Mode Tool Usage",
+      "description": "Voice-mode Delegate on Windows using a tool to read the contents of a PDF.",
+      "path": "/kb-assets/desktop-agent-uipath/Voice mode tool usage.png",
+      "related_entities": [
+        "project:desktop_agent_uipath",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "desktop-agent",
+        "delegate",
+        "voice-mode",
+        "windows",
+        "tool-usage",
+        "pdf",
+        "uipath",
+        "andrei-clodius"
+      ],
+      "caption": "Voice-mode Delegate using a PDF tool",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio",
+        "client": "UiPath",
+        "platform": "Windows"
+      },
+      "blob_id": "desktop-agent-uipath/voice-mode-tool-usage",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/desktop-agent-uipath/Voice mode tool usage.png"
+    },
+    {
+      "id": "asset:desktop_agent_sub_agent_components_001",
+      "type": "asset",
+      "entity_type": "diagram",
+      "title": "Delegate Sub-Agent Components",
+      "description": "Sub-agent visual components for different tool usages in Delegate.",
+      "path": "/kb-assets/desktop-agent-uipath/sub-agent components.png",
+      "related_entities": [
+        "project:desktop_agent_uipath",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "desktop-agent",
+        "delegate",
+        "sub-agent",
+        "components",
+        "tool-usage",
+        "uipath",
+        "andrei-clodius"
+      ],
+      "caption": "Sub-agent UI components for Delegate",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio",
+        "client": "UiPath",
+        "code_name": "Delegate"
+      },
+      "blob_id": "desktop-agent-uipath/sub-agent-components",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/desktop-agent-uipath/sub-agent components.png"
+    },
+    {
+      "id": "asset:desktop_agent_scroll_tool_results_001",
+      "type": "asset",
+      "entity_type": "diagram",
+      "title": "Delegate Scrollable Tool Results",
+      "description": "Full debug mode tool results with scroll in Delegate.",
+      "path": "/kb-assets/desktop-agent-uipath/Scroll Tool Results.png",
+      "related_entities": [
+        "project:desktop_agent_uipath",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "desktop-agent",
+        "delegate",
+        "tool-results",
+        "debug",
+        "scroll",
+        "uipath",
+        "andrei-clodius"
+      ],
+      "caption": "Scrollable tool results in Delegate debug mode",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio",
+        "client": "UiPath",
+        "code_name": "Delegate"
+      },
+      "blob_id": "desktop-agent-uipath/scroll-tool-results",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/desktop-agent-uipath/Scroll Tool Results.png"
+    },
+    {
+      "id": "asset:desktop_agent_prompt_input_shimmer_001",
+      "type": "asset",
+      "entity_type": "gif",
+      "title": "Delegate Prompt Input Shimmer",
+      "description": "GIF of prompt input outline shimmer indicating the agent is connected.",
+      "path": "/kb-assets/desktop-agent-uipath/prompt input shimmer.gif",
+      "related_entities": [
+        "project:desktop_agent_uipath",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "desktop-agent",
+        "delegate",
+        "prompt",
+        "shimmer",
+        "connected",
+        "gif",
+        "uipath",
+        "andrei-clodius"
+      ],
+      "caption": "Prompt input shimmer for connected status",
+      "metadata": {
+        "format": "gif",
+        "source": "FRAM Design portfolio",
+        "client": "UiPath",
+        "code_name": "Delegate"
+      },
+      "blob_id": "desktop-agent-uipath/prompt-input-shimmer",
+      "file_extension": "gif",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/desktop-agent-uipath/prompt input shimmer.gif"
+    },
+    {
+      "id": "asset:desktop_agent_planning_steps_001",
+      "type": "asset",
+      "entity_type": "diagram",
+      "title": "Delegate Planning Steps",
+      "description": "Delegate planning steps UI.",
+      "path": "/kb-assets/desktop-agent-uipath/planning.png",
+      "related_entities": [
+        "project:desktop_agent_uipath",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "desktop-agent",
+        "delegate",
+        "planning",
+        "steps",
+        "uipath",
+        "andrei-clodius"
+      ],
+      "caption": "Delegate planning steps",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio",
+        "client": "UiPath",
+        "code_name": "Delegate"
+      },
+      "blob_id": "desktop-agent-uipath/planning-steps",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/desktop-agent-uipath/planning.png"
+    },
+    {
+      "id": "asset:desktop_agent_full_screen_app_001",
+      "type": "asset",
+      "entity_type": "photo",
+      "title": "Delegate Full Screen App View",
+      "description": "Full chat view of the Delegate UI with a sub-agent window.",
+      "path": "/kb-assets/desktop-agent-uipath/Full screen app.png",
+      "related_entities": [
+        "project:desktop_agent_uipath",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "desktop-agent",
+        "delegate",
+        "full-screen",
+        "chat",
+        "sub-agent",
+        "uipath",
+        "andrei-clodius"
+      ],
+      "caption": "Delegate full-screen chat view",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio",
+        "client": "UiPath",
+        "code_name": "Delegate"
+      },
+      "blob_id": "desktop-agent-uipath/full-screen-app",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/desktop-agent-uipath/Full screen app.png"
+    },
+    {
+      "id": "asset:desktop_agent_full_app_gif_001",
+      "type": "asset",
+      "entity_type": "gif",
+      "title": "Delegate App Theme Variations",
+      "description": "GIF showing multiple color themes for the Delegate app, including the automation canvas within the chat experience.",
+      "path": "/kb-assets/desktop-agent-uipath/full app.gif",
+      "related_entities": [
+        "project:desktop_agent_uipath",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "desktop-agent",
+        "delegate",
+        "themes",
+        "gif",
+        "canvas",
+        "automation",
+        "uipath",
+        "andrei-clodius"
+      ],
+      "caption": "Delegate app theme variations with canvas",
+      "metadata": {
+        "format": "gif",
+        "source": "FRAM Design portfolio",
+        "client": "UiPath",
+        "code_name": "Delegate"
+      },
+      "blob_id": "desktop-agent-uipath/full-app-theme-variations",
+      "file_extension": "gif",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/desktop-agent-uipath/full app.gif"
+    },
+    {
+      "id": "asset:desktop_agent_full_app_canvas_001",
+      "type": "asset",
+      "entity_type": "photo",
+      "title": "Delegate App with Automation Canvas",
+      "description": "Delegate app with canvas for visual breakdown of the automation.",
+      "path": "/kb-assets/desktop-agent-uipath/full app with canvas.png",
+      "related_entities": [
+        "project:desktop_agent_uipath",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "desktop-agent",
+        "delegate",
+        "canvas",
+        "automation",
+        "uipath",
+        "andrei-clodius"
+      ],
+      "caption": "Delegate app with automation canvas",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio",
+        "client": "UiPath",
+        "code_name": "Delegate"
+      },
+      "blob_id": "desktop-agent-uipath/full-app-with-canvas",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/desktop-agent-uipath/full app with canvas.png"
+    },
+    {
+      "id": "asset:desktop_agent_theme_changing_video_001",
+      "type": "asset",
+      "entity_type": "video",
+      "title": "Delegate Theme Changing",
+      "description": "Video showing theme changing in Delegate.",
+      "path": "/kb-assets/desktop-agent-uipath/theme changing.mov",
+      "related_entities": [
+        "project:desktop_agent_uipath",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "desktop-agent",
+        "delegate",
+        "theme",
+        "video",
+        "uipath",
+        "andrei-clodius"
+      ],
+      "caption": "Delegate theme changing video",
+      "metadata": {
+        "format": "mov",
+        "source": "FRAM Design portfolio",
+        "client": "UiPath",
+        "code_name": "Delegate"
+      },
+      "blob_id": "desktop-agent-uipath/theme-changing",
+      "file_extension": "mov",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/desktop-agent-uipath/theme changing.mov"
+    },
+    {
+      "id": "asset:desktop_agent_reasoning_animation_001",
+      "type": "asset",
+      "entity_type": "video",
+      "title": "Delegate Reasoning Animation",
+      "description": "Video showing the reasoning animation in Delegate.",
+      "path": "/kb-assets/desktop-agent-uipath/reasoning animation.mov",
+      "related_entities": [
+        "project:desktop_agent_uipath",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "desktop-agent",
+        "delegate",
+        "reasoning",
+        "animation",
+        "video",
+        "uipath",
+        "andrei-clodius"
+      ],
+      "caption": "Delegate reasoning animation",
+      "metadata": {
+        "format": "mov",
+        "source": "FRAM Design portfolio",
+        "client": "UiPath",
+        "code_name": "Delegate"
+      },
+      "blob_id": "desktop-agent-uipath/reasoning-animation",
+      "file_extension": "mov",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/desktop-agent-uipath/reasoning animation.mov"
+    },
+    {
+      "id": "asset:desktop_agent_expanding_animation_001",
+      "type": "asset",
+      "entity_type": "video",
+      "title": "Delegate Expanding Animation",
+      "description": "Video showing the expanding animation in Delegate.",
+      "path": "/kb-assets/desktop-agent-uipath/expanding.mov",
+      "related_entities": [
+        "project:desktop_agent_uipath",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "desktop-agent",
+        "delegate",
+        "expanding",
+        "animation",
+        "video",
+        "uipath",
+        "andrei-clodius"
+      ],
+      "caption": "Delegate expanding animation",
+      "metadata": {
+        "format": "mov",
+        "source": "FRAM Design portfolio",
+        "client": "UiPath",
+        "code_name": "Delegate"
+      },
+      "blob_id": "desktop-agent-uipath/expanding-animation",
+      "file_extension": "mov",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/desktop-agent-uipath/expanding.mov"
+    },
+    {
+      "id": "asset:desktop_agent_expand_light_001",
+      "type": "asset",
+      "entity_type": "video",
+      "title": "Delegate Expand Light",
+      "description": "Video showing the light expand animation in Delegate.",
+      "path": "/kb-assets/desktop-agent-uipath/expand light.mov",
+      "related_entities": [
+        "project:desktop_agent_uipath",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "desktop-agent",
+        "delegate",
+        "expand",
+        "light",
+        "animation",
+        "video",
+        "uipath",
+        "andrei-clodius"
+      ],
+      "caption": "Delegate light expand animation",
+      "metadata": {
+        "format": "mov",
+        "source": "FRAM Design portfolio",
+        "client": "UiPath",
+        "code_name": "Delegate"
+      },
+      "blob_id": "desktop-agent-uipath/expand-light",
+      "file_extension": "mov",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/desktop-agent-uipath/expand light.mov"
+    },
+    {
+      "id": "asset:desktop_agent_creating_recipe_001",
+      "type": "asset",
+      "entity_type": "video",
+      "title": "Delegate Creating a Recipe",
+      "description": "Video of Delegate creating a recipe flow.",
+      "path": "/kb-assets/desktop-agent-uipath/creating a recipe.mov",
+      "related_entities": [
+        "project:desktop_agent_uipath",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "desktop-agent",
+        "delegate",
+        "recipe",
+        "automation",
+        "video",
+        "uipath",
+        "andrei-clodius"
+      ],
+      "caption": "Delegate creating a recipe automation",
+      "metadata": {
+        "format": "mov",
+        "source": "FRAM Design portfolio",
+        "client": "UiPath",
+        "code_name": "Delegate"
+      },
+      "blob_id": "desktop-agent-uipath/creating-a-recipe",
+      "file_extension": "mov",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/desktop-agent-uipath/creating a recipe.mov"
+    },
+    {
+      "id": "asset:desktop_agent_background_animation_recipe_001",
+      "type": "asset",
+      "entity_type": "video",
+      "title": "Delegate Background Animation - Recipe",
+      "description": "Background animation video used in the Delegate recipe experience.",
+      "path": "/kb-assets/desktop-agent-uipath/Background Animation Desktop Agent Recipe.mov",
+      "related_entities": [
+        "project:desktop_agent_uipath",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "desktop-agent",
+        "delegate",
+        "background",
+        "animation",
+        "recipe",
+        "video",
+        "uipath",
+        "andrei-clodius"
+      ],
+      "caption": "Background animation for Delegate recipe",
+      "metadata": {
+        "format": "mov",
+        "source": "FRAM Design portfolio",
+        "client": "UiPath",
+        "code_name": "Delegate"
+      },
+      "blob_id": "desktop-agent-uipath/background-animation-recipe",
+      "file_extension": "mov",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/desktop-agent-uipath/Background Animation Desktop Agent Recipe.mov"
     },
     {
       "id": "asset:fram_photo_001",
@@ -870,7 +1367,7 @@
       "type": "asset",
       "entity_type": "photo",
       "title": "Semantic Space Document View - Mobile",
-      "description": "Mobile phone screenshot showing a document view within Semantic Space application on iPhone. Displays 'Andrei's Space' workspace with a document named 'Gandalf' in a white card with rounded corners. The document combines an artistic image (abstract scene with coral-like structures, person silhouette interacting with glowing rectangular panels displaying abstract landscapes) and multiple text blocks. Shows inline text editing toolbar with formatting options (Bold, Italic, Underline, Body M style dropdown, chat bubble icon) appearing above highlighted text. Features document header with back arrow, title 'Gandalf', and expand icon. Demonstrates how documents in Semantic Space combine images and editable text on mobile, with active editing capabilities and integration with the agent through chat functionality. Text content includes headings like 'Understanding the product vision' and 'Defining very well articulated user goals', with paragraphs about mapping stakeholders, user journeys, and experimentation processes.",
+      "description": "Mobile snapshot of a Semantic Space document created on the canvas. Shows a rich text editor optimized for mobile with inline formatting controls and highlighted text, blending images and text blocks in a single document. The Space's AI agent is always accessible from the UI, reinforcing that assistance is available while editing or reviewing the document on iPhone.",
       "path": "/kb-assets/semantic-space/document-view-mobile-snapshop-with-perplexity-illustration.png",
       "related_entities": [
         "project:semantic_space",
@@ -902,7 +1399,7 @@
       "type": "asset",
       "entity_type": "photo",
       "title": "Semantic Space Folder View - Mobile",
-      "description": "Mobile phone screenshot showing folder view within Semantic Space application on iPhone. Displays 'Andrei's Space' workspace with a 'Portfolio Folder' card containing a grid of document cards arranged in two columns. Each document card shows a bold serif title (e.g., 'Hello', 'Gandalf', 'The Dreamer', 'Title', 'hmmm', 'ok') and placeholder text describing document sections. Features floating action buttons (FABs) with '+' icon for creating new documents and chat bubble icon for interacting with the AI agent. Bottom navigation bar shows back arrow, document stack icon, username 'andreiclodius', refresh icon, and ellipsis menu. Demonstrates folder-based organization system for grouping related documents and assets, with quick access to creation and agent interaction features on mobile.",
+      "description": "Mobile view of a folder in Semantic Space where users group multiple documents. Shows a grid of document cards inside a folder and quick access actions, illustrating a UI exploration for organizing documents on mobile.",
       "path": "/kb-assets/semantic-space/folder-view-mobile-snapshot.png",
       "related_entities": [
         "project:semantic_space",
@@ -934,7 +1431,7 @@
       "type": "asset",
       "entity_type": "diagram",
       "title": "Semantic Space Canvas Design Sketch",
-      "description": "Design sketch showing the canvas view of Semantic Space workspace 'Andrei's Space'. Features a light grey infinite canvas with various content cards arranged spatially: text note cards with titles and summaries, artistic image cards (person silhouette interacting with glowing screens, abstract gradient designs), and document snapshots. Shows left sidebar with circular icons (calculator, calendar, target, pink circle with 'P'). Bottom asset tray displays preview cards (white puppy photo, person-with-screens image, document stack). Centered chat input field with placeholder '@ Chat with this Space' and upward arrow icon. Image cards include interactive elements: upload/download icon, delete button, resize icon, and 'Change' button with pencil icon for remixing. Demonstrates the canvas-based interaction model where users can organize images and document snapshots spatially, interact with the agent through chat, and continuously remix content. The layout shows how different asset types (text, images, documents) coexist on the canvas for moodboard creation and brainstorming.",
+      "description": "Semantic Space canvas sketch showing multiple generated images and documents that can be grouped into folders. The AI agent sits at the bottom to edit images, generate new ones, create research documents, or analyze existing content on the canvas. A side panel provides quick access to other apps like chat, calendar, and video editing, and users can switch between multiple spaces, each with its own focus.",
       "path": "/kb-assets/semantic-space/Semantic Space design sketch beginnings.png",
       "related_entities": [
         "project:semantic_space",
@@ -965,7 +1462,7 @@
       "type": "asset",
       "entity_type": "diagram",
       "title": "Semantic Space Chat Bubble Options",
-      "description": "Design exploration for message bubbles in Semantic Space chat interface, showing interaction options for individual message bubbles. Features two stacked message bubbles: upper bubble contains a landscape image (terraced rice paddies with path leading to misty mountains under soft sky), lower bubble contains text message. Both bubbles display semi-transparent dark grey contextual menu overlay on bottom right with three options in large white text: 'Reply', 'Ask Agent', and 'Make image'. Above each contextual menu are two small circular icons: white smiley face (reactions) and white downward chevron (additional options). Demonstrates how users can interact with the agent directly from message bubbles, with 'Ask Agent' option for conversational interaction and 'Make image' option for generating visual content based on chat context. Shows consistency in UI design for both text and image message types, enabling agent interaction and content generation from any message in the space.",
+      "description": "UI exploration from Figma showing the Semantic Space chat bubble component with per-message dropdown actions. Demonstrates how users can reply, ask the agent, or make an image directly from individual message bubbles in the Chat App.",
       "path": "/kb-assets/semantic-space/Semantic-Space-Chat-App-Bubble-Options-Design-Explorations.png",
       "related_entities": [
         "project:semantic_space",
@@ -990,6 +1487,1882 @@
       "file_extension": "png",
       "storage_provider": "gcs",
       "_old_path": "/kb-assets/semantic-space/Semantic-Space-Chat-App-Bubble-Options-Design-Explorations.png"
+    },
+    {
+      "id": "asset:clubaperitif_gift_001",
+      "type": "asset",
+      "entity_type": "photo",
+      "title": "ClubAperitif Chapter Visual - The Gift",
+      "description": "Gift chapter visual for ClubAperitif.",
+      "path": "/kb-assets/clubaperitif/the-gift.png",
+      "related_entities": [
+        "project:clubaperitif"
+      ],
+      "tags": [
+        "clubaperitif",
+        "chapter",
+        "the-gift",
+        "invitation",
+        "membership",
+        "ritual",
+        "brand-visual",
+        "cover"
+      ],
+      "caption": "The Gift chapter visual for ClubAperitif",
+      "metadata": {
+        "format": "png",
+        "source": "ClubAperitif brand assets"
+      },
+      "blob_id": "clubaperitif/the-gift",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/clubaperitif/the-gift.png"
+    },
+    {
+      "id": "asset:clubaperitif_journey_001",
+      "type": "asset",
+      "entity_type": "photo",
+      "title": "ClubAperitif Chapter Visual - The Journey",
+      "description": "Journey chapter visual for ClubAperitif.",
+      "path": "/kb-assets/clubaperitif/the-journey.png",
+      "related_entities": [
+        "project:clubaperitif"
+      ],
+      "tags": [
+        "clubaperitif",
+        "chapter",
+        "the-journey",
+        "travel",
+        "exploration",
+        "membership",
+        "brand-visual",
+        "cover"
+      ],
+      "caption": "The Journey chapter visual for ClubAperitif",
+      "metadata": {
+        "format": "png",
+        "source": "ClubAperitif brand assets"
+      },
+      "blob_id": "clubaperitif/the-journey",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/clubaperitif/the-journey.png"
+    },
+    {
+      "id": "asset:clubaperitif_meet_001",
+      "type": "asset",
+      "entity_type": "photo",
+      "title": "ClubAperitif Chapter Visual - The Meet",
+      "description": "Meet chapter visual for ClubAperitif.",
+      "path": "/kb-assets/clubaperitif/the-meet.png",
+      "related_entities": [
+        "project:clubaperitif"
+      ],
+      "tags": [
+        "clubaperitif",
+        "chapter",
+        "the-meet",
+        "social",
+        "hospitality",
+        "membership",
+        "brand-visual",
+        "cover"
+      ],
+      "caption": "The Meet chapter visual for ClubAperitif",
+      "metadata": {
+        "format": "png",
+        "source": "ClubAperitif brand assets"
+      },
+      "blob_id": "clubaperitif/the-meet",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/clubaperitif/the-meet.png"
+    },
+    {
+      "id": "asset:clubaperitif_presence_001",
+      "type": "asset",
+      "entity_type": "photo",
+      "title": "ClubAperitif Chapter Visual - The Presence",
+      "description": "Presence chapter visual for ClubAperitif.",
+      "path": "/kb-assets/clubaperitif/the-presence.png",
+      "related_entities": [
+        "project:clubaperitif"
+      ],
+      "tags": [
+        "clubaperitif",
+        "chapter",
+        "the-presence",
+        "digital-identity",
+        "badge",
+        "membership",
+        "brand-visual",
+        "cover"
+      ],
+      "caption": "The Presence chapter visual for ClubAperitif",
+      "metadata": {
+        "format": "png",
+        "source": "ClubAperitif brand assets"
+      },
+      "blob_id": "clubaperitif/the-presence",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/clubaperitif/the-presence.png"
+    },
+    {
+      "id": "asset:clubaperitif_box_with_letter_001",
+      "type": "asset",
+      "entity_type": "photo",
+      "title": "ClubAperitif Invitation Box with Letter",
+      "description": "Sketch of the ClubAperitif invitation box: opening the box reveals a letter with a ClubAperitif-shaped sticker, with the object placed underneath.",
+      "path": "/kb-assets/clubaperitif/box with letter.png",
+      "related_entities": [
+        "project:clubaperitif"
+      ],
+      "tags": [
+        "clubaperitif",
+        "invitation",
+        "gift",
+        "membership",
+        "package",
+        "letter",
+        "artifact"
+      ],
+      "caption": "Invitation box with letter concept",
+      "metadata": {
+        "format": "png",
+        "source": "ClubAperitif brand assets"
+      },
+      "blob_id": "clubaperitif/box-with-letter",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/clubaperitif/box with letter.png"
+    },
+    {
+      "id": "asset:clubaperitif_letter_001",
+      "type": "asset",
+      "entity_type": "photo",
+      "title": "ClubAperitif Invitation Letter",
+      "description": "ClubAperitif letter invitation.",
+      "path": "/kb-assets/clubaperitif/letter.png",
+      "related_entities": [
+        "project:clubaperitif"
+      ],
+      "tags": [
+        "clubaperitif",
+        "invitation",
+        "letter",
+        "membership",
+        "ritual",
+        "artifact"
+      ],
+      "caption": "Invitation letter concept",
+      "metadata": {
+        "format": "png",
+        "source": "ClubAperitif brand assets"
+      },
+      "blob_id": "clubaperitif/letter",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/clubaperitif/letter.png"
+    },
+    {
+      "id": "asset:clubaperitif_prize_concept_001",
+      "type": "asset",
+      "entity_type": "photo",
+      "title": "ClubAperitif Prize Concept",
+      "description": "Prize that ClubAperitif would have given restaurants.",
+      "path": "/kb-assets/clubaperitif/prize-concept.png",
+      "related_entities": [
+        "project:clubaperitif"
+      ],
+      "tags": [
+        "clubaperitif",
+        "prize",
+        "gift",
+        "artifact",
+        "membership",
+        "concept"
+      ],
+      "caption": "Prize concept for ClubAperitif membership",
+      "metadata": {
+        "format": "png",
+        "source": "ClubAperitif brand assets"
+      },
+      "blob_id": "clubaperitif/prize-concept",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/clubaperitif/prize-concept.png"
+    },
+    {
+      "id": "asset:clubaperitif_open_badge_001",
+      "type": "asset",
+      "entity_type": "video",
+      "title": "ClubAperitif Open Badge Animation",
+      "description": "Short motion asset showing the ClubAperitif digital badge opening or animating. Represents the dynamic, time-based identity of a member's badge and the ritual of making presence known in the app.",
+      "path": "/kb-assets/clubaperitif/open badge.mov",
+      "related_entities": [
+        "project:clubaperitif"
+      ],
+      "tags": [
+        "clubaperitif",
+        "badge",
+        "animation",
+        "motion",
+        "digital-identity",
+        "app"
+      ],
+      "caption": "Open badge animation concept",
+      "metadata": {
+        "format": "mov",
+        "source": "ClubAperitif brand assets"
+      },
+      "blob_id": "clubaperitif/open-badge",
+      "file_extension": "mov",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/clubaperitif/open badge.mov"
+    },
+    {
+      "id": "asset:vector_ios_app_activity_dashboard_001",
+      "type": "asset",
+      "entity_type": "photo",
+      "title": "Vector iOS App - Activity Dashboard",
+      "description": "Snapshot from a Vector iOS app variant focused on physical activity, connected to the Vector Watch. Users could see their steps, active calories, sleep, and other key metrics in a dashboard view with circular progress indicators.",
+      "path": "/kb-assets/vector/iOS-app-view-activity-dashboard.png",
+      "related_entities": [
+        "project:vector_watch"
+      ],
+      "tags": [
+        "vector",
+        "ios",
+        "app",
+        "dashboard",
+        "activity-tracking",
+        "fitness",
+        "UI"
+      ],
+      "caption": "Vector iOS app activity dashboard",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio"
+      },
+      "blob_id": "vector/ios-app-view-activity-dashboard",
+      "file_extension": "png",
+      "storage_provider": "gcs"
+    },
+    {
+      "id": "asset:vector_ios_app_settings_devices_001",
+      "type": "asset",
+      "entity_type": "photo",
+      "title": "Vector iOS App - Settings and Devices",
+      "description": "Snapshot from the main Vector iOS app showing the device management interface. Users could connect multiple devices (Luna Black, Meridian Solar, Luna Pulse, Luna Sport) and control their settings and connection status.",
+      "path": "/kb-assets/vector/iOS-app-view-settings-devices.png",
+      "related_entities": [
+        "project:vector_watch"
+      ],
+      "tags": [
+        "vector",
+        "ios",
+        "app",
+        "settings",
+        "devices",
+        "management",
+        "UI"
+      ],
+      "caption": "Vector iOS app device settings",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio"
+      },
+      "blob_id": "vector/ios-app-view-settings-devices",
+      "file_extension": "png",
+      "storage_provider": "gcs"
+    },
+    {
+      "id": "asset:vector_watch_os_navigation_model_001",
+      "type": "asset",
+      "entity_type": "diagram",
+      "title": "Vector Watch OS Navigation Model",
+      "description": "Schema showing the conceptual structure of the Vector Watch OS UI and how users navigate between watchfaces, apps, and insights using gestures. Illustrates the hierarchical organization of content on the circular display.",
+      "path": "/kb-assets/vector/navigation-model.png",
+      "related_entities": [
+        "project:vector_watch"
+      ],
+      "tags": [
+        "vector",
+        "watch-os",
+        "navigation",
+        "UX",
+        "diagram",
+        "gestures",
+        "conceptual-model"
+      ],
+      "caption": "Vector Watch OS navigation conceptual model",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio"
+      },
+      "blob_id": "vector/navigation-model",
+      "file_extension": "png",
+      "storage_provider": "gcs"
+    },
+    {
+      "id": "asset:vector_watch_tracker_app_001",
+      "type": "asset",
+      "entity_type": "video",
+      "title": "Vector Watch Tracker App Navigation",
+      "description": "Video demonstration of navigating the Tracker app on the Vector Watch. Shows how physical activity tracking data is displayed and accessed on the watch interface.",
+      "path": "/kb-assets/vector/tracker app.mov",
+      "related_entities": [
+        "project:vector_watch"
+      ],
+      "tags": [
+        "vector",
+        "watch-os",
+        "tracker-app",
+        "video",
+        "demo",
+        "activity-tracking",
+        "UI"
+      ],
+      "caption": "Video showing navigation in the Vector Watch Tracker app",
+      "metadata": {
+        "format": "mov",
+        "source": "FRAM Design portfolio"
+      },
+      "blob_id": "vector/tracker-app",
+      "file_extension": "mov",
+      "storage_provider": "gcs"
+    },
+    {
+      "id": "asset:vector_ecosystem_explained_001",
+      "type": "asset",
+      "entity_type": "diagram",
+      "title": "Vector Ecosystem Explained",
+      "description": "A comprehensive overview of the Vector ecosystem, showing the interplay between physical products (Vector Watch V1, V2, V3), digital tools (Vector Builder, Watchface Builder, Vector Tracker app), and the Vector Cloud infrastructure.",
+      "path": "/kb-assets/vector/vector-ecosystem-explained.png",
+      "related_entities": [
+        "project:vector_watch"
+      ],
+      "tags": [
+        "vector",
+        "ecosystem",
+        "architecture",
+        "hardware",
+        "software",
+        "cloud",
+        "overview",
+        "diagram"
+      ],
+      "caption": "Overview of the Vector product and service ecosystem",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio"
+      },
+      "blob_id": "vector/vector-ecosystem-explained",
+      "file_extension": "png",
+      "storage_provider": "gcs"
+    },
+    {
+      "id": "asset:vector_watch_os_ui_primitives_001",
+      "type": "asset",
+      "entity_type": "diagram",
+      "title": "Vector Watch OS UI Primitives",
+      "description": "Diagram showcasing the UI primitives used in the Vector Watch OS, including the canvas, basic shapes (primitives), layer structure, and default components used for building watchfaces and apps.",
+      "path": "/kb-assets/vector/watch-os-ui-primitives.png",
+      "related_entities": [
+        "project:vector_watch"
+      ],
+      "tags": [
+        "vector",
+        "watch-os",
+        "UI-primitives",
+        "design-system",
+        "canvas",
+        "layers",
+        "components",
+        "diagram"
+      ],
+      "caption": "UI primitives and components for Vector Watch OS",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio"
+      },
+      "blob_id": "vector/watch-os-ui-primitives",
+      "file_extension": "png",
+      "storage_provider": "gcs"
+    },
+    {
+      "id": "asset:urbanair_neobility_intro_001",
+      "type": "asset",
+      "entity_type": "photo",
+      "title": "UrbanAir (Neobility) Intro and Pitch",
+      "description": "Intro to Neobility (also known as UrbanAir) and the initial pitch for the project, describing the future of multi-modal mobility and the app's role as a mobility aggregator that integrates e-scooters, bikes, and cars for renting.",
+      "path": "/kb-assets/urbanair/neobility intro.png",
+      "related_entities": [
+        "project:urbanair"
+      ],
+      "tags": [
+        "urbanair",
+        "neobility",
+        "mobility",
+        "aggregator",
+        "pitch",
+        "intro",
+        "UI"
+      ],
+      "caption": "Introduction to Neobility/UrbanAir mobility aggregator",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio"
+      },
+      "blob_id": "urbanair/neobility-intro",
+      "file_extension": "png",
+      "storage_provider": "gcs"
+    },
+    {
+      "id": "asset:uipath_studio_mobile_dark_light_001",
+      "type": "asset",
+      "entity_type": "photo",
+      "title": "UiPath Studio Mobile Exploration - Dark/Light",
+      "description": "Exploration into how UiPath Studio would transpose over to mobile, allowing automation builders in the UiPath ecosystem to test and edit workflows on the go. Shows the interface in both dark and light modes.",
+      "path": "/kb-assets/uipath-studio/DARK LIGHT.png",
+      "related_entities": [
+        "project:uipath_studio_mobile"
+      ],
+      "tags": [
+        "uipath",
+        "studio",
+        "mobile",
+        "automation",
+        "dark-mode",
+        "light-mode",
+        "UI",
+        "exploration"
+      ],
+      "caption": "Dark and light mode exploration for UiPath Studio on mobile",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio"
+      },
+      "blob_id": "uipath-studio/dark-light",
+      "file_extension": "png",
+      "storage_provider": "gcs"
+    },
+    {
+      "id": "asset:uipath_studio_mobile_edit_step_001",
+      "type": "asset",
+      "entity_type": "photo",
+      "title": "UiPath Studio Mobile - Edit Step Detail",
+      "description": "Another exploration into the UiPath Studio mobile interface, demonstrating how users can edit a single specific step within an automation workflow while on a mobile device.",
+      "path": "/kb-assets/uipath-studio/SIDE BY SIDE.png",
+      "related_entities": [
+        "project:uipath_studio_mobile"
+      ],
+      "tags": [
+        "uipath",
+        "studio",
+        "mobile",
+        "automation",
+        "editing",
+        "UI",
+        "step-detail"
+      ],
+      "caption": "Interface for editing an automation step on UiPath Studio mobile",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio"
+      },
+      "blob_id": "uipath-studio/side-by-side",
+      "file_extension": "png",
+      "storage_provider": "gcs"
+    },
+    {
+      "id": "asset:that_language_onboarding_001",
+      "type": "asset",
+      "entity_type": "video",
+      "title": "That - Language Learning App Onboarding",
+      "description": "Onboarding video for 'That', a language learning app where users learn new languages by pointing their phone camera at objects and tapping them. The app uses personal photos and gamification to review and reinforce language understanding.",
+      "path": "/kb-assets/that/tap the screen5.mov",
+      "related_entities": [
+        "project:that_language_app"
+      ],
+      "tags": [
+        "that",
+        "language-learning",
+        "AR",
+        "camera",
+        "onboarding",
+        "video",
+        "gamification",
+        "education"
+      ],
+      "caption": "Onboarding video for the 'That' language learning app",
+      "metadata": {
+        "format": "mov",
+        "source": "FRAM Design portfolio"
+      },
+      "blob_id": "that/tap-the-screen5",
+      "file_extension": "mov",
+      "storage_provider": "gcs"
+    },
+    {
+      "id": "asset:strategie_del_design_broad_vs_deep_001",
+      "type": "asset",
+      "entity_type": "diagram",
+      "title": "Strategie del Design - Broad versus Deep",
+      "description": "Illustration from the book 'Strategie del Design' showing how organization members interact horizontally while having deep understanding on a single subject.",
+      "path": "/kb-assets/strategie-del-design-book/broad versus deep.png",
+      "related_entities": [
+        "project:strategie_del_design_book"
+      ],
+      "tags": [
+        "strategie-del-design",
+        "book",
+        "organization",
+        "broad-vs-deep",
+        "collaboration",
+        "expertise",
+        "diagram"
+      ],
+      "caption": "Illustration of horizontal interaction vs deep subject expertise",
+      "metadata": {
+        "format": "png",
+        "source": "Strategie del Design book"
+      },
+      "blob_id": "strategie-del-design-book/broad-versus-deep",
+      "file_extension": "png",
+      "storage_provider": "gcs"
+    },
+    {
+      "id": "asset:strategie_del_design_communication_interference_001",
+      "type": "asset",
+      "entity_type": "diagram",
+      "title": "Strategie del Design - Communication Interference",
+      "description": "Illustration from 'Strategie del Design' showing how concepts can change meaning when going through multiple filters of perception, arriving at the far end completely changed.",
+      "path": "/kb-assets/strategie-del-design-book/communication interference is natural.png",
+      "related_entities": [
+        "project:strategie_del_design_book"
+      ],
+      "tags": [
+        "strategie-del-design",
+        "book",
+        "communication",
+        "perception",
+        "interference",
+        "concept-transformation",
+        "diagram"
+      ],
+      "caption": "Illustration of natural communication interference and perception filters",
+      "metadata": {
+        "format": "png",
+        "source": "Strategie del Design book"
+      },
+      "blob_id": "strategie-del-design-book/communication-interference-is-natural",
+      "file_extension": "png",
+      "storage_provider": "gcs"
+    },
+    {
+      "id": "asset:strategie_del_design_connected_disciplines_001",
+      "type": "asset",
+      "entity_type": "diagram",
+      "title": "Strategie del Design - Connected Disciplines",
+      "description": "Illustration from 'Strategie del Design' depicting the figure of the designer as a connector of multiple viewpoints into products, services, and communication.",
+      "path": "/kb-assets/strategie-del-design-book/connected disciplines.png",
+      "related_entities": [
+        "project:strategie_del_design_book"
+      ],
+      "tags": [
+        "strategie-del-design",
+        "book",
+        "designer-role",
+        "connector",
+        "disciplines",
+        "integration",
+        "diagram"
+      ],
+      "caption": "The designer as a connector of disciplines",
+      "metadata": {
+        "format": "png",
+        "source": "Strategie del Design book"
+      },
+      "blob_id": "strategie-del-design-book/connected-disciplines",
+      "file_extension": "png",
+      "storage_provider": "gcs"
+    },
+    {
+      "id": "asset:strategie_del_design_thinking_and_tools_001",
+      "type": "asset",
+      "entity_type": "diagram",
+      "title": "Strategie del Design - Design Thinking and Design Tools",
+      "description": "Illustration from 'Strategie del Design' showing design thinking and design tools in a T-shaped structure, emphasizing that one cannot have one without the other.",
+      "path": "/kb-assets/strategie-del-design-book/design thinking and design tools.png",
+      "related_entities": [
+        "project:strategie_del_design_book"
+      ],
+      "tags": [
+        "strategie-del-design",
+        "book",
+        "design-thinking",
+        "design-tools",
+        "T-shape",
+        "interdependence",
+        "diagram"
+      ],
+      "caption": "Interdependence of design thinking and design tools",
+      "metadata": {
+        "format": "png",
+        "source": "Strategie del Design book"
+      },
+      "blob_id": "strategie-del-design-book/design-thinking-and-design-tools",
+      "file_extension": "png",
+      "storage_provider": "gcs"
+    },
+    {
+      "id": "asset:strategie_del_design_vertical_roles_001",
+      "type": "asset",
+      "entity_type": "diagram",
+      "title": "Strategie del Design - Vertical Roles and User Needs",
+      "description": "Illustration from 'Strategie del Design' showing how each vertical role in an organization (Manufacturing, Sales, Engineering, Marketing) has its own skewed interpretation of user needs, and how they must work together to build what the client actually wants.",
+      "path": "/kb-assets/strategie-del-design-book/how each vertical role understands user needs.png",
+      "related_entities": [
+        "project:strategie_del_design_book"
+      ],
+      "tags": [
+        "strategie-del-design",
+        "book",
+        "organization",
+        "roles",
+        "user-needs",
+        "collaboration",
+        "client-perspective",
+        "diagram"
+      ],
+      "caption": "Skewed vs collaborative interpretations of user needs by organizational roles",
+      "metadata": {
+        "format": "png",
+        "source": "Strategie del Design book"
+      },
+      "blob_id": "strategie-del-design-book/how-each-vertical-role-understands-user-needs",
+      "file_extension": "png",
+      "storage_provider": "gcs"
+    },
+    {
+      "id": "asset:strategie_del_design_people_001",
+      "type": "asset",
+      "entity_type": "photo",
+      "title": "Strategie del Design - People Illustration",
+      "description": "Illustration from 'Strategie del Design' showing a group of people looking for direction within an organizational or strategic context.",
+      "path": "/kb-assets/strategie-del-design-book/people.jpg",
+      "related_entities": [
+        "project:strategie_del_design_book"
+      ],
+      "tags": [
+        "strategie-del-design",
+        "book",
+        "people",
+        "direction",
+        "illustration",
+        "strategy"
+      ],
+      "caption": "Illustration of a group of people looking for direction",
+      "metadata": {
+        "format": "jpg",
+        "source": "Strategie del Design book"
+      },
+      "blob_id": "strategie-del-design-book/people",
+      "file_extension": "jpg",
+      "storage_provider": "gcs"
+    },
+    {
+      "id": "asset:strategie_del_design_sketch_002",
+      "type": "asset",
+      "entity_type": "diagram",
+      "title": "Strategie del Design - Book Illustration Sketch 2",
+      "description": "Work-in-progress sketch (sketch 2) for the illustrations in the book 'Strategie del Design'.",
+      "path": "/kb-assets/strategie-del-design-book/sketch of book illustration 2.png",
+      "related_entities": [
+        "project:strategie_del_design_book"
+      ],
+      "tags": [
+        "strategie-del-design",
+        "book",
+        "sketch",
+        "work-in-progress",
+        "illustration",
+        "process"
+      ],
+      "caption": "WIP sketch for book illustration (v2)",
+      "metadata": {
+        "format": "png",
+        "source": "Strategie del Design book"
+      },
+      "blob_id": "strategie-del-design-book/sketch-of-book-illustration-2",
+      "file_extension": "png",
+      "storage_provider": "gcs"
+    },
+    {
+      "id": "asset:strategie_del_design_sketch_001",
+      "type": "asset",
+      "entity_type": "diagram",
+      "title": "Strategie del Design - Book Illustration Sketch 1",
+      "description": "Work-in-progress sketch (sketch 1) for the illustrations in the book 'Strategie del Design'.",
+      "path": "/kb-assets/strategie-del-design-book/sketch of book illustration.png",
+      "related_entities": [
+        "project:strategie_del_design_book"
+      ],
+      "tags": [
+        "strategie-del-design",
+        "book",
+        "sketch",
+        "work-in-progress",
+        "illustration",
+        "process"
+      ],
+      "caption": "WIP sketch for book illustration (v1)",
+      "metadata": {
+        "format": "png",
+        "source": "Strategie del Design book"
+      },
+      "blob_id": "strategie-del-design-book/sketch-of-book-illustration",
+      "file_extension": "png",
+      "storage_provider": "gcs"
+    },
+    {
+      "id": "asset:strategie_del_design_sketch_leader_001",
+      "type": "asset",
+      "entity_type": "diagram",
+      "title": "Strategie del Design - Organizational Leader Sketch",
+      "description": "Work-in-progress sketch (sketch 3) for the book 'Strategie del Design', illustrating the concept of an organizational leader.",
+      "path": "/kb-assets/strategie-del-design-book/sketch of organisational leader.png",
+      "related_entities": [
+        "project:strategie_del_design_book"
+      ],
+      "tags": [
+        "strategie-del-design",
+        "book",
+        "sketch",
+        "leader",
+        "organization",
+        "work-in-progress"
+      ],
+      "caption": "WIP sketch of an organizational leader",
+      "metadata": {
+        "format": "png",
+        "source": "Strategie del Design book"
+      },
+      "blob_id": "strategie-del-design-book/sketch-of-organisational-leader",
+      "file_extension": "png",
+      "storage_provider": "gcs"
+    },
+    {
+      "id": "asset:strategie_del_design_communication_interference_detail_001",
+      "type": "asset",
+      "entity_type": "photo",
+      "title": "Strategie del Design - Communication Interference (Detail)",
+      "description": "A zoomed-in detail view from the 'Communication Interference is Natural' illustration in 'Strategie del Design'.",
+      "path": "/kb-assets/strategie-del-design-book/test5.jpg",
+      "related_entities": [
+        "project:strategie_del_design_book"
+      ],
+      "tags": [
+        "strategie-del-design",
+        "book",
+        "detail",
+        "communication",
+        "interference",
+        "zoomed-in"
+      ],
+      "caption": "Detail view from communication interference illustration",
+      "metadata": {
+        "format": "jpg",
+        "source": "Strategie del Design book"
+      },
+      "blob_id": "strategie-del-design-book/test5",
+      "file_extension": "jpg",
+      "storage_provider": "gcs"
+    },
+    {
+      "id": "asset:strategie_del_design_broad_vs_deep_detail_001",
+      "type": "asset",
+      "entity_type": "photo",
+      "title": "Strategie del Design - Broad versus Deep (Detail)",
+      "description": "A zoomed-in detail view of a woman from the 'Broad versus Deep' illustration in 'Strategie del Design'.",
+      "path": "/kb-assets/strategie-del-design-book/woman.jpg",
+      "related_entities": [
+        "project:strategie_del_design_book"
+      ],
+      "tags": [
+        "strategie-del-design",
+        "book",
+        "detail",
+        "woman",
+        "broad-vs-deep",
+        "zoomed-in"
+      ],
+      "caption": "Detail view of a woman from broad vs deep illustration",
+      "metadata": {
+        "format": "jpg",
+        "source": "Strategie del Design book"
+      },
+      "blob_id": "strategie-del-design-book/woman",
+      "file_extension": "jpg",
+      "storage_provider": "gcs"
+    },
+    {
+      "id": "asset:strategie_del_design_leader_goals_001",
+      "type": "asset",
+      "entity_type": "diagram",
+      "title": "Strategie del Design - Leader Communicating Goals",
+      "description": "Sketch illustrating people working together for a common goal, with a leader opening up to show the goal as a symbol for how leaders should communicate goals and action.",
+      "path": "/kb-assets/strategie-del-design-book/zoom in sketch.png",
+      "related_entities": [
+        "project:strategie_del_design_book"
+      ],
+      "tags": [
+        "strategie-del-design",
+        "book",
+        "leader",
+        "communication",
+        "goals",
+        "alignment",
+        "common-goal",
+        "sketch"
+      ],
+      "caption": "Sketch of leader communicating shared goals and action",
+      "metadata": {
+        "format": "png",
+        "source": "Strategie del Design book"
+      },
+      "blob_id": "strategie-del-design-book/zoom-in-sketch",
+      "file_extension": "png",
+      "storage_provider": "gcs"
+    },
+    {
+      "id": "asset:playable_logo_sketch_001",
+      "type": "asset",
+      "entity_type": "diagram",
+      "title": "Playable Logo Sketch",
+      "description": "Sketch of the Playable logo. Playable was one of Andrei's venture studios created to work with crypto startups, a direction that did not pan out.",
+      "path": "/kb-assets/playable/playable-logo-sketch.png",
+      "related_entities": [
+        "project:playable_venture_studio",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "playable",
+        "logo",
+        "sketch",
+        "venture-studio",
+        "crypto",
+        "branding",
+        "andrei-clodius"
+      ],
+      "caption": "Playable logo sketch",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio"
+      },
+      "blob_id": "playable/playable-logo-sketch",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/playable/playable-logo-sketch.png"
+    },
+    {
+      "id": "asset:third_ear_sketch_one_001",
+      "type": "asset",
+      "entity_type": "diagram",
+      "title": "Third Ear Earbud Shape Exploration",
+      "description": "Sketch from the Third Ear project exploring the earbud form factor for a wearable hardware product carried around the neck, functioning as both recording and listening device.",
+      "path": "/kb-assets/industrial design projects/sketch-one.jpg",
+      "related_entities": [
+        "project:third_ear",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "third-ear",
+        "earbud",
+        "sketch",
+        "shape-exploration",
+        "audio",
+        "hardware",
+        "wearable",
+        "industrial-design",
+        "andrei-clodius"
+      ],
+      "caption": "Earbud shape exploration for Third Ear",
+      "metadata": {
+        "format": "jpg",
+        "source": "FRAM Design portfolio"
+      },
+      "blob_id": "industrial-design-projects/third-ear-earbud-shape-exploration",
+      "file_extension": "jpg",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/industrial design projects/sketch-one.jpg"
+    },
+    {
+      "id": "asset:celia_thermostat_detail_001",
+      "type": "asset",
+      "entity_type": "photo",
+      "title": "CELIA Thermostat Detail",
+      "description": "Detail view of the CELIA line of thermostats designed by Andrei for Leroy Merlin.",
+      "path": "/kb-assets/industrial design projects/thermostat detail.jpg",
+      "related_entities": [
+        "project:celia_thermostats",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "celia",
+        "thermostat",
+        "leroy-merlin",
+        "detail",
+        "home-heating",
+        "industrial-design",
+        "andrei-clodius"
+      ],
+      "caption": "CELIA thermostat module detail",
+      "metadata": {
+        "format": "jpg",
+        "source": "FRAM Design portfolio",
+        "client": "Leroy Merlin"
+      },
+      "blob_id": "industrial-design-projects/celia-thermostat-detail",
+      "file_extension": "jpg",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/industrial design projects/thermostat detail.jpg"
+    },
+    {
+      "id": "asset:third_ear_sketch_two_001",
+      "type": "asset",
+      "entity_type": "diagram",
+      "title": "Third Ear Shape Exploration (China)",
+      "description": "Shape exploration sketch for the Third Ear project, created during the China phase of the work.",
+      "path": "/kb-assets/industrial design projects/sketch-two.png",
+      "related_entities": [
+        "project:third_ear",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "third-ear",
+        "sketch",
+        "shape-exploration",
+        "china",
+        "hardware",
+        "audio",
+        "industrial-design",
+        "andrei-clodius"
+      ],
+      "caption": "Shape exploration sketch for Third Ear",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio"
+      },
+      "blob_id": "industrial-design-projects/third-ear-shape-exploration-china",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/industrial design projects/sketch-two.png"
+    },
+    {
+      "id": "asset:third_ear_casing_sketch_001",
+      "type": "asset",
+      "entity_type": "diagram",
+      "title": "Third Ear Casing Shape Explorations",
+      "description": "Sketches exploring the casing shape for the Third Ear wearable hardware device.",
+      "path": "/kb-assets/industrial design projects/sketch-of-casing.png",
+      "related_entities": [
+        "project:third_ear",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "third-ear",
+        "casing",
+        "sketch",
+        "shape-exploration",
+        "hardware",
+        "industrial-design",
+        "andrei-clodius"
+      ],
+      "caption": "Casing shape explorations for Third Ear",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio"
+      },
+      "blob_id": "industrial-design-projects/third-ear-casing-shape-explorations",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/industrial design projects/sketch-of-casing.png"
+    },
+    {
+      "id": "asset:third_ear_casing_texture_sketch_001",
+      "type": "asset",
+      "entity_type": "diagram",
+      "title": "Third Ear Casing Texture Explorations",
+      "description": "Sketches exploring casing textures and surface patterns for the Third Ear wearable device.",
+      "path": "/kb-assets/industrial design projects/sketch-of-casing-02.png",
+      "related_entities": [
+        "project:third_ear",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "third-ear",
+        "casing",
+        "texture",
+        "pattern",
+        "sketch",
+        "hardware",
+        "industrial-design",
+        "andrei-clodius"
+      ],
+      "caption": "Casing texture explorations for Third Ear",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio"
+      },
+      "blob_id": "industrial-design-projects/third-ear-casing-texture-explorations",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/industrial design projects/sketch-of-casing-02.png"
+    },
+    {
+      "id": "asset:third_ear_casing_render_001",
+      "type": "asset",
+      "entity_type": "photo",
+      "title": "Third Ear Casing Render",
+      "description": "Dark casing render for the Third Ear device, featuring a tiny white LED that signals the device is on but not recording.",
+      "path": "/kb-assets/industrial design projects/render of casing.png",
+      "related_entities": [
+        "project:third_ear",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "third-ear",
+        "casing",
+        "render",
+        "hardware",
+        "led",
+        "industrial-design",
+        "andrei-clodius"
+      ],
+      "caption": "Casing render with status LED for Third Ear",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio"
+      },
+      "blob_id": "industrial-design-projects/third-ear-casing-render",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/industrial design projects/render of casing.png"
+    },
+    {
+      "id": "asset:celia_premium_thermostat_header_001",
+      "type": "asset",
+      "entity_type": "photo",
+      "title": "CELIA Premium Thermostat Header",
+      "description": "CELIA line premium aluminum header with integrated smart thermostat module.",
+      "path": "/kb-assets/industrial design projects/premium thermostat.jpg",
+      "related_entities": [
+        "project:celia_thermostats",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "celia",
+        "thermostat",
+        "premium",
+        "aluminum",
+        "leroy-merlin",
+        "home-heating",
+        "industrial-design",
+        "andrei-clodius"
+      ],
+      "caption": "CELIA premium aluminum header with smart thermostat",
+      "metadata": {
+        "format": "jpg",
+        "source": "FRAM Design portfolio",
+        "client": "Leroy Merlin"
+      },
+      "blob_id": "industrial-design-projects/celia-premium-thermostat-header",
+      "file_extension": "jpg",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/industrial design projects/premium thermostat.jpg"
+    },
+    {
+      "id": "asset:celia_premium_thermostat_detail_001",
+      "type": "asset",
+      "entity_type": "photo",
+      "title": "CELIA Premium Thermostat Detail",
+      "description": "Detail view of the CELIA premium heater thermostat module.",
+      "path": "/kb-assets/industrial design projects/premium thermostat detail.jpg",
+      "related_entities": [
+        "project:celia_thermostats",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "celia",
+        "thermostat",
+        "detail",
+        "premium",
+        "leroy-merlin",
+        "home-heating",
+        "industrial-design",
+        "andrei-clodius"
+      ],
+      "caption": "Detail of the CELIA premium thermostat module",
+      "metadata": {
+        "format": "jpg",
+        "source": "FRAM Design portfolio",
+        "client": "Leroy Merlin"
+      },
+      "blob_id": "industrial-design-projects/celia-premium-thermostat-detail",
+      "file_extension": "jpg",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/industrial design projects/premium thermostat detail.jpg"
+    },
+    {
+      "id": "asset:celia_premium_heater_001",
+      "type": "asset",
+      "entity_type": "photo",
+      "title": "CELIA Premium Aluminum Heater",
+      "description": "CELIA premium aluminum heater with integrated thermostat module.",
+      "path": "/kb-assets/industrial design projects/premium thermostat 2.jpg",
+      "related_entities": [
+        "project:celia_thermostats",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "celia",
+        "heater",
+        "aluminum",
+        "leroy-merlin",
+        "home-heating",
+        "industrial-design",
+        "andrei-clodius"
+      ],
+      "caption": "CELIA premium aluminum heater",
+      "metadata": {
+        "format": "jpg",
+        "source": "FRAM Design portfolio",
+        "client": "Leroy Merlin"
+      },
+      "blob_id": "industrial-design-projects/celia-premium-aluminum-heater",
+      "file_extension": "jpg",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/industrial design projects/premium thermostat 2.jpg"
+    },
+    {
+      "id": "asset:third_ear_necklace_gold_001",
+      "type": "asset",
+      "entity_type": "photo",
+      "title": "Third Ear Necklace - Gold",
+      "description": "Gold necklace concept for the Third Ear wearable device.",
+      "path": "/kb-assets/industrial design projects/medaglion and necklace Gold.png",
+      "related_entities": [
+        "project:third_ear",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "third-ear",
+        "necklace",
+        "gold",
+        "wearable",
+        "hardware",
+        "industrial-design",
+        "andrei-clodius"
+      ],
+      "caption": "Gold necklace concept for Third Ear",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio"
+      },
+      "blob_id": "industrial-design-projects/third-ear-necklace-gold",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/industrial design projects/medaglion and necklace Gold.png"
+    },
+    {
+      "id": "asset:celia_addon_thermostat_detail_001",
+      "type": "asset",
+      "entity_type": "photo",
+      "title": "CELIA Add-on Thermostat Detail",
+      "description": "Detail view of the CELIA model with add-on thermostat for Leroy Merlin.",
+      "path": "/kb-assets/industrial design projects/Leroy Merlin Thermostat.jpg",
+      "related_entities": [
+        "project:celia_thermostats",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "celia",
+        "thermostat",
+        "add-on",
+        "leroy-merlin",
+        "home-heating",
+        "industrial-design",
+        "andrei-clodius"
+      ],
+      "caption": "CELIA add-on thermostat module",
+      "metadata": {
+        "format": "jpg",
+        "source": "FRAM Design portfolio",
+        "client": "Leroy Merlin"
+      },
+      "blob_id": "industrial-design-projects/celia-addon-thermostat-detail",
+      "file_extension": "jpg",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/industrial design projects/Leroy Merlin Thermostat.jpg"
+    },
+    {
+      "id": "asset:celia_heater_addon_001",
+      "type": "asset",
+      "entity_type": "photo",
+      "title": "CELIA Heater with Add-on Thermostat",
+      "description": "CELIA line heater model featuring an add-on thermostat unit.",
+      "path": "/kb-assets/industrial design projects/Leroy merlin heater.jpg",
+      "related_entities": [
+        "project:celia_thermostats",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "celia",
+        "heater",
+        "add-on",
+        "leroy-merlin",
+        "home-heating",
+        "industrial-design",
+        "andrei-clodius"
+      ],
+      "caption": "CELIA heater with add-on thermostat",
+      "metadata": {
+        "format": "jpg",
+        "source": "FRAM Design portfolio",
+        "client": "Leroy Merlin"
+      },
+      "blob_id": "industrial-design-projects/celia-heater-addon-thermostat",
+      "file_extension": "jpg",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/industrial design projects/Leroy merlin heater.jpg"
+    },
+    {
+      "id": "asset:celia_heater_home_001",
+      "type": "asset",
+      "entity_type": "photo",
+      "title": "CELIA Heater in Home Interior",
+      "description": "CELIA heater integrated into a home interior setting.",
+      "path": "/kb-assets/industrial design projects/leroy merlin heater in the home.jpg",
+      "related_entities": [
+        "project:celia_thermostats",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "celia",
+        "heater",
+        "home-interior",
+        "leroy-merlin",
+        "home-heating",
+        "industrial-design",
+        "andrei-clodius"
+      ],
+      "caption": "CELIA heater integrated in a home",
+      "metadata": {
+        "format": "jpg",
+        "source": "FRAM Design portfolio",
+        "client": "Leroy Merlin"
+      },
+      "blob_id": "industrial-design-projects/celia-heater-home-interior",
+      "file_extension": "jpg",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/industrial design projects/leroy merlin heater in the home.jpg"
+    },
+    {
+      "id": "asset:third_ear_hardware_features_sketches_001",
+      "type": "asset",
+      "entity_type": "diagram",
+      "title": "Third Ear Hardware Features Sketches",
+      "description": "Exploratory sketches outlining various hardware features and interaction ideas for the Third Ear concept.",
+      "path": "/kb-assets/industrial design projects/how andrei thinks of hardware features.png",
+      "related_entities": [
+        "project:third_ear",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "third-ear",
+        "hardware",
+        "features",
+        "sketches",
+        "concept",
+        "industrial-design",
+        "andrei-clodius"
+      ],
+      "caption": "Hardware feature explorations for Third Ear",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio"
+      },
+      "blob_id": "industrial-design-projects/third-ear-hardware-features-sketches",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/industrial design projects/how andrei thinks of hardware features.png"
+    },
+    {
+      "id": "asset:organic_space_separators_hotel_001",
+      "type": "asset",
+      "entity_type": "photo",
+      "title": "Organic Space Separators - Hotel Reception",
+      "description": "Organic space separator collection designed by Andrei for a hotel reception area.",
+      "path": "/kb-assets/industrial design projects/dettaglio 05.jpg",
+      "related_entities": [
+        "project:organic_space_separators",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "space-separators",
+        "hotel",
+        "reception",
+        "interior",
+        "installation",
+        "industrial-design",
+        "andrei-clodius"
+      ],
+      "caption": "Organic space separators for a hotel reception",
+      "metadata": {
+        "format": "jpg",
+        "source": "FRAM Design portfolio"
+      },
+      "blob_id": "industrial-design-projects/organic-space-separators-hotel-reception",
+      "file_extension": "jpg",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/industrial design projects/dettaglio 05.jpg"
+    },
+    {
+      "id": "asset:organic_space_separators_novotel_001",
+      "type": "asset",
+      "entity_type": "photo",
+      "title": "Organic Space Separators - Novotel",
+      "description": "Organic space separator collection created for Novotel.",
+      "path": "/kb-assets/industrial design projects/dettaglio 04.jpg",
+      "related_entities": [
+        "project:organic_space_separators",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "space-separators",
+        "novotel",
+        "hotel",
+        "reception",
+        "interior",
+        "installation",
+        "industrial-design",
+        "andrei-clodius"
+      ],
+      "caption": "Organic space separators for Novotel",
+      "metadata": {
+        "format": "jpg",
+        "source": "FRAM Design portfolio",
+        "client": "Novotel"
+      },
+      "blob_id": "industrial-design-projects/organic-space-separators-novotel",
+      "file_extension": "jpg",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/industrial design projects/dettaglio 04.jpg"
+    },
+    {
+      "id": "asset:third_ear_connector_sketches_001",
+      "type": "asset",
+      "entity_type": "diagram",
+      "title": "Third Ear Connector Sketches",
+      "description": "Connector sketches for the Third Ear device. The casing connects to the earbuds through a special connector to support higher-quality sound input from four microphones in the earbuds, enabling 3D recording and immersive playback.",
+      "path": "/kb-assets/industrial design projects/connector.png",
+      "related_entities": [
+        "project:third_ear",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "third-ear",
+        "connector",
+        "microphones",
+        "earbuds",
+        "audio",
+        "3d-recording",
+        "sketch",
+        "industrial-design",
+        "andrei-clodius"
+      ],
+      "caption": "Connector concept for Third Ear earbuds",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio"
+      },
+      "blob_id": "industrial-design-projects/third-ear-connector-sketches",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/industrial design projects/connector.png"
+    },
+    {
+      "id": "asset:clara_lamp_models_001",
+      "type": "asset",
+      "entity_type": "photo",
+      "title": "Clara Lamp with Models",
+      "description": "Clara lamp designed by Andrei, photographed with two friends as models.",
+      "path": "/kb-assets/industrial design projects/Clara lamp.png",
+      "related_entities": [
+        "project:clara_lamp",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "clara-lamp",
+        "lighting",
+        "industrial-design",
+        "photo",
+        "portrait",
+        "andrei-clodius"
+      ],
+      "caption": "Clara lamp with models",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio"
+      },
+      "blob_id": "industrial-design-projects/clara-lamp-with-models",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/industrial design projects/Clara lamp.png"
+    },
+    {
+      "id": "asset:clara_lamp_assembly_001",
+      "type": "asset",
+      "entity_type": "photo",
+      "title": "Clara Lamp Assembly by Mihai Topescu",
+      "description": "Artist Mihai Topescu assembling the Clara lamp.",
+      "path": "/kb-assets/industrial design projects/Clara lamp.jpg",
+      "related_entities": [
+        "project:clara_lamp",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "clara-lamp",
+        "assembly",
+        "mihai-topescu",
+        "lighting",
+        "industrial-design",
+        "photo",
+        "andrei-clodius"
+      ],
+      "caption": "Mihai Topescu assembling the Clara lamp",
+      "metadata": {
+        "format": "jpg",
+        "source": "FRAM Design portfolio"
+      },
+      "blob_id": "industrial-design-projects/clara-lamp-assembly-mihai-topescu",
+      "file_extension": "jpg",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/industrial design projects/Clara lamp.jpg"
+    },
+    {
+      "id": "asset:clara_lamp_long_exposure_001",
+      "type": "asset",
+      "entity_type": "photo",
+      "title": "Clara Lamp Long Exposure",
+      "description": "Long exposure photo of the Clara lamp by Andrei.",
+      "path": "/kb-assets/industrial design projects/Clara lamp-4.jpg",
+      "related_entities": [
+        "project:clara_lamp",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "clara-lamp",
+        "lighting",
+        "long-exposure",
+        "industrial-design",
+        "photo",
+        "andrei-clodius"
+      ],
+      "caption": "Clara lamp long exposure photo",
+      "metadata": {
+        "format": "jpg",
+        "source": "FRAM Design portfolio"
+      },
+      "blob_id": "industrial-design-projects/clara-lamp-long-exposure",
+      "file_extension": "jpg",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/industrial design projects/Clara lamp-4.jpg"
+    },
+    {
+      "id": "asset:clara_lamp_after_assembly_001",
+      "type": "asset",
+      "entity_type": "photo",
+      "title": "Mihai Topescu After Clara Lamp Assembly",
+      "description": "Artist Mihai Topescu after assembling the Clara lamp.",
+      "path": "/kb-assets/industrial design projects/Clara lamp-3.png",
+      "related_entities": [
+        "project:clara_lamp",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "clara-lamp",
+        "mihai-topescu",
+        "assembly",
+        "lighting",
+        "industrial-design",
+        "photo",
+        "andrei-clodius"
+      ],
+      "caption": "Mihai Topescu after assembling the Clara lamp",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio"
+      },
+      "blob_id": "industrial-design-projects/clara-lamp-after-assembly",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/industrial design projects/Clara lamp-3.png"
+    },
+    {
+      "id": "asset:clara_lamp_long_exposure_002",
+      "type": "asset",
+      "entity_type": "photo",
+      "title": "Clara Lamp Long Exposure (2)",
+      "description": "Second long exposure photo of the Clara lamp.",
+      "path": "/kb-assets/industrial design projects/Clara lamp-2.jpg",
+      "related_entities": [
+        "project:clara_lamp",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "clara-lamp",
+        "lighting",
+        "long-exposure",
+        "industrial-design",
+        "photo",
+        "andrei-clodius"
+      ],
+      "caption": "Clara lamp long exposure photo (2)",
+      "metadata": {
+        "format": "jpg",
+        "source": "FRAM Design portfolio"
+      },
+      "blob_id": "industrial-design-projects/clara-lamp-long-exposure-2",
+      "file_extension": "jpg",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/industrial design projects/Clara lamp-2.jpg"
+    },
+    {
+      "id": "asset:clara_sofa_001",
+      "type": "asset",
+      "entity_type": "photo",
+      "title": "Clara Sofa",
+      "description": "Clara sofa, an industrial design project by Andrei.",
+      "path": "/kb-assets/industrial design projects/clara 7.png",
+      "related_entities": [
+        "project:clara_sofa",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "clara-sofa",
+        "furniture",
+        "industrial-design",
+        "photo",
+        "andrei-clodius"
+      ],
+      "caption": "Clara sofa concept",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio"
+      },
+      "blob_id": "industrial-design-projects/clara-sofa",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/industrial design projects/clara 7.png"
+    },
+    {
+      "id": "asset:goodgest_gio_ibba_logo_001",
+      "type": "asset",
+      "entity_type": "photo",
+      "title": "Giovanni Alberto Ibba with Goodgest Logo",
+      "description": "Founder Giovanni Alberto Ibba with the new Goodgest logo. Goodgest is a close partner of Andrei and FRAM.",
+      "path": "/kb-assets/goodgest/goodgest-gio-ibba-G-logo.png",
+      "related_entities": [
+        "project:goodgest",
+        "person:andrei_clodius",
+        "lab:fram_design"
+      ],
+      "tags": [
+        "goodgest",
+        "logo",
+        "giovanni-alberto-ibba",
+        "founder",
+        "branding",
+        "partner",
+        "andrei-clodius"
+      ],
+      "caption": "Giovanni Alberto Ibba with the Goodgest logo",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio"
+      },
+      "blob_id": "goodgest/goodgest-gio-ibba-g-logo",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/goodgest/goodgest-gio-ibba-G-logo.png"
+    },
+    {
+      "id": "asset:goodgest_logo_building_blocks_001",
+      "type": "asset",
+      "entity_type": "diagram",
+      "title": "Goodgest Logo Building Blocks Poster",
+      "description": "Poster presenting the Goodgest logo deconstructed into building blocks.",
+      "path": "/kb-assets/goodgest/logo-building-blocks-poster.png",
+      "related_entities": [
+        "project:goodgest",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "goodgest",
+        "logo",
+        "poster",
+        "deconstruction",
+        "branding",
+        "andrei-clodius"
+      ],
+      "caption": "Goodgest logo building blocks poster",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio"
+      },
+      "blob_id": "goodgest/logo-building-blocks-poster",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/goodgest/logo-building-blocks-poster.png"
+    },
+    {
+      "id": "asset:goodgest_logo_event_wallpaper_001",
+      "type": "asset",
+      "entity_type": "diagram",
+      "title": "Goodgest Logo Event Wallpaper",
+      "description": "Mood poster featuring the Goodgest logo with repeated cropped segments resembling a loading spinner, emphasizing the digital nature of Goodgest's business.",
+      "path": "/kb-assets/goodgest/logo-event-wallpaper.png",
+      "related_entities": [
+        "project:goodgest",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "goodgest",
+        "logo",
+        "wallpaper",
+        "spinner",
+        "digital",
+        "branding",
+        "andrei-clodius"
+      ],
+      "caption": "Goodgest logo event wallpaper",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio"
+      },
+      "blob_id": "goodgest/logo-event-wallpaper",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/goodgest/logo-event-wallpaper.png"
+    },
+    {
+      "id": "asset:goodgest_logo_001",
+      "type": "asset",
+      "entity_type": "diagram",
+      "title": "Goodgest Logo",
+      "description": "New Goodgest logo designed by Andrei.",
+      "path": "/kb-assets/goodgest/logo-goodgest.png",
+      "related_entities": [
+        "project:goodgest",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "goodgest",
+        "logo",
+        "branding",
+        "andrei-clodius"
+      ],
+      "caption": "Goodgest logo",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio"
+      },
+      "blob_id": "goodgest/logo-goodgest",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/goodgest/logo-goodgest.png"
+    },
+    {
+      "id": "asset:goodgest_logo_pattern_wallpaper_001",
+      "type": "asset",
+      "entity_type": "diagram",
+      "title": "Goodgest Logo Pattern Wallpaper",
+      "description": "Mood poster of Goodgest, featuring the logo pattern without the photographic background.",
+      "path": "/kb-assets/goodgest/logo-pattern-wallpaper.png",
+      "related_entities": [
+        "project:goodgest",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "goodgest",
+        "logo",
+        "pattern",
+        "wallpaper",
+        "branding",
+        "andrei-clodius"
+      ],
+      "caption": "Goodgest logo pattern wallpaper",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio"
+      },
+      "blob_id": "goodgest/logo-pattern-wallpaper",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/goodgest/logo-pattern-wallpaper.png"
+    },
+    {
+      "id": "asset:fitbit_core_health_metrics_001",
+      "type": "asset",
+      "entity_type": "diagram",
+      "title": "Fitbit Core Health Metrics Whiteboard",
+      "description": "Whiteboard brainstorm with Andrei and the technical team defining the structure of core health metrics for new Fitbit smartwatches.",
+      "path": "/kb-assets/fitbit/core health metrics.jpg",
+      "related_entities": [
+        "project:fitbit_OS",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "fitbit",
+        "health-metrics",
+        "whiteboard",
+        "brainstorm",
+        "wearables",
+        "andrei-clodius"
+      ],
+      "caption": "Core health metrics brainstorm for Fitbit OS",
+      "metadata": {
+        "format": "jpg",
+        "source": "FRAM Design portfolio",
+        "client": "Fitbit"
+      },
+      "blob_id": "fitbit/core-health-metrics",
+      "file_extension": "jpg",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/fitbit/core health metrics.jpg"
+    },
+    {
+      "id": "asset:fitbit_opportunity_areas_001",
+      "type": "asset",
+      "entity_type": "diagram",
+      "title": "Fitbit Opportunity Areas",
+      "description": "Opportunity areas defined with the GTM team during Fitbit research.",
+      "path": "/kb-assets/fitbit/oportunity areas.png",
+      "related_entities": [
+        "project:fitbit_OS",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "fitbit",
+        "opportunity-areas",
+        "research",
+        "gtm",
+        "wearables",
+        "andrei-clodius"
+      ],
+      "caption": "Opportunity areas from Fitbit research",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio",
+        "client": "Fitbit"
+      },
+      "blob_id": "fitbit/opportunity-areas",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/fitbit/oportunity areas.png"
+    },
+    {
+      "id": "asset:fitbit_uber_app_flow_001",
+      "type": "asset",
+      "entity_type": "diagram",
+      "title": "Uber App Flow on Fitbit OS",
+      "description": "Flow diagram with visual examples of the Uber app on the first Fitbit watch OS.",
+      "path": "/kb-assets/fitbit/Uber app on the fitbit smartwatch.png",
+      "related_entities": [
+        "project:fitbit_OS",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "fitbit",
+        "uber",
+        "app-flow",
+        "watch-os",
+        "wearables",
+        "diagram",
+        "andrei-clodius"
+      ],
+      "caption": "Uber app flow on Fitbit OS",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio",
+        "client": "Fitbit"
+      },
+      "blob_id": "fitbit/uber-app-on-fitbit-os",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/fitbit/Uber app on the fitbit smartwatch.png"
+    },
+    {
+      "id": "asset:compass_light_view_001",
+      "type": "asset",
+      "entity_type": "photo",
+      "title": "Job Compass - Light View",
+      "description": "Job Compass interface concept for intelligent job searching.",
+      "path": "/kb-assets/compass/light-view.png",
+      "related_entities": [
+        "project:job_compass",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "compass",
+        "job-search",
+        "intelligent",
+        "UI",
+        "product",
+        "andrei-clodius"
+      ],
+      "caption": "Job Compass interface concept",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio"
+      },
+      "blob_id": "compass/light-view",
+      "file_extension": "png",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/compass/light-view.png"
+    },
+    {
+      "id": "asset:compass_onboarding_motion_001",
+      "type": "asset",
+      "entity_type": "video",
+      "title": "Compass Onboarding Motion Study",
+      "description": "Motion study for Compass onboarding.",
+      "path": "/kb-assets/compass/dark.mov",
+      "related_entities": [
+        "project:job_compass",
+        "person:andrei_clodius"
+      ],
+      "tags": [
+        "compass",
+        "onboarding",
+        "motion",
+        "video",
+        "job-search",
+        "andrei-clodius"
+      ],
+      "caption": "Compass onboarding motion study",
+      "metadata": {
+        "format": "mov",
+        "source": "FRAM Design portfolio"
+      },
+      "blob_id": "compass/dark",
+      "file_extension": "mov",
+      "storage_provider": "gcs",
+      "_old_path": "/kb-assets/compass/dark.mov"
     }
   ],
   "_schema": {

@@ -7954,3 +7954,490 @@
 2026-01-29T10:34:59.269Z generateContentStream failed for tool: perplexity_search - ApiError: {"error":{"message":"{\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"CachedContent not found (or permission denied)\",\n    \"status\": \"PERMISSION_DENIED\"\n  }\n}\n","code":403,"status":"Forbidden"}}
 2026-01-29T10:34:59.270Z Retrying without cache for tool: perplexity_search
 2026-01-29T10:35:01.407Z Stream iteration complete. 8 chunks.
+2026-01-29T11:57:33.143Z Preparing follow-up stream for tool: kb_search
+2026-01-29T11:57:33.144Z Calling generateContentStream for tool: kb_search
+2026-01-29T11:57:34.293Z generateContentStream returned for tool: kb_search
+2026-01-29T11:57:34.337Z Stream iteration complete. 2 chunks.
+2026-01-29T11:57:38.308Z Preparing follow-up stream for tool: kb_search
+2026-01-29T11:57:38.309Z Calling generateContentStream for tool: kb_search
+2026-01-29T11:57:39.187Z generateContentStream returned for tool: kb_search
+2026-01-29T11:58:07.246Z Stream iteration complete. 164 chunks.
+2026-01-29T11:58:12.705Z Preparing follow-up stream for tool: kb_search
+2026-01-29T11:58:12.707Z Calling generateContentStream for tool: kb_search
+2026-01-29T11:58:15.000Z generateContentStream returned for tool: kb_search
+2026-01-29T11:58:15.005Z Stream iteration complete. 1 chunks.
+2026-01-29T11:58:17.249Z Stream iteration complete. 3 chunks.
+2026-01-29T11:58:19.395Z Preparing follow-up stream for tool: kb_get
+2026-01-29T11:58:19.396Z Calling generateContentStream for tool: kb_get
+2026-01-29T11:58:20.830Z generateContentStream returned for tool: kb_get
+2026-01-29T11:58:21.398Z Stream iteration complete. 5 chunks.
+2026-01-29T11:58:23.366Z Preparing follow-up stream for tool: kb_search
+2026-01-29T11:58:23.367Z Calling generateContentStream for tool: kb_search
+2026-01-29T11:58:24.267Z generateContentStream returned for tool: kb_search
+2026-01-29T11:58:25.669Z Stream iteration complete. 10 chunks.
+2026-01-29T11:58:31.932Z Preparing follow-up stream for tool: kb_get
+2026-01-29T11:58:31.934Z Calling generateContentStream for tool: kb_get
+2026-01-29T11:58:36.383Z generateContentStream returned for tool: kb_get
+2026-01-29T11:58:37.124Z Stream iteration complete. 6 chunks.
+2026-01-29T11:58:40.082Z Preparing follow-up stream for tool: kb_search
+2026-01-29T11:58:40.085Z Calling generateContentStream for tool: kb_search
+2026-01-29T11:58:41.183Z generateContentStream returned for tool: kb_search
+2026-01-29T11:58:42.726Z Stream iteration complete. 11 chunks.
+2026-01-29T11:58:45.017Z Preparing follow-up stream for tool: query_tool_memory
+2026-01-29T11:58:45.020Z Calling generateContentStream for tool: query_tool_memory
+2026-01-29T11:58:45.416Z generateContentStream failed for tool: query_tool_memory - ApiError: {"error":{"message":"{\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"CachedContent not found (or permission denied)\",\n    \"status\": \"PERMISSION_DENIED\"\n  }\n}\n","code":403,"status":"Forbidden"}}
+2026-01-29T11:58:45.417Z Retrying without cache for tool: query_tool_memory
+2026-01-29T11:58:48.677Z Stream iteration complete. 3 chunks.
+2026-01-29T11:58:50.751Z Retrying chained call without cache
+2026-01-29T11:58:53.880Z Stream iteration complete. 6 chunks.
+2026-01-29T11:59:02.022Z Preparing follow-up stream for tool: kb_search
+2026-01-29T11:59:02.024Z Calling generateContentStream for tool: kb_search
+2026-01-29T11:59:02.498Z generateContentStream failed for tool: kb_search - ApiError: {"error":{"message":"{\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"CachedContent not found (or permission denied)\",\n    \"status\": \"PERMISSION_DENIED\"\n  }\n}\n","code":403,"status":"Forbidden"}}
+2026-01-29T11:59:02.500Z Retrying without cache for tool: kb_search
+2026-01-29T11:59:04.144Z Stream iteration complete. 2 chunks.
+2026-01-29T11:59:05.746Z Preparing follow-up stream for tool: kb_get
+2026-01-29T11:59:05.748Z Calling generateContentStream for tool: kb_get
+2026-01-29T11:59:06.039Z generateContentStream failed for tool: kb_get - ApiError: {"error":{"message":"{\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"CachedContent not found (or permission denied)\",\n    \"status\": \"PERMISSION_DENIED\"\n  }\n}\n","code":403,"status":"Forbidden"}}
+2026-01-29T11:59:06.040Z Retrying without cache for tool: kb_get
+2026-01-29T11:59:07.270Z Stream iteration complete. 3 chunks.
+2026-01-29T11:59:10.920Z Retrying initial stream without cache
+2026-01-29T11:59:20.002Z Preparing follow-up stream for tool: perplexity_search
+2026-01-29T11:59:20.005Z Calling generateContentStream for tool: perplexity_search
+2026-01-29T11:59:20.547Z generateContentStream failed for tool: perplexity_search - ApiError: {"error":{"message":"{\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"CachedContent not found (or permission denied)\",\n    \"status\": \"PERMISSION_DENIED\"\n  }\n}\n","code":403,"status":"Forbidden"}}
+2026-01-29T11:59:20.548Z Retrying without cache for tool: perplexity_search
+2026-01-29T11:59:22.798Z Stream iteration complete. 8 chunks.
+2026-01-29T12:09:49.274Z Preparing follow-up stream for tool: kb_search
+2026-01-29T12:09:49.276Z Calling generateContentStream for tool: kb_search
+2026-01-29T12:09:50.837Z generateContentStream returned for tool: kb_search
+2026-01-29T12:09:50.839Z Stream iteration complete. 1 chunks.
+2026-01-29T12:09:52.751Z Preparing follow-up stream for tool: kb_search
+2026-01-29T12:09:52.753Z Calling generateContentStream for tool: kb_search
+2026-01-29T12:09:53.611Z generateContentStream returned for tool: kb_search
+2026-01-29T12:09:53.617Z Stream iteration complete. 2 chunks.
+2026-01-29T12:09:55.980Z Preparing follow-up stream for tool: query_tool_memory
+2026-01-29T12:09:55.982Z Calling generateContentStream for tool: query_tool_memory
+2026-01-29T12:09:56.648Z generateContentStream returned for tool: query_tool_memory
+2026-01-29T12:09:56.860Z Stream iteration complete. 4 chunks.
+2026-01-29T12:09:58.999Z Preparing follow-up stream for tool: kb_search
+2026-01-29T12:09:59.002Z Calling generateContentStream for tool: kb_search
+2026-01-29T12:09:59.847Z generateContentStream returned for tool: kb_search
+2026-01-29T12:09:59.848Z Stream iteration complete. 1 chunks.
+2026-01-29T12:10:01.473Z Stream iteration complete. 6 chunks.
+2026-01-29T12:10:03.555Z Preparing follow-up stream for tool: query_tool_memory
+2026-01-29T12:10:03.556Z Calling generateContentStream for tool: query_tool_memory
+2026-01-29T12:10:04.256Z generateContentStream returned for tool: query_tool_memory
+2026-01-29T12:10:04.728Z Stream iteration complete. 4 chunks.
+2026-01-29T12:10:08.466Z Preparing follow-up stream for tool: kb_search
+2026-01-29T12:10:08.467Z Calling generateContentStream for tool: kb_search
+2026-01-29T12:10:09.851Z generateContentStream returned for tool: kb_search
+2026-01-29T12:10:10.268Z Stream iteration complete. 4 chunks.
+2026-01-29T12:10:11.819Z Preparing follow-up stream for tool: kb_search
+2026-01-29T12:10:11.821Z Calling generateContentStream for tool: kb_search
+2026-01-29T12:10:13.934Z generateContentStream returned for tool: kb_search
+2026-01-29T12:10:14.172Z Stream iteration complete. 3 chunks.
+2026-01-29T12:10:15.331Z Preparing follow-up stream for tool: kb_search
+2026-01-29T12:10:15.333Z Calling generateContentStream for tool: kb_search
+2026-01-29T12:10:17.001Z generateContentStream returned for tool: kb_search
+2026-01-29T12:10:17.222Z Stream iteration complete. 2 chunks.
+2026-01-29T12:10:18.562Z Preparing follow-up stream for tool: kb_search
+2026-01-29T12:10:18.564Z Calling generateContentStream for tool: kb_search
+2026-01-29T12:10:21.205Z generateContentStream returned for tool: kb_search
+2026-01-29T12:10:21.410Z Stream iteration complete. 2 chunks.
+2026-01-29T12:10:25.477Z Preparing follow-up stream for tool: kb_search
+2026-01-29T12:10:25.478Z Calling generateContentStream for tool: kb_search
+2026-01-29T12:10:26.248Z generateContentStream returned for tool: kb_search
+2026-01-29T12:10:27.705Z Stream iteration complete. 10 chunks.
+2026-01-29T12:10:31.126Z Preparing follow-up stream for tool: kb_get
+2026-01-29T12:10:31.127Z Calling generateContentStream for tool: kb_get
+2026-01-29T12:10:32.642Z generateContentStream returned for tool: kb_get
+2026-01-29T12:10:33.208Z Stream iteration complete. 4 chunks.
+2026-01-29T12:10:35.377Z Retrying initial stream without cache
+2026-01-29T12:10:37.358Z Retrying initial stream without cache
+2026-01-29T12:10:38.638Z Preparing follow-up stream for tool: kb_search
+2026-01-29T12:10:38.640Z Calling generateContentStream for tool: kb_search
+2026-01-29T12:10:38.845Z generateContentStream failed for tool: kb_search - ApiError: {"error":{"message":"{\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"CachedContent not found (or permission denied)\",\n    \"status\": \"PERMISSION_DENIED\"\n  }\n}\n","code":403,"status":"Forbidden"}}
+2026-01-29T12:10:38.845Z Retrying without cache for tool: kb_search
+2026-01-29T12:10:41.064Z Stream iteration complete. 3 chunks.
+2026-01-29T12:10:42.551Z Preparing follow-up stream for tool: kb_search
+2026-01-29T12:10:42.553Z Calling generateContentStream for tool: kb_search
+2026-01-29T12:10:42.828Z generateContentStream failed for tool: kb_search - ApiError: {"error":{"message":"{\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"CachedContent not found (or permission denied)\",\n    \"status\": \"PERMISSION_DENIED\"\n  }\n}\n","code":403,"status":"Forbidden"}}
+2026-01-29T12:10:42.829Z Retrying without cache for tool: kb_search
+2026-01-29T12:10:43.931Z Stream iteration complete. 3 chunks.
+2026-01-29T12:10:44.247Z Retrying initial stream without cache
+2026-01-29T12:10:45.921Z Preparing follow-up stream for tool: query_tool_memory
+2026-01-29T12:10:45.923Z Calling generateContentStream for tool: query_tool_memory
+2026-01-29T12:10:46.101Z generateContentStream failed for tool: query_tool_memory - ApiError: {"error":{"message":"{\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"CachedContent not found (or permission denied)\",\n    \"status\": \"PERMISSION_DENIED\"\n  }\n}\n","code":403,"status":"Forbidden"}}
+2026-01-29T12:10:46.102Z Retrying without cache for tool: query_tool_memory
+2026-01-29T12:10:48.066Z Stream iteration complete. 5 chunks.
+2026-01-29T12:10:59.483Z Preparing follow-up stream for tool: perplexity_search
+2026-01-29T12:10:59.484Z Calling generateContentStream for tool: perplexity_search
+2026-01-29T12:11:00.156Z generateContentStream failed for tool: perplexity_search - ApiError: {"error":{"message":"{\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"CachedContent not found (or permission denied)\",\n    \"status\": \"PERMISSION_DENIED\"\n  }\n}\n","code":403,"status":"Forbidden"}}
+2026-01-29T12:11:00.157Z Retrying without cache for tool: perplexity_search
+2026-01-29T12:11:02.391Z Stream iteration complete. 8 chunks.
+2026-01-29T12:12:20.199Z Preparing follow-up stream for tool: kb_search
+2026-01-29T12:12:20.201Z Calling generateContentStream for tool: kb_search
+2026-01-29T12:12:20.872Z generateContentStream returned for tool: kb_search
+2026-01-29T12:12:20.931Z Stream iteration complete. 2 chunks.
+2026-01-29T12:13:21.398Z Preparing follow-up stream for tool: kb_search
+2026-01-29T12:13:21.399Z Calling generateContentStream for tool: kb_search
+2026-01-29T12:13:22.221Z generateContentStream returned for tool: kb_search
+2026-01-29T12:13:22.317Z Stream iteration complete. 2 chunks.
+2026-01-29T12:33:39.055Z Preparing follow-up stream for tool: kb_search
+2026-01-29T12:33:39.056Z Calling generateContentStream for tool: kb_search
+2026-01-29T12:33:42.116Z generateContentStream returned for tool: kb_search
+2026-01-29T12:33:42.319Z Stream iteration complete. 3 chunks.
+2026-01-29T12:33:45.245Z Preparing follow-up stream for tool: kb_search
+2026-01-29T12:33:45.246Z Calling generateContentStream for tool: kb_search
+2026-01-29T12:33:46.683Z generateContentStream returned for tool: kb_search
+2026-01-29T12:33:46.686Z Stream iteration complete. 1 chunks.
+2026-01-29T12:33:47.956Z Preparing follow-up stream for tool: kb_get
+2026-01-29T12:33:47.957Z Calling generateContentStream for tool: kb_get
+2026-01-29T12:33:48.782Z generateContentStream returned for tool: kb_get
+2026-01-29T12:33:48.785Z Stream iteration complete. 2 chunks.
+2026-01-29T12:33:50.005Z Preparing follow-up stream for tool: kb_get
+2026-01-29T12:33:50.007Z Calling generateContentStream for tool: kb_get
+2026-01-29T12:33:51.310Z generateContentStream returned for tool: kb_get
+2026-01-29T12:33:51.387Z Stream iteration complete. 3 chunks.
+2026-01-29T12:33:53.444Z Preparing follow-up stream for tool: kb_search
+2026-01-29T12:33:53.445Z Calling generateContentStream for tool: kb_search
+2026-01-29T12:33:54.365Z generateContentStream returned for tool: kb_search
+2026-01-29T12:33:54.981Z Stream iteration complete. 4 chunks.
+2026-01-29T12:33:56.645Z Preparing follow-up stream for tool: kb_get
+2026-01-29T12:33:56.647Z Calling generateContentStream for tool: kb_get
+2026-01-29T12:33:58.709Z generateContentStream returned for tool: kb_get
+2026-01-29T12:33:58.714Z Stream iteration complete. 1 chunks.
+2026-01-29T12:34:07.141Z Stream iteration complete. 12 chunks.
+2026-01-29T12:34:10.137Z Preparing follow-up stream for tool: query_tool_memory
+2026-01-29T12:34:10.139Z Calling generateContentStream for tool: query_tool_memory
+2026-01-29T12:34:10.844Z generateContentStream returned for tool: query_tool_memory
+2026-01-29T12:34:11.761Z Stream iteration complete. 6 chunks.
+2026-01-29T12:34:14.427Z Preparing follow-up stream for tool: kb_search
+2026-01-29T12:34:14.428Z Calling generateContentStream for tool: kb_search
+2026-01-29T12:34:16.489Z generateContentStream returned for tool: kb_search
+2026-01-29T12:34:16.491Z Stream iteration complete. 1 chunks.
+2026-01-29T12:34:20.781Z Stream iteration complete. 4 chunks.
+2026-01-29T12:34:22.673Z Preparing follow-up stream for tool: kb_get
+2026-01-29T12:34:22.675Z Calling generateContentStream for tool: kb_get
+2026-01-29T12:34:23.988Z generateContentStream returned for tool: kb_get
+2026-01-29T12:34:25.110Z Stream iteration complete. 6 chunks.
+2026-01-29T12:34:27.145Z Preparing follow-up stream for tool: kb_search
+2026-01-29T12:34:27.147Z Calling generateContentStream for tool: kb_search
+2026-01-29T12:34:28.457Z generateContentStream returned for tool: kb_search
+2026-01-29T12:34:30.046Z Stream iteration complete. 11 chunks.
+2026-01-29T12:34:35.084Z Preparing follow-up stream for tool: kb_search
+2026-01-29T12:34:35.086Z Calling generateContentStream for tool: kb_search
+2026-01-29T12:34:36.548Z generateContentStream returned for tool: kb_search
+2026-01-29T12:34:38.416Z Stream iteration complete. 10 chunks.
+2026-01-29T12:34:39.055Z Retrying initial stream without cache
+2026-01-29T12:34:46.475Z Preparing follow-up stream for tool: kb_search
+2026-01-29T12:34:46.476Z Calling generateContentStream for tool: kb_search
+2026-01-29T12:34:46.899Z generateContentStream failed for tool: kb_search - ApiError: {"error":{"message":"{\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"CachedContent not found (or permission denied)\",\n    \"status\": \"PERMISSION_DENIED\"\n  }\n}\n","code":403,"status":"Forbidden"}}
+2026-01-29T12:34:46.900Z Retrying without cache for tool: kb_search
+2026-01-29T12:34:49.182Z Stream iteration complete. 3 chunks.
+2026-01-29T12:34:53.497Z Preparing follow-up stream for tool: kb_search
+2026-01-29T12:34:53.498Z Calling generateContentStream for tool: kb_search
+2026-01-29T12:34:53.789Z generateContentStream failed for tool: kb_search - ApiError: {"error":{"message":"{\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"CachedContent not found (or permission denied)\",\n    \"status\": \"PERMISSION_DENIED\"\n  }\n}\n","code":403,"status":"Forbidden"}}
+2026-01-29T12:34:53.790Z Retrying without cache for tool: kb_search
+2026-01-29T12:34:55.316Z Stream iteration complete. 5 chunks.
+2026-01-29T12:34:55.783Z Retrying initial stream without cache
+2026-01-29T12:35:05.377Z Preparing follow-up stream for tool: perplexity_search
+2026-01-29T12:35:05.378Z Calling generateContentStream for tool: perplexity_search
+2026-01-29T12:35:06.001Z generateContentStream failed for tool: perplexity_search - ApiError: {"error":{"message":"{\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"CachedContent not found (or permission denied)\",\n    \"status\": \"PERMISSION_DENIED\"\n  }\n}\n","code":403,"status":"Forbidden"}}
+2026-01-29T12:35:06.001Z Retrying without cache for tool: perplexity_search
+2026-01-29T12:35:08.736Z Stream iteration complete. 8 chunks.
+2026-01-29T12:58:57.768Z Preparing follow-up stream for tool: kb_search
+2026-01-29T12:58:57.769Z Calling generateContentStream for tool: kb_search
+2026-01-29T12:58:59.290Z generateContentStream returned for tool: kb_search
+2026-01-29T12:58:59.772Z Stream iteration complete. 3 chunks.
+2026-01-29T12:59:01.831Z Preparing follow-up stream for tool: kb_search
+2026-01-29T12:59:01.832Z Calling generateContentStream for tool: kb_search
+2026-01-29T12:59:03.552Z generateContentStream returned for tool: kb_search
+2026-01-29T12:59:03.581Z Stream iteration complete. 2 chunks.
+2026-01-29T12:59:04.949Z Preparing follow-up stream for tool: kb_get
+2026-01-29T12:59:04.950Z Calling generateContentStream for tool: kb_get
+2026-01-29T12:59:05.639Z generateContentStream returned for tool: kb_get
+2026-01-29T12:59:05.642Z Stream iteration complete. 2 chunks.
+2026-01-29T12:59:09.346Z Preparing follow-up stream for tool: kb_search
+2026-01-29T12:59:09.348Z Calling generateContentStream for tool: kb_search
+2026-01-29T12:59:10.226Z generateContentStream returned for tool: kb_search
+2026-01-29T12:59:10.682Z Stream iteration complete. 5 chunks.
+2026-01-29T12:59:12.563Z Preparing follow-up stream for tool: kb_get
+2026-01-29T12:59:12.565Z Calling generateContentStream for tool: kb_get
+2026-01-29T12:59:13.641Z generateContentStream returned for tool: kb_get
+2026-01-29T12:59:13.643Z Stream iteration complete. 1 chunks.
+2026-01-29T12:59:17.100Z Stream iteration complete. 12 chunks.
+2026-01-29T12:59:19.884Z Preparing follow-up stream for tool: kb_search
+2026-01-29T12:59:19.886Z Calling generateContentStream for tool: kb_search
+2026-01-29T12:59:21.827Z generateContentStream returned for tool: kb_search
+2026-01-29T12:59:21.833Z Stream iteration complete. 2 chunks.
+2026-01-29T12:59:23.996Z Preparing follow-up stream for tool: kb_search
+2026-01-29T12:59:23.996Z Calling generateContentStream for tool: kb_search
+2026-01-29T12:59:26.911Z generateContentStream returned for tool: kb_search
+2026-01-29T12:59:26.927Z Stream iteration complete. 2 chunks.
+2026-01-29T12:59:31.472Z Preparing follow-up stream for tool: kb_search
+2026-01-29T12:59:31.473Z Calling generateContentStream for tool: kb_search
+2026-01-29T12:59:32.123Z generateContentStream returned for tool: kb_search
+2026-01-29T12:59:32.129Z Stream iteration complete. 1 chunks.
+2026-01-29T12:59:35.115Z Stream iteration complete. 11 chunks.
+2026-01-29T12:59:37.960Z Preparing follow-up stream for tool: kb_search
+2026-01-29T12:59:37.962Z Calling generateContentStream for tool: kb_search
+2026-01-29T12:59:39.254Z generateContentStream returned for tool: kb_search
+2026-01-29T12:59:39.743Z Stream iteration complete. 4 chunks.
+2026-01-29T12:59:41.717Z Preparing follow-up stream for tool: kb_search
+2026-01-29T12:59:41.719Z Calling generateContentStream for tool: kb_search
+2026-01-29T12:59:43.451Z generateContentStream returned for tool: kb_search
+2026-01-29T12:59:43.453Z Stream iteration complete. 1 chunks.
+2026-01-29T12:59:46.262Z Stream iteration complete. 6 chunks.
+2026-01-29T12:59:48.901Z Preparing follow-up stream for tool: kb_get
+2026-01-29T12:59:48.903Z Calling generateContentStream for tool: kb_get
+2026-01-29T12:59:50.102Z generateContentStream returned for tool: kb_get
+2026-01-29T12:59:50.106Z Stream iteration complete. 1 chunks.
+2026-01-29T12:59:53.673Z Stream iteration complete. 13 chunks.
+2026-01-29T12:59:55.471Z Preparing follow-up stream for tool: kb_search
+2026-01-29T12:59:55.473Z Calling generateContentStream for tool: kb_search
+2026-01-29T12:59:56.304Z generateContentStream returned for tool: kb_search
+2026-01-29T12:59:57.815Z Stream iteration complete. 11 chunks.
+2026-01-29T13:00:03.519Z Preparing follow-up stream for tool: kb_search
+2026-01-29T13:00:03.521Z Calling generateContentStream for tool: kb_search
+2026-01-29T13:00:04.801Z generateContentStream returned for tool: kb_search
+2026-01-29T13:00:06.048Z Stream iteration complete. 10 chunks.
+2026-01-29T13:00:12.552Z Retrying initial stream without cache
+2026-01-29T13:00:14.640Z Preparing follow-up stream for tool: kb_search
+2026-01-29T13:00:14.642Z Calling generateContentStream for tool: kb_search
+2026-01-29T13:00:14.934Z generateContentStream failed for tool: kb_search - ApiError: {"error":{"message":"{\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"CachedContent not found (or permission denied)\",\n    \"status\": \"PERMISSION_DENIED\"\n  }\n}\n","code":403,"status":"Forbidden"}}
+2026-01-29T13:00:14.934Z Retrying without cache for tool: kb_search
+2026-01-29T13:00:15.848Z Stream iteration complete. 3 chunks.
+2026-01-29T13:00:16.313Z Retrying initial stream without cache
+2026-01-29T13:00:27.514Z Preparing follow-up stream for tool: perplexity_search
+2026-01-29T13:00:27.515Z Calling generateContentStream for tool: perplexity_search
+2026-01-29T13:00:27.820Z generateContentStream failed for tool: perplexity_search - ApiError: {"error":{"message":"{\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"CachedContent not found (or permission denied)\",\n    \"status\": \"PERMISSION_DENIED\"\n  }\n}\n","code":403,"status":"Forbidden"}}
+2026-01-29T13:00:27.820Z Retrying without cache for tool: perplexity_search
+2026-01-29T13:00:30.374Z Stream iteration complete. 5 chunks.
+2026-01-29T13:00:39.183Z Preparing follow-up stream for tool: kb_get
+2026-01-29T13:00:39.184Z Calling generateContentStream for tool: kb_get
+2026-01-29T13:00:40.583Z generateContentStream returned for tool: kb_get
+2026-01-29T13:00:40.624Z Stream iteration complete. 2 chunks.
+2026-01-29T13:00:42.941Z Preparing follow-up stream for tool: kb_search
+2026-01-29T13:00:42.943Z Calling generateContentStream for tool: kb_search
+2026-01-29T13:00:44.415Z generateContentStream returned for tool: kb_search
+2026-01-29T13:00:45.326Z Stream iteration complete. 6 chunks.
+2026-01-29T13:00:47.070Z Preparing follow-up stream for tool: query_tool_memory
+2026-01-29T13:00:47.071Z Calling generateContentStream for tool: query_tool_memory
+2026-01-29T13:00:47.598Z generateContentStream returned for tool: query_tool_memory
+2026-01-29T13:00:48.354Z Stream iteration complete. 5 chunks.
+2026-01-29T13:00:50.286Z Preparing follow-up stream for tool: query_tool_memory
+2026-01-29T13:00:50.288Z Calling generateContentStream for tool: query_tool_memory
+2026-01-29T13:00:51.059Z generateContentStream returned for tool: query_tool_memory
+2026-01-29T13:00:51.735Z Stream iteration complete. 5 chunks.
+2026-01-29T13:00:53.786Z Preparing follow-up stream for tool: kb_search
+2026-01-29T13:00:53.787Z Calling generateContentStream for tool: kb_search
+2026-01-29T13:00:54.643Z generateContentStream returned for tool: kb_search
+2026-01-29T13:00:55.330Z Stream iteration complete. 5 chunks.
+2026-01-29T13:00:58.047Z Preparing follow-up stream for tool: kb_get
+2026-01-29T13:00:58.048Z Calling generateContentStream for tool: kb_get
+2026-01-29T13:00:59.245Z generateContentStream returned for tool: kb_get
+2026-01-29T13:01:01.313Z Stream iteration complete. 9 chunks.
+2026-01-29T13:01:02.939Z Preparing follow-up stream for tool: kb_search
+2026-01-29T13:01:02.941Z Calling generateContentStream for tool: kb_search
+2026-01-29T13:01:04.328Z generateContentStream returned for tool: kb_search
+2026-01-29T13:01:06.085Z Stream iteration complete. 11 chunks.
+2026-01-29T13:01:08.418Z Preparing follow-up stream for tool: query_tool_memory
+2026-01-29T13:01:08.419Z Calling generateContentStream for tool: query_tool_memory
+2026-01-29T13:01:09.520Z generateContentStream returned for tool: query_tool_memory
+2026-01-29T13:01:10.279Z Stream iteration complete. 7 chunks.
+2026-01-29T13:01:12.521Z Preparing follow-up stream for tool: kb_search
+2026-01-29T13:01:12.522Z Calling generateContentStream for tool: kb_search
+2026-01-29T13:01:13.541Z generateContentStream returned for tool: kb_search
+2026-01-29T13:01:15.369Z Stream iteration complete. 11 chunks.
+2026-01-29T13:01:21.850Z Preparing follow-up stream for tool: kb_search
+2026-01-29T13:01:21.851Z Calling generateContentStream for tool: kb_search
+2026-01-29T13:01:23.066Z generateContentStream returned for tool: kb_search
+2026-01-29T13:01:23.157Z Stream iteration complete. 3 chunks.
+2026-01-29T13:01:25.186Z Preparing follow-up stream for tool: kb_search
+2026-01-29T13:01:25.187Z Calling generateContentStream for tool: kb_search
+2026-01-29T13:01:25.603Z generateContentStream failed for tool: kb_search - ApiError: {"error":{"message":"{\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"CachedContent not found (or permission denied)\",\n    \"status\": \"PERMISSION_DENIED\"\n  }\n}\n","code":403,"status":"Forbidden"}}
+2026-01-29T13:01:25.604Z Retrying without cache for tool: kb_search
+2026-01-29T13:01:26.829Z Stream iteration complete. 3 chunks.
+2026-01-29T13:01:28.656Z Preparing follow-up stream for tool: kb_search
+2026-01-29T13:01:28.657Z Calling generateContentStream for tool: kb_search
+2026-01-29T13:01:29.460Z generateContentStream returned for tool: kb_search
+2026-01-29T13:01:29.504Z Stream iteration complete. 3 chunks.
+2026-01-29T13:01:33.713Z Preparing follow-up stream for tool: perplexity_search
+2026-01-29T13:01:33.715Z Calling generateContentStream for tool: perplexity_search
+2026-01-29T13:01:34.416Z generateContentStream failed for tool: perplexity_search - ApiError: {"error":{"message":"{\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"CachedContent not found (or permission denied)\",\n    \"status\": \"PERMISSION_DENIED\"\n  }\n}\n","code":403,"status":"Forbidden"}}
+2026-01-29T13:01:34.417Z Retrying without cache for tool: perplexity_search
+2026-01-29T13:01:36.934Z Stream iteration complete. 7 chunks.
+2026-01-29T13:01:53.033Z Preparing follow-up stream for tool: kb_get
+2026-01-29T13:01:53.034Z Calling generateContentStream for tool: kb_get
+2026-01-29T13:01:54.098Z generateContentStream returned for tool: kb_get
+2026-01-29T13:01:54.132Z Stream iteration complete. 2 chunks.
+2026-01-29T13:01:56.713Z Preparing follow-up stream for tool: kb_search
+2026-01-29T13:01:56.714Z Calling generateContentStream for tool: kb_search
+2026-01-29T13:01:58.695Z generateContentStream returned for tool: kb_search
+2026-01-29T13:01:59.436Z Stream iteration complete. 6 chunks.
+2026-01-29T13:02:04.032Z Preparing follow-up stream for tool: query_tool_memory
+2026-01-29T13:02:04.034Z Calling generateContentStream for tool: query_tool_memory
+2026-01-29T13:02:06.194Z generateContentStream returned for tool: query_tool_memory
+2026-01-29T13:02:06.198Z Stream iteration complete. 1 chunks.
+2026-01-29T13:02:08.397Z Stream iteration complete. 6 chunks.
+2026-01-29T13:02:10.955Z Preparing follow-up stream for tool: kb_get
+2026-01-29T13:02:10.956Z Calling generateContentStream for tool: kb_get
+2026-01-29T13:02:11.649Z generateContentStream returned for tool: kb_get
+2026-01-29T13:02:12.012Z Stream iteration complete. 4 chunks.
+2026-01-29T13:02:13.422Z Preparing follow-up stream for tool: kb_get
+2026-01-29T13:02:13.423Z Calling generateContentStream for tool: kb_get
+2026-01-29T13:02:14.134Z generateContentStream returned for tool: kb_get
+2026-01-29T13:02:15.501Z Stream iteration complete. 8 chunks.
+2026-01-29T13:02:17.121Z Preparing follow-up stream for tool: kb_search
+2026-01-29T13:02:17.123Z Calling generateContentStream for tool: kb_search
+2026-01-29T13:02:17.893Z generateContentStream returned for tool: kb_search
+2026-01-29T13:02:19.806Z Stream iteration complete. 11 chunks.
+2026-01-29T13:02:24.883Z Preparing follow-up stream for tool: kb_search
+2026-01-29T13:02:24.884Z Calling generateContentStream for tool: kb_search
+2026-01-29T13:02:26.625Z generateContentStream returned for tool: kb_search
+2026-01-29T13:02:28.563Z Stream iteration complete. 11 chunks.
+2026-01-29T13:02:32.652Z Preparing follow-up stream for tool: kb_get
+2026-01-29T13:02:32.654Z Calling generateContentStream for tool: kb_get
+2026-01-29T13:02:33.317Z generateContentStream failed for tool: kb_get - ApiError: {"error":{"message":"{\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"CachedContent not found (or permission denied)\",\n    \"status\": \"PERMISSION_DENIED\"\n  }\n}\n","code":403,"status":"Forbidden"}}
+2026-01-29T13:02:33.317Z Retrying without cache for tool: kb_get
+2026-01-29T13:02:36.247Z Stream iteration complete. 6 chunks.
+2026-01-29T13:02:36.840Z Retrying initial stream without cache
+2026-01-29T13:02:40.914Z Retrying initial stream without cache
+2026-01-29T13:02:44.579Z Preparing follow-up stream for tool: query_tool_memory
+2026-01-29T13:02:44.581Z Calling generateContentStream for tool: query_tool_memory
+2026-01-29T13:02:45.625Z generateContentStream failed for tool: query_tool_memory - ApiError: {"error":{"message":"{\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"CachedContent not found (or permission denied)\",\n    \"status\": \"PERMISSION_DENIED\"\n  }\n}\n","code":403,"status":"Forbidden"}}
+2026-01-29T13:02:45.626Z Retrying without cache for tool: query_tool_memory
+2026-01-29T13:02:48.828Z Stream iteration complete. 5 chunks.
+2026-01-29T13:02:50.628Z Preparing follow-up stream for tool: kb_get
+2026-01-29T13:02:50.630Z Calling generateContentStream for tool: kb_get
+2026-01-29T13:02:50.968Z generateContentStream failed for tool: kb_get - ApiError: {"error":{"message":"{\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"CachedContent not found (or permission denied)\",\n    \"status\": \"PERMISSION_DENIED\"\n  }\n}\n","code":403,"status":"Forbidden"}}
+2026-01-29T13:02:50.969Z Retrying without cache for tool: kb_get
+2026-01-29T13:02:52.070Z Stream iteration complete. 4 chunks.
+2026-01-29T13:02:55.231Z Retrying initial stream without cache
+2026-01-29T13:02:57.061Z Preparing follow-up stream for tool: perplexity_search
+2026-01-29T13:02:57.063Z Calling generateContentStream for tool: perplexity_search
+2026-01-29T13:02:57.499Z generateContentStream failed for tool: perplexity_search - ApiError: {"error":{"message":"{\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"CachedContent not found (or permission denied)\",\n    \"status\": \"PERMISSION_DENIED\"\n  }\n}\n","code":403,"status":"Forbidden"}}
+2026-01-29T13:02:57.499Z Retrying without cache for tool: perplexity_search
+2026-01-29T13:03:00.924Z Stream iteration complete. 5 chunks.
+2026-01-29T13:08:34.888Z Preparing follow-up stream for tool: kb_search
+2026-01-29T13:08:34.889Z Calling generateContentStream for tool: kb_search
+2026-01-29T13:08:37.366Z generateContentStream returned for tool: kb_search
+2026-01-29T13:08:37.651Z Stream iteration complete. 3 chunks.
+2026-01-29T13:08:39.575Z Preparing follow-up stream for tool: kb_search
+2026-01-29T13:08:39.576Z Calling generateContentStream for tool: kb_search
+2026-01-29T13:08:42.420Z generateContentStream returned for tool: kb_search
+2026-01-29T13:08:42.424Z Stream iteration complete. 1 chunks.
+2026-01-29T13:08:45.625Z Preparing follow-up stream for tool: kb_get
+2026-01-29T13:08:45.625Z Calling generateContentStream for tool: kb_get
+2026-01-29T13:08:47.610Z generateContentStream returned for tool: kb_get
+2026-01-29T13:08:47.613Z Stream iteration complete. 2 chunks.
+2026-01-29T13:08:49.601Z Preparing follow-up stream for tool: kb_search
+2026-01-29T13:08:49.603Z Calling generateContentStream for tool: kb_search
+2026-01-29T13:08:50.266Z generateContentStream returned for tool: kb_search
+2026-01-29T13:08:51.116Z Stream iteration complete. 6 chunks.
+2026-01-29T13:08:54.626Z Preparing follow-up stream for tool: kb_get
+2026-01-29T13:08:54.627Z Calling generateContentStream for tool: kb_get
+2026-01-29T13:08:55.700Z generateContentStream returned for tool: kb_get
+2026-01-29T13:08:55.701Z Stream iteration complete. 1 chunks.
+2026-01-29T13:08:58.695Z Stream iteration complete. 12 chunks.
+2026-01-29T13:09:00.359Z Preparing follow-up stream for tool: kb_get
+2026-01-29T13:09:00.360Z Calling generateContentStream for tool: kb_get
+2026-01-29T13:09:01.258Z generateContentStream returned for tool: kb_get
+2026-01-29T13:09:01.620Z Stream iteration complete. 4 chunks.
+2026-01-29T13:09:03.023Z Preparing follow-up stream for tool: kb_get
+2026-01-29T13:09:03.024Z Calling generateContentStream for tool: kb_get
+2026-01-29T13:09:03.832Z generateContentStream returned for tool: kb_get
+2026-01-29T13:09:04.549Z Stream iteration complete. 5 chunks.
+2026-01-29T13:09:11.991Z Preparing follow-up stream for tool: kb_search
+2026-01-29T13:09:11.992Z Calling generateContentStream for tool: kb_search
+2026-01-29T13:09:13.043Z generateContentStream returned for tool: kb_search
+2026-01-29T13:09:14.488Z Stream iteration complete. 10 chunks.
+2026-01-29T13:09:20.220Z Preparing follow-up stream for tool: kb_search
+2026-01-29T13:09:20.221Z Calling generateContentStream for tool: kb_search
+2026-01-29T13:09:22.326Z generateContentStream returned for tool: kb_search
+2026-01-29T13:09:23.783Z Stream iteration complete. 10 chunks.
+2026-01-29T13:09:29.111Z Retrying initial stream without cache
+2026-01-29T13:09:31.079Z Preparing follow-up stream for tool: kb_search
+2026-01-29T13:09:31.079Z Calling generateContentStream for tool: kb_search
+2026-01-29T13:09:31.603Z generateContentStream failed for tool: kb_search - ApiError: {"error":{"message":"{\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"CachedContent not found (or permission denied)\",\n    \"status\": \"PERMISSION_DENIED\"\n  }\n}\n","code":403,"status":"Forbidden"}}
+2026-01-29T13:09:31.604Z Retrying without cache for tool: kb_search
+2026-01-29T13:09:33.116Z Stream iteration complete. 3 chunks.
+2026-01-29T13:09:33.538Z Retrying initial stream without cache
+2026-01-29T13:09:35.787Z Preparing follow-up stream for tool: kb_search
+2026-01-29T13:09:35.788Z Calling generateContentStream for tool: kb_search
+2026-01-29T13:09:36.075Z generateContentStream failed for tool: kb_search - ApiError: {"error":{"message":"{\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"CachedContent not found (or permission denied)\",\n    \"status\": \"PERMISSION_DENIED\"\n  }\n}\n","code":403,"status":"Forbidden"}}
+2026-01-29T13:09:36.075Z Retrying without cache for tool: kb_search
+2026-01-29T13:09:37.416Z Stream iteration complete. 3 chunks.
+2026-01-29T13:09:39.098Z Retrying initial stream without cache
+2026-01-29T13:09:40.906Z Preparing follow-up stream for tool: kb_search
+2026-01-29T13:09:40.908Z Calling generateContentStream for tool: kb_search
+2026-01-29T13:09:41.250Z generateContentStream failed for tool: kb_search - ApiError: {"error":{"message":"{\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"CachedContent not found (or permission denied)\",\n    \"status\": \"PERMISSION_DENIED\"\n  }\n}\n","code":403,"status":"Forbidden"}}
+2026-01-29T13:09:41.250Z Retrying without cache for tool: kb_search
+2026-01-29T13:09:42.656Z Stream iteration complete. 4 chunks.
+2026-01-29T13:09:53.115Z Preparing follow-up stream for tool: perplexity_search
+2026-01-29T13:09:53.117Z Calling generateContentStream for tool: perplexity_search
+2026-01-29T13:09:54.317Z generateContentStream failed for tool: perplexity_search - ApiError: {"error":{"message":"{\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"CachedContent not found (or permission denied)\",\n    \"status\": \"PERMISSION_DENIED\"\n  }\n}\n","code":403,"status":"Forbidden"}}
+2026-01-29T13:09:54.318Z Retrying without cache for tool: perplexity_search
+2026-01-29T13:09:56.118Z Stream iteration complete. 6 chunks.
+2026-01-29T13:10:16.074Z Preparing follow-up stream for tool: kb_get
+2026-01-29T13:10:16.075Z Calling generateContentStream for tool: kb_get
+2026-01-29T13:10:16.846Z generateContentStream returned for tool: kb_get
+2026-01-29T13:10:17.204Z Stream iteration complete. 4 chunks.
+2026-01-29T13:10:18.775Z Preparing follow-up stream for tool: kb_search
+2026-01-29T13:10:18.776Z Calling generateContentStream for tool: kb_search
+2026-01-29T13:10:19.546Z generateContentStream returned for tool: kb_search
+2026-01-29T13:10:19.610Z Stream iteration complete. 3 chunks.
+2026-01-29T13:10:21.689Z Preparing follow-up stream for tool: kb_get
+2026-01-29T13:10:21.690Z Calling generateContentStream for tool: kb_get
+2026-01-29T13:10:22.326Z generateContentStream returned for tool: kb_get
+2026-01-29T13:10:22.391Z Stream iteration complete. 3 chunks.
+2026-01-29T13:10:23.796Z Preparing follow-up stream for tool: kb_search
+2026-01-29T13:10:23.797Z Calling generateContentStream for tool: kb_search
+2026-01-29T13:10:24.955Z generateContentStream returned for tool: kb_search
+2026-01-29T13:10:25.650Z Stream iteration complete. 5 chunks.
+2026-01-29T13:10:26.527Z Preparing follow-up stream for tool: kb_get
+2026-01-29T13:10:26.529Z Calling generateContentStream for tool: kb_get
+2026-01-29T13:10:27.990Z generateContentStream returned for tool: kb_get
+2026-01-29T13:10:28.012Z Stream iteration complete. 1 chunks.
+2026-01-29T13:10:31.779Z Stream iteration complete. 14 chunks.
+2026-01-29T13:10:36.219Z Preparing follow-up stream for tool: kb_get
+2026-01-29T13:10:36.220Z Calling generateContentStream for tool: kb_get
+2026-01-29T13:10:37.935Z generateContentStream returned for tool: kb_get
+2026-01-29T13:10:38.916Z Stream iteration complete. 6 chunks.
+2026-01-29T13:10:41.441Z Preparing follow-up stream for tool: query_tool_memory
+2026-01-29T13:10:41.441Z Calling generateContentStream for tool: query_tool_memory
+2026-01-29T13:10:46.129Z generateContentStream returned for tool: query_tool_memory
+2026-01-29T13:10:46.901Z Stream iteration complete. 4 chunks.
+2026-01-29T13:10:49.256Z Preparing follow-up stream for tool: kb_search
+2026-01-29T13:10:49.257Z Calling generateContentStream for tool: kb_search
+2026-01-29T13:10:51.285Z generateContentStream returned for tool: kb_search
+2026-01-29T13:10:53.221Z Stream iteration complete. 12 chunks.
+2026-01-29T13:10:58.468Z Preparing follow-up stream for tool: kb_get
+2026-01-29T13:10:58.471Z Calling generateContentStream for tool: kb_get
+2026-01-29T13:11:03.453Z generateContentStream returned for tool: kb_get
+2026-01-29T13:11:04.761Z Stream iteration complete. 8 chunks.
+2026-01-29T13:11:08.500Z Preparing follow-up stream for tool: kb_search
+2026-01-29T13:11:08.502Z Calling generateContentStream for tool: kb_search
+2026-01-29T13:11:09.479Z generateContentStream returned for tool: kb_search
+2026-01-29T13:11:11.033Z Stream iteration complete. 10 chunks.
+2026-01-29T13:11:17.564Z Retrying initial stream without cache
+2026-01-29T13:11:19.218Z Preparing follow-up stream for tool: kb_search
+2026-01-29T13:11:19.219Z Calling generateContentStream for tool: kb_search
+2026-01-29T13:11:19.500Z generateContentStream failed for tool: kb_search - ApiError: {"error":{"message":"{\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"CachedContent not found (or permission denied)\",\n    \"status\": \"PERMISSION_DENIED\"\n  }\n}\n","code":403,"status":"Forbidden"}}
+2026-01-29T13:11:19.501Z Retrying without cache for tool: kb_search
+2026-01-29T13:11:21.856Z Stream iteration complete. 3 chunks.
+2026-01-29T13:11:24.031Z Preparing follow-up stream for tool: kb_search
+2026-01-29T13:11:24.032Z Calling generateContentStream for tool: kb_search
+2026-01-29T13:11:24.445Z generateContentStream failed for tool: kb_search - ApiError: {"error":{"message":"{\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"CachedContent not found (or permission denied)\",\n    \"status\": \"PERMISSION_DENIED\"\n  }\n}\n","code":403,"status":"Forbidden"}}
+2026-01-29T13:11:24.446Z Retrying without cache for tool: kb_search
+2026-01-29T13:11:25.388Z Stream iteration complete. 3 chunks.
+2026-01-29T13:11:26.782Z Preparing follow-up stream for tool: kb_get
+2026-01-29T13:11:26.784Z Calling generateContentStream for tool: kb_get
+2026-01-29T13:11:27.765Z generateContentStream returned for tool: kb_get
+2026-01-29T13:11:27.825Z Stream iteration complete. 3 chunks.
+2026-01-29T13:11:28.271Z Retrying initial stream without cache
+2026-01-29T13:11:38.374Z Preparing follow-up stream for tool: perplexity_search
+2026-01-29T13:11:38.375Z Calling generateContentStream for tool: perplexity_search
+2026-01-29T13:11:38.703Z generateContentStream failed for tool: perplexity_search - ApiError: {"error":{"message":"{\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"CachedContent not found (or permission denied)\",\n    \"status\": \"PERMISSION_DENIED\"\n  }\n}\n","code":403,"status":"Forbidden"}}
+2026-01-29T13:11:38.703Z Retrying without cache for tool: perplexity_search
+2026-01-29T13:11:40.102Z Stream iteration complete. 5 chunks.

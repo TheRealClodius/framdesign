@@ -17,9 +17,9 @@ Query past tool executions in this conversation to avoid redundant calls and reu
 ## How It Works
 
 Tool executions are stored during the conversation:
-- **Recent calls** (last 10): Full responses available
-- **Older calls** (next 40): Summaries only
-- **Full responses**: Retrieve by call_id
+- **All session calls** (last 50): Full responses always available in storage
+- **Context optimization**: Only summaries auto-injected in context (calls beyond position 10)
+- **Full responses**: Always retrievable by call_id when you need complete data
 
 ## Example Workflow
 

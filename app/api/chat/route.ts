@@ -69,10 +69,20 @@ type ObservabilityContextStack = {
   recentMessages: number;
   summaryPresent: boolean;
   summaryUpToIndex: number;
+  summaryLength?: number;
+  summaryPreview?: string;
   cachedContentUsed: boolean;
   cachedTokens?: number;
   estimatedTokens: number;
   timeoutExpired: boolean;
+  toolCount?: number;
+  toolIds?: string[];
+  toolMemoryState?: {
+    totalCalls: number;
+    callsWithFullResponse: number;
+    callsWithSummary: number;
+    toolBreakdown: Record<string, number>;
+  };
 };
 
 type ObservabilityToolCall = {
@@ -1401,7 +1411,7 @@ export async function POST(request: Request) {
     if (observability) {
       const toolCount = toolRegistry.tools.size;
       const estimatedTokens = estimateMessageTokens(contentsToSend);
-      
+
       // Calculate cached tokens (system prompt + tool schemas when caching is active)
       let cachedTokens = 0;
       if (cachedContent) {
@@ -1411,17 +1421,36 @@ export async function POST(request: Request) {
         const toolSchemasJson = JSON.stringify(providerSchemas);
         cachedTokens += estimateTokens(toolSchemasJson);
       }
-      
+
+      // Get tool IDs for detailed breakdown
+      const toolIds = Array.from(toolRegistry.tools.keys());
+
+      // Get tool memory state for debugging
+      const toolMemoryState = {
+        totalCalls: pastToolCalls.length,
+        callsWithFullResponse: pastToolCalls.filter(c => c.fullResponse).length,
+        callsWithSummary: pastToolCalls.filter(c => c.summary).length,
+        toolBreakdown: pastToolCalls.reduce((acc, call) => {
+          acc[call.toolId] = (acc[call.toolId] || 0) + 1;
+          return acc;
+        }, {} as Record<string, number>)
+      };
+
       observability.contextStack = {
         systemPromptSource: `core.md + ${toolCount} tools`,
         totalMessages: totalMessages,
         recentMessages: recentMessages.length,
         summaryPresent: !!summary,
         summaryUpToIndex: summaryUpToIndex,
+        summaryLength: summary ? summary.length : undefined,
+        summaryPreview: summary ? summary.substring(0, 100) + (summary.length > 100 ? '...' : '') : undefined,
         cachedContentUsed: !!cachedContent,
         cachedTokens: cachedTokens,
         estimatedTokens: estimatedTokens,
-        timeoutExpired: timeoutExpired || false
+        timeoutExpired: timeoutExpired || false,
+        toolCount: toolCount,
+        toolIds: toolIds,
+        toolMemoryState: toolMemoryState
       };
     }
 

@@ -5,13 +5,13 @@ This document provides AI agents with a quick architectural overview of the fram
 ## Executive Summary
 
 **FRAM** is a dual-agent conversational system featuring:
-- **Text Agent**: Next.js API routes using Google Gemini 3 Flash API
-- **Voice Agent**: WebSocket server using Google Gemini Live API
+- **Text Agent**: Next.js API routes using Google Gemini 2.5 Flash
+- **Voice Agent**: WebSocket server using Google Gemini Live API (2.5 Flash Native Audio)
 - **Unified Tool System**: Shared tool registry supporting both agents (5 tools)
 - **Knowledge Base**: Qdrant vector database + Google Cloud Storage for assets
 - **Deployment**: Vercel (text/frontend) + Railway (voice server)
 
-**Technology Stack**: Next.js 16, Node.js 24, Google Gemini API, Qdrant, GCS, WebSocket
+**Technology Stack**: Next.js 16, Node.js 24, Google Gemini 2.5 API, Qdrant, GCS, WebSocket
 
 ---
 
@@ -23,7 +23,7 @@ This document provides AI agents with a quick architectural overview of the fram
 
 - **Type**: HTTP API streaming endpoint
 - **Port**: 3000 (development)
-- **Technology**: Next.js 16, Google Gemini 3 Flash API
+- **Technology**: Next.js 16, Google Gemini 2.5 Flash
 - **Deployment**: Vercel (serverless functions)
 - **Key Features**:
   - Streaming text responses
@@ -151,9 +151,9 @@ This document provides AI agents with a quick architectural overview of the fram
         └────────┬──────────────┬──────────┘
                  │              │
         ┌────────▼────┐  ┌──────▼───────────┐
-        │ Gemini 3    │  │ Gemini Live API  │
-        │ Flash API   │  │ (Streaming)      │
-        │ (Text)      │  │ (Voice/Audio)    │
+        │ Gemini 2.5  │  │ Gemini Live API  │
+        │ Flash       │  │ (2.5 Flash       │
+        │ (Text)      │  │  Native Audio)   │
         └────────┬────┘  └──────┬───────────┘
                  │              │
                  └──────┬───────┘
@@ -182,7 +182,7 @@ Load Tool Registry (first request only)
     ↓
 Generate System Prompt + Tool Schemas
     ↓
-Call Gemini 3 Flash API (streaming)
+Call Gemini 2.5 Flash API (streaming)
     ↓
 Stream Response
     ├─ Tool call detected?

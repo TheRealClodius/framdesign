@@ -20,7 +20,7 @@ domains:
 
 ## Overview
 
-Semantic Space is a canvas-based interaction environment where users interact with an AI agent that creates documents and images for moodboard creation and brainstorming. The agent has complete context of all assets in the space and can continuously remix and brainstorm within that context. Users can organize content in folders, view documents and images on a canvas, and interact with the agent through a chat interface to generate, modify, and iterate on creative assets.
+Semantic Space is a canvas-based interaction environment where users interact with an AI agent that creates documents and images for moodboard creation and brainstorming. The agent has complete context of all assets in the space and can continuously remix and brainstorm within that context. Users can organize content in folders, view documents and images on a canvas, and interact with the agent through a chat interface to generate, modify, and iterate on creative assets. The experience spans mobile and desktop, with a mobile-optimized rich text editor, side panel access to adjacent tools like chat and calendar, and the ability to switch between multiple spaces with different focus areas.
 
 ## Context and problem
 
@@ -34,6 +34,7 @@ Andrei is working on Semantic Space as a lab project, focusing on:
 - **Mobile experience**: Creating mobile interfaces for viewing documents and folders, ensuring the canvas-based interaction works seamlessly on smaller screens.
 - **Chat integration**: Designing chat interface patterns where users can interact with the agent directly from the canvas, with message bubbles supporting both text and image content.
 - **Document system**: Creating document views that combine images and text, with inline editing capabilities and integration with the agent.
+- **Space switching**: Supporting multiple spaces and fast context switching across focus areas.
 - **Folder organization**: Designing folder structures for organizing documents and assets within the semantic space.
 - **Visual design**: Exploring visual language, color palettes, and interaction patterns for the creative workspace.
 
@@ -42,7 +43,10 @@ Andrei is working on Semantic Space as a lab project, focusing on:
 - **Canvas workspace**: Infinite canvas where users can arrange images and document snapshots spatially, with support for overlapping cards and visual organization.
 - **AI agent integration**: Conversational agent that understands all assets in the space and can generate new documents and images based on context.
 - **Document system**: Rich documents that combine images and text blocks, with inline editing, highlighting, and formatting tools.
+- **Mobile rich text editor**: Mobile-optimized editing controls for documents created on the canvas.
 - **Folder organization**: Folder-based organization system for grouping related documents and assets.
+- **Side panel apps**: Quick access to adjacent tools like chat, calendar, and video editing.
+- **Multi-space navigation**: Ability to switch between different spaces, each with its own context and focus.
 - **Mobile interfaces**: Responsive mobile views for documents and folders, maintaining the canvas interaction model on smaller screens.
 - **Chat interface**: Message bubbles supporting text and images, with contextual actions like "Reply", "Ask Agent", and "Make image" for interacting with the agent.
 - **Remix capabilities**: Ability to continuously iterate and remix content, with the agent maintaining context across all modifications.

@@ -21,12 +21,15 @@
     "test": "NODE_OPTIONS='--experimental-vm-modules' jest",
     "test:watch": "NODE_OPTIONS='--experimental-vm-modules' jest --watch",
     "test:coverage": "NODE_OPTIONS='--experimental-vm-modules' jest --coverage",
-    "test:agent": "node scripts/text-agent-test.js"
+    "test:agent": "node scripts/text-agent-test.js",
+    "test:voice": "node scripts/voice-agent-test.js",
+    "generate:audio": "node scripts/generate-test-audio.js"
   },
   "dependencies": {
     "@fontsource/google-sans-code": "^5.2.3",
     "@fontsource/google-sans-flex": "^5.2.1",
     "@google-cloud/storage": "^7.18.0",
+    "@google-cloud/text-to-speech": "^5.8.0",
     "@google/genai": "^1.35.0",
     "@hookform/resolvers": "^5.2.2",
     "@next/third-parties": "^16.1.1",
@@ -47,6 +50,7 @@
     "remark-gfm": "^4.0.1",
     "resend": "^6.6.0",
     "tiktoken": "^1.0.22",
+    "ws": "^8.18.0",
     "zod": "^4.2.1"
   },
   "devDependencies": {
