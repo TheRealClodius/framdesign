@@ -144,13 +144,18 @@ function isVisualShowRequest(text: string): boolean {
   if (!normalized) return false;
   const hasVisualNoun = /\b(photo|image|picture|screenshot|diagram|video|gif)\b/.test(normalized);
   const hasShowVerb = /\b(show|see|display|view|look)\b/.test(normalized);
-  return hasVisualNoun || (hasShowVerb && normalized.includes("me"));
+  const hasAnother = /\b(another|different|else|more|other)\b/.test(normalized);
+  return hasVisualNoun || (hasShowVerb && normalized.includes("me")) || (hasShowVerb && hasAnother);
 }
 
-function selectTopVisualResultId(results: Array<{ id?: string; type?: string; metadata?: { entity_type?: string } }> = []): string | null {
+function selectTopVisualResultId(
+  results: Array<{ id?: string; type?: string; metadata?: { entity_type?: string } }> = [],
+  excludeIds: string[] = []
+): string | null {
+  const excludeSet = new Set(excludeIds);
   for (const result of results) {
     const type = result?.type || result?.metadata?.entity_type;
-    if (type && VISUAL_ASSET_TYPES.has(type) && typeof result?.id === "string") {
+    if (type && VISUAL_ASSET_TYPES.has(type) && typeof result?.id === "string" && !excludeSet.has(result.id)) {
       return result.id;
     }
   }
@@ -2092,9 +2097,30 @@ export async function POST(request: Request) {
         ];
 
         if (toolName === "kb_search" && result.ok && isVisualShowRequest(lastUserMessageText)) {
-          const autoAssetId = selectTopVisualResultId(
+          let autoAssetId = selectTopVisualResultId(
             Array.isArray(cleanedResultData?.results) ? cleanedResultData.results : []
           );
+
+          // Detect if user asked for "another" image and try to avoid recently shown ones
+          const isAnother = lastUserMessageText.toLowerCase().match(/\b(another|different|else|more|other)\b/);
+          if (isAnother) {
+            const shownAssetIds = pastToolCalls
+              .filter(call => call.toolId === "kb_get" && call.ok)
+              .map(call => (call.args as any)?.id)
+              .filter(Boolean);
+
+            const betterAssetId = selectTopVisualResultId(
+              Array.isArray(cleanedResultData?.results) ? cleanedResultData.results : [],
+              shownAssetIds
+            );
+
+            if (betterAssetId) {
+              console.log(`[AutoChain] User asked for "another" image. Skipping previously shown: ${shownAssetIds.join(", ")}. New choice: ${betterAssetId}`);
+              autoAssetId = betterAssetId;
+            } else {
+              console.log(`[AutoChain] User asked for "another" image but no new ones found in search results.`);
+            }
+          }
 
           if (autoAssetId) {
             const autoToolName = "kb_get";
@@ -2241,6 +2267,16 @@ export async function POST(request: Request) {
                   parts: autoResponseParts
                 }
               );
+
+              const isRepeat = pastToolCalls.some(call => call.toolId === "kb_get" && (call.args as any)?.id === autoAssetId);
+              if (isRepeat) {
+                updatedContents.push({
+                  role: "user" as const,
+                  parts: [{
+                    text: "GUIDANCE: The image you just retrieved is the same one you've already shown in this conversation. If the user asked for 'another' or 'different' image, you must acknowledge that this is the only one you have for this specific topic and ask if they'd like to see images from a different project or a different type of asset. DO NOT apologize for 'retrieving the same image' as if it's a technical failure; just be direct and helpful."
+                  }]
+                });
+              }
 
               if (!autoResult.ok) {
                 toolErrorNotices.push({
