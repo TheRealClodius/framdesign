@@ -210,39 +210,41 @@ Tools must return `ToolResponse` objects via `createToolResponse()`.
 
 ### Tool Memory Architecture
 
-The system uses a two-tier storage approach for tool execution records:
+The system always retains full tool outputs, giving agents summaries in context while allowing on-demand access to complete data.
+
+**Core Principle**: Full tool outputs are always stored. Agents see summaries in context but can retrieve full outputs anytime via `query_tool_memory`.
 
 **Server-Side: In-Memory Tool Memory Store** (`tools/_core/tool-memory-store.js`)
-- Session-scoped storage with sliding window policy
-- **Window Configuration**:
-  - Last 10 calls: Full responses retained (`RECENT_COUNT`)
-  - Next 40 calls: Full responses retained, summaries generated for context injection (`SUMMARY_COUNT`)
-  - Total window: 50 calls, auto-expires after 1 hour (`MAX_AGE_MS`)
-- Full responses always available via `getFullResponse(sessionId, callId)`
+- Session-scoped storage keeps **full responses for ALL calls** in the sliding window
+- **Window Policy**:
+  - Last 50 calls: Full responses always retained
+  - Auto-expires after 1 hour (`MAX_AGE_MS`)
+  - Calls beyond 50 are dropped (oldest first)
+- Full responses always retrievable via `getFullResponse(sessionId, callId)`
 - Duplicate detection via similarity matching (85% threshold)
 
 **Server-Side: Async Summarization** (`tools/_core/tool-memory-summarizer.js`)
-- Background FIFO queue processing using Gemini Flash Lite
-- 150-token summaries for older calls (beyond position 10)
-- Fallback rule-based summaries when AI unavailable
-- Summaries auto-injected into conversation context
+- Generates 150-token summaries for calls beyond position 10 (for context injection)
+- Uses Gemini Flash Lite with fallback to rule-based summaries
+- **Summaries are for context injection only** - full responses remain stored
+- Agent sees summaries in `[SYSTEM CONTEXT]` to know what tools were called
 
 **Server-Side: Deduplication** (`tools/_core/tool-memory-dedup.js`)
 - Pre-execution duplicate detection for retrieval tools
-- Returns cached results when similarity >= 85%
+- Returns cached full results when similarity >= 85%
 - Prevents redundant expensive operations (KB searches, entity lookups)
 
 **Client-Side: localStorage Persistence** (`lib/storage.ts`)
-- Conversation messages with structured tool data:
+- Conversation messages store full structured tool data:
   - `toolCalls[]`: Array of `{id, name, args}` for each tool invocation
-  - `toolResults[]`: Array of `{callId, name, result}` with full structured results
+  - `toolResults[]`: Array of `{callId, name, result}` with **full structured results**
 - Enables accurate conversation reconstruction across page reloads
-- Separate from server-side tool memory (client stores messages, server stores execution records)
 
 **Agent Access: query_tool_memory Tool** (`tools/query-tool-memory/`)
-- Query past executions with filters (toolId, timeRange, includeErrors)
-- Retrieve full responses via `get_full_response_for` parameter
-- Returns summaries for older calls, full data for recent calls
+- Agent sees summaries in context, can request full output when needed
+- `get_full_response_for`: Retrieve complete tool output for any call_id
+- Query with filters: toolId, timeRange, includeErrors
+- Full responses available for all 50 calls in the window
 
 ## Environment Variables
 
