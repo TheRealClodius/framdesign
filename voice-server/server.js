@@ -1335,10 +1335,13 @@ wss.on('connection', async (ws, req) => {
           }
 
           // Store conversation history for context injection
-          conversationHistory = (data.conversationHistory || []).map(msg => ({
-            role: msg.role === 'assistant' ? 'model' : 'user',
-            parts: [{ text: msg.content }]
-          }));
+          // Filter out messages with undefined/null content to prevent "undefined" leaking into context
+          conversationHistory = (data.conversationHistory || [])
+            .filter(msg => msg.content != null && msg.content !== '')
+            .map(msg => ({
+              role: msg.role === 'assistant' ? 'model' : 'user',
+              parts: [{ text: msg.content }]
+            }));
           
           // Store pending request from text agent handoff (if any)
           pendingRequest = data.pendingRequest || null;
