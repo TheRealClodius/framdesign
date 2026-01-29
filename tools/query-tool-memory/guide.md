@@ -4,9 +4,8 @@ Query past tool executions in this conversation to avoid redundant calls and reu
 
 ## When to Use
 
-- **Before expensive searches**: Check if you already called kb_search or perplexity_search with similar queries
-- **When user asks follow-ups**: Reference what you've already looked up instead of repeating searches
-- **To be faster**: Reusing cached results is much faster than re-executing tools
+- **Before repeating a search**: Check if you already called kb_search or perplexity_search
+- **Follow-ups**: Reuse prior results instead of re-running tools
 
 ## When NOT to Use
 
@@ -17,17 +16,17 @@ Query past tool executions in this conversation to avoid redundant calls and reu
 
 ## How It Works
 
-Tool executions are stored in memory during your conversation:
+Tool executions are stored during the conversation:
 - **Recent calls** (last 10): Full responses available
-- **Older calls** (next 40): Summaries available
-- **Full responses**: Can be retrieved on demand by call_id
+- **Older calls** (next 40): Summaries only
+- **Full responses**: Retrieve by call_id
 
 ## Example Workflow
 
 ```
 User: "What's our neural networks project?"
 
-Step 1: query_tool_memory(filter_tool='kb_search', filter_time_range='all')
+Step 1: query_tool_memory(filter_tool='kb_search')
 → Response: Found 1 previous call
   - call_id: "call-abc123"
   - Turn 3: kb_search('neural networks')
@@ -98,10 +97,8 @@ Example: `get_full_response_for='call-abc123'`
 
 ## Tips
 
-- **Query first, then decide**: Check what's in memory before calling expensive tools
-- **Use call_id for details**: Summaries tell you what was found, full responses give you the data
-- **Filter strategically**: Use filter_tool and filter_time_range to narrow down results
-- **Save time**: Cached results return instantly vs 500-2000ms for actual execution
+- **Query first, then decide**: Check memory before calling expensive tools
+- **Use call_id for details**: Summaries show what was found; full responses contain the data
 
 ## Memory Limits
 

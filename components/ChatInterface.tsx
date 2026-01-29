@@ -876,6 +876,7 @@ export default function ChatInterface() {
             id: generateMessageId(),
             role: role,
             content: text,
+            timestamp: role === 'user' ? Date.now() : undefined, // Add timestamp to user messages for time awareness
             isVoiceTranscript: true, // Mark as voice transcript
             citations: citations && citations.length > 0 ? citations : undefined,
             images: images && images.length > 0 ? images : undefined
@@ -1210,7 +1211,7 @@ export default function ChatInterface() {
     const baseMessages = (currentMessages && currentMessages.length > 0) ? currentMessages : messages;
 
     // Directly submit the starter text (bypass input state)
-    const newUserMessage = { id: generateMessageId(), role: "user" as const, content: text };
+    const newUserMessage = { id: generateMessageId(), role: "user" as const, content: text, timestamp: Date.now() };
     setMessages([...baseMessages, newUserMessage]);
     setIsLoading(true);
 
@@ -1325,7 +1326,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
 
       const fixMessages: Message[] = [
         ...messages.slice(0, messageIndex),
-        { id: generateMessageId(), role: "user", content: fixPrompt }
+        { id: generateMessageId(), role: "user", content: fixPrompt, timestamp: Date.now() }
       ];
 
       let fixedContent = "";
@@ -1412,7 +1413,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
 
     const userMessage = input.trim();
     setInput("");
-    setMessages((prev) => [...prev, { id: generateMessageId(), role: "user", content: userMessage }]);
+    setMessages((prev) => [...prev, { id: generateMessageId(), role: "user", content: userMessage, timestamp: Date.now() }]);
     setIsLoading(true);
 
     // Check if timeout just expired - if so, pass that context to the API
@@ -1427,7 +1428,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
       
       const requestMessages: Message[] = [
         ...messages,
-        { id: generateMessageId(), role: "user", content: userMessage }
+        { id: generateMessageId(), role: "user", content: userMessage, timestamp: Date.now() }
       ];
       
       // Count voice transcripts in the request (excluding the new user message we just added)

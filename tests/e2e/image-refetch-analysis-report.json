@@ -5,14 +5,13 @@
     {
       "toolId": "kb_search",
       "args": {
+        "query": "Vector Watch",
         "filters": {
           "type": "photo"
-        },
-        "query": "Vector Watch",
-        "top_k": 1
+        }
       },
       "ok": true,
-      "durationMs": 525,
+      "durationMs": 491,
       "hasImageData": false,
       "entityId": null,
       "entityType": null,
@@ -23,17 +22,27 @@
           "id": "asset:vector_watch_luna_001",
           "score": 0.71712756,
           "blob_id": null
+        },
+        {
+          "id": "asset:autopilot_tool_calls_dark_001",
+          "score": 0.4950586,
+          "blob_id": null
+        },
+        {
+          "id": "asset:clubaperitif_letter_001",
+          "score": 0.48991895,
+          "blob_id": null
         }
       ]
     },
     {
       "toolId": "kb_get",
       "args": {
-        "include_image_data": true,
-        "id": "asset:vector_vector-watch-luna"
+        "id": "asset:vector_watch_luna",
+        "include_image_data": true
       },
       "ok": false,
-      "durationMs": 295,
+      "durationMs": 290,
       "hasImageData": false,
       "entityId": null,
       "entityType": null,

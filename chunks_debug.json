@@ -5,14 +5,210 @@
         "content": {
           "parts": [
             {
+              "text": "My"
+            }
+          ],
+          "role": "model"
+        },
+        "index": 0
+      }
+    ],
+    "modelVersion": "gemini-2.5-flash",
+    "responseId": "jTJ7abaoMqSe_uMPyor7mAw",
+    "usageMetadata": {
+      "promptTokenCount": 25872,
+      "candidatesTokenCount": 1,
+      "totalTokenCount": 25873,
+      "cachedContentTokenCount": 18485,
+      "promptTokensDetails": [
+        {
+          "modality": "TEXT",
+          "tokenCount": 25872
+        }
+      ],
+      "cacheTokensDetails": [
+        {
+          "modality": "TEXT",
+          "tokenCount": 18485
+        }
+      ]
+    },
+    "sdkHttpResponse": {
+      "headers": {
+        "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+        "content-disposition": "attachment",
+        "content-type": "text/event-stream",
+        "date": "Thu, 29 Jan 2026 10:12:29 GMT",
+        "server": "scaffolding on HTTPServer2",
+        "server-timing": "gfet4t7; dur=1372",
+        "transfer-encoding": "chunked",
+        "vary": "Origin, X-Origin, Referer",
+        "x-content-type-options": "nosniff",
+        "x-frame-options": "SAMEORIGIN",
+        "x-xss-protection": "0"
+      }
+    }
+  },
+  {
+    "candidates": [
+      {
+        "content": {
+          "parts": [
+            {
+              "text": " apologies. There seems to be an issue retrieving the details for the Vector Watch project. The"
+            }
+          ],
+          "role": "model"
+        },
+        "index": 0
+      }
+    ],
+    "modelVersion": "gemini-2.5-flash",
+    "responseId": "jTJ7abaoMqSe_uMPyor7mAw",
+    "usageMetadata": {
+      "promptTokenCount": 25872,
+      "candidatesTokenCount": 20,
+      "totalTokenCount": 25892,
+      "cachedContentTokenCount": 18485,
+      "promptTokensDetails": [
+        {
+          "modality": "TEXT",
+          "tokenCount": 25872
+        }
+      ],
+      "cacheTokensDetails": [
+        {
+          "modality": "TEXT",
+          "tokenCount": 18485
+        }
+      ]
+    },
+    "sdkHttpResponse": {
+      "headers": {
+        "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+        "content-disposition": "attachment",
+        "content-type": "text/event-stream",
+        "date": "Thu, 29 Jan 2026 10:12:29 GMT",
+        "server": "scaffolding on HTTPServer2",
+        "server-timing": "gfet4t7; dur=1372",
+        "transfer-encoding": "chunked",
+        "vary": "Origin, X-Origin, Referer",
+        "x-content-type-options": "nosniff",
+        "x-frame-options": "SAMEORIGIN",
+        "x-xss-protection": "0"
+      }
+    }
+  },
+  {
+    "candidates": [
+      {
+        "content": {
+          "parts": [
+            {
+              "text": " system reports: \"Entity 'project:vector_watch_project' not found in KB. Use kb_search to find entities.\"\n\nIt suggests I use `kb_search` to find the entity. I will try that now."
+            }
+          ],
+          "role": "model"
+        },
+        "index": 0
+      }
+    ],
+    "modelVersion": "gemini-2.5-flash",
+    "responseId": "jTJ7abaoMqSe_uMPyor7mAw",
+    "usageMetadata": {
+      "promptTokenCount": 25872,
+      "candidatesTokenCount": 68,
+      "totalTokenCount": 25940,
+      "cachedContentTokenCount": 18485,
+      "promptTokensDetails": [
+        {
+          "modality": "TEXT",
+          "tokenCount": 25872
+        }
+      ],
+      "cacheTokensDetails": [
+        {
+          "modality": "TEXT",
+          "tokenCount": 18485
+        }
+      ]
+    },
+    "sdkHttpResponse": {
+      "headers": {
+        "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+        "content-disposition": "attachment",
+        "content-type": "text/event-stream",
+        "date": "Thu, 29 Jan 2026 10:12:29 GMT",
+        "server": "scaffolding on HTTPServer2",
+        "server-timing": "gfet4t7; dur=1372",
+        "transfer-encoding": "chunked",
+        "vary": "Origin, X-Origin, Referer",
+        "x-content-type-options": "nosniff",
+        "x-frame-options": "SAMEORIGIN",
+        "x-xss-protection": "0"
+      }
+    }
+  },
+  {
+    "candidates": [
+      {
+        "content": {
+          "parts": [
+            {
+              "text": "\n"
+            }
+          ],
+          "role": "model"
+        },
+        "index": 0
+      }
+    ],
+    "modelVersion": "gemini-2.5-flash",
+    "responseId": "jTJ7abaoMqSe_uMPyor7mAw",
+    "usageMetadata": {
+      "promptTokenCount": 25872,
+      "candidatesTokenCount": 68,
+      "totalTokenCount": 25940,
+      "cachedContentTokenCount": 18485,
+      "promptTokensDetails": [
+        {
+          "modality": "TEXT",
+          "tokenCount": 25872
+        }
+      ],
+      "cacheTokensDetails": [
+        {
+          "modality": "TEXT",
+          "tokenCount": 18485
+        }
+      ]
+    },
+    "sdkHttpResponse": {
+      "headers": {
+        "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+        "content-disposition": "attachment",
+        "content-type": "text/event-stream",
+        "date": "Thu, 29 Jan 2026 10:12:29 GMT",
+        "server": "scaffolding on HTTPServer2",
+        "server-timing": "gfet4t7; dur=1372",
+        "transfer-encoding": "chunked",
+        "vary": "Origin, X-Origin, Referer",
+        "x-content-type-options": "nosniff",
+        "x-frame-options": "SAMEORIGIN",
+        "x-xss-protection": "0"
+      }
+    }
+  },
+  {
+    "candidates": [
+      {
+        "content": {
+          "parts": [
+            {
               "functionCall": {
                 "name": "kb_search",
                 "args": {
-                  "query": "Vector Watch",
-                  "filters": {
-                    "type": "photo"
-                  },
-                  "top_k": 1
+                  "query": "Vector Watch project"
                 }
               }
             }
@@ -24,22 +220,22 @@
       }
     ],
     "modelVersion": "gemini-2.5-flash",
-    "responseId": "uh56aeb7B6-8xN8P6_G5uAc",
+    "responseId": "jTJ7abaoMqSe_uMPyor7mAw",
     "usageMetadata": {
-      "promptTokenCount": 15298,
-      "candidatesTokenCount": 31,
-      "totalTokenCount": 15329,
-      "cachedContentTokenCount": 9443,
+      "promptTokenCount": 25872,
+      "candidatesTokenCount": 85,
+      "totalTokenCount": 25957,
+      "cachedContentTokenCount": 18485,
       "promptTokensDetails": [
         {
           "modality": "TEXT",
-          "tokenCount": 15298
+          "tokenCount": 25872
         }
       ],
       "cacheTokensDetails": [
         {
           "modality": "TEXT",
-          "tokenCount": 9443
+          "tokenCount": 18485
         }
       ]
     },
@@ -48,9 +244,9 @@
         "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
         "content-disposition": "attachment",
         "content-type": "text/event-stream",
-        "date": "Wed, 28 Jan 2026 14:35:38 GMT",
+        "date": "Thu, 29 Jan 2026 10:12:29 GMT",
         "server": "scaffolding on HTTPServer2",
-        "server-timing": "gfet4t7; dur=2121",
+        "server-timing": "gfet4t7; dur=1372",
         "transfer-encoding": "chunked",
         "vary": "Origin, X-Origin, Referer",
         "x-content-type-options": "nosniff",

@@ -58,6 +58,7 @@ type FunctionCallPart = {
 type RawMessage = {
   role: string;
   content: string;
+  timestamp?: number; // Unix timestamp in milliseconds (for user messages)
   toolCalls?: Array<{ name: string; args: Record<string, unknown> }>;
   toolResults?: Array<{ name: string; result: unknown }>;
 };
@@ -129,6 +130,55 @@ type StreamChunk = {
 };
 
 const VISUAL_ASSET_TYPES = new Set(["photo", "diagram", "gif", "video"]);
+
+/**
+ * Format a timestamp for display in messages
+ * @param timestamp Unix timestamp in milliseconds
+ * @param includeYear Whether to include the year in the output
+ * @returns Formatted string like "[Jan 28, 14:30]" or "[Jan 28, 2024, 14:30]"
+ */
+function formatTimestamp(timestamp: number | undefined, includeYear = false): string {
+  if (!timestamp) return '';
+  const date = new Date(timestamp);
+  // Use UTC to ensure consistent formatting across timezones
+  const month = date.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' });
+  const day = date.getUTCDate();
+  const hours = date.getUTCHours().toString().padStart(2, '0');
+  const minutes = date.getUTCMinutes().toString().padStart(2, '0');
+  const year = includeYear ? `, ${date.getUTCFullYear()}` : '';
+  return `[${month} ${day}${year}, ${hours}:${minutes}]`;
+}
+
+/**
+ * Extract date range header from messages for summary
+ * @param messages Array of messages with optional timestamps
+ * @returns Date range string or empty string if not enough timestamps
+ */
+function extractDateRangeHeader(
+  messages: Array<{ role: string; content: string; timestamp?: number }>
+): string {
+  const timestamps = messages
+    .filter((m) => m.timestamp)
+    .map((m) => m.timestamp!);
+
+  if (timestamps.length < 1) return '';
+
+  const earliest = new Date(Math.min(...timestamps));
+  const latest = new Date(Math.max(...timestamps));
+
+  const formatDate = (d: Date) => {
+    const month = d.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' });
+    const day = d.getUTCDate();
+    const year = d.getUTCFullYear();
+    return `${month} ${day}, ${year}`;
+  };
+
+  if (timestamps.length === 1) {
+    return `[Conversation on ${formatDate(earliest)}]`;
+  }
+
+  return `[Conversation from ${formatDate(earliest)} to ${formatDate(latest)}]`;
+}
 
 function getLastUserMessageText(messages: Array<{ role: string; content: string }>): string {
   for (let i = messages.length - 1; i >= 0; i -= 1) {
@@ -305,13 +355,16 @@ function hashConversation(messages: Array<{ role: string; content: string }>, ti
 
 /**
  * Summarizes old messages using Gemini API
- * Returns a concise summary of the conversation history
+ * Returns a concise summary of the conversation history with date range header
  */
 async function summarizeMessages(
   ai: GoogleGenAI,
-  messages: Array<{ role: string; content: string }>
+  messages: Array<{ role: string; content: string; timestamp?: number }>
 ): Promise<string> {
   try {
+    // Extract date range header from timestamps (if available)
+    const dateRangeHeader = extractDateRangeHeader(messages);
+
     // Build prompt for summarization
     const conversationText = messages
       .map((msg) => `${msg.role === "user" ? "User" : "Fram"}: ${msg.content}`)
@@ -335,11 +388,19 @@ Summary:`;
     // The response structure has candidates[0].content.parts[0].text
     const summaryText = result.candidates?.[0]?.content?.parts?.[0]?.text || "Previous conversation context.";
     console.log(`Generated summary (${summaryText.length} chars, ~${estimateTokens(summaryText)} tokens)`);
-    return summaryText;
+
+    // Prepend date range header if available
+    const finalSummary = dateRangeHeader
+      ? `${dateRangeHeader}\n\n${summaryText}`
+      : summaryText;
+
+    return finalSummary;
   } catch (error) {
     console.error("Failed to summarize messages:", error);
-    // Fallback: return a simple note
-    return `Previous conversation with ${messages.length} messages.`;
+    // Fallback: return a simple note with date range if available
+    const dateRangeHeader = extractDateRangeHeader(messages);
+    const fallbackText = `Previous conversation with ${messages.length} messages.`;
+    return dateRangeHeader ? `${dateRangeHeader}\n\n${fallbackText}` : fallbackText;
   }
 }
 
@@ -1043,22 +1104,33 @@ export async function POST(request: Request) {
     // Convert recent raw messages to Gemini format with structured tool parts
     // Track turn numbers to inject stored tool events
     const session = getOrCreateToolSession(conversationHash);
-    
+
+    // Track if we need to include year in timestamp (first user message after summary)
+    // This helps the agent understand the year context when resuming from a summary
+    let includeYearOnNextUserMessage = summary !== null;
+
     for (let i = 0; i < rawMessages.length; i++) {
       const msg = rawMessages[i];
-      
+
       // Calculate turn number based on position in full conversation
       // rawMessages[i] corresponds to messages[summaryUpToIndex + i]
       // Turn number = Math.ceil((summaryUpToIndex + i + 1) / 2)
       const messageIndexInFullConversation = summaryUpToIndex + i;
       const currentTurnNumber = Math.ceil((messageIndexInFullConversation + 1) / 2);
-      
+
       const parts: ContentPart[] = [];
-      
+
       // Add text content if present
       let content = typeof msg.content === 'string' ? msg.content : String(msg.content || '');
       if (msg.role === 'assistant') {
         content = stripSuggestionsFromContent(content);
+      }
+      // For user messages with timestamps, prepend the formatted timestamp
+      // Include year on first message after summary for unambiguous year context
+      if (msg.role === 'user' && msg.timestamp) {
+        const timestampStr = formatTimestamp(msg.timestamp, includeYearOnNextUserMessage);
+        content = timestampStr ? `${timestampStr} ${content}` : content;
+        includeYearOnNextUserMessage = false; // Only first message gets year
       }
       if (content.trim()) {
         parts.push({ text: content });

@@ -13,6 +13,7 @@ export type Message = {
   id: string;
   role: "user" | "assistant";
   content: string;
+  timestamp?: number; // Unix timestamp in milliseconds (when message was created)
   streaming?: boolean;
   isVoiceTranscript?: boolean; // Marks messages that originated from voice transcripts
   citations?: Citation[]; // Citations from web search tools (perplexity_search)

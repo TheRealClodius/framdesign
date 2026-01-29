@@ -38,9 +38,9 @@ Works in both voice and text modes.
 
 ## Watch Out
 
-- **Use only after warning**: First offense should get a firm warning ONLY. Use this tool on second offense or worse.
-- **Not idempotent**: Each call EXTENDS timeout. Don't call multiple times carelessly.
-- **Keep messages professional**: Firm and direct, not snarky or insulting. "I don't tolerate disrespect" not "Wow, you're dumb."
-- **Meaningful durations**: Minimum 30s enforced, but use 300+ (5 min) for actual impact.
-- **Different from end_voice_session**: This is PUNITIVE (blocks user). `end_voice_session` is graceful.
-- **Immediate termination**: Voice session ends after farewell, text communication blocked until timeout expires.
+- **Use only after warning**: First offense gets a firm warning. Use this tool on second offense or worse.
+- **Not idempotent**: Each call extends the timeout.
+- **Keep messages professional**: Firm and direct, not snarky or insulting.
+- **Meaningful durations**: Minimum 30s enforced; use 300+ seconds for real impact.
+- **Different from end_voice_session**: This is punitive (blocks user). `end_voice_session` is graceful.
+- **Immediate termination**: Voice ends after farewell; text is blocked until timeout expires.

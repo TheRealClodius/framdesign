@@ -1,18 +1,6 @@
 {
-  "user-q73710c3g-mkwj0r2o": {
-    "totalTokens": 659,
-    "lastUpdate": "2026-01-27T11:52:24.379Z"
-  },
-  "user-fzewgnjnh-mkwj90de": {
-    "totalTokens": 408,
-    "lastUpdate": "2026-01-27T19:13:52.275Z"
-  },
-  "user-pzkz0fd34-mkqmoc7y": {
-    "totalTokens": 1311,
-    "lastUpdate": "2026-01-28T15:47:55.509Z"
-  },
-  "user-4nmyvezlz-mkxp9kxc": {
-    "totalTokens": 1966,
-    "lastUpdate": "2026-01-28T09:58:01.534Z"
+  "test-kill-switch-user": {
+    "totalTokens": 300,
+    "lastUpdate": "2026-01-29T09:19:02.702Z"
   }
 }

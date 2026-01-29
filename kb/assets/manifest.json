@@ -1223,6 +1223,176 @@
       "file_extension": "mov",
       "storage_provider": "gcs",
       "_old_path": "/kb-assets/clubaperitif/open badge.mov"
+    },
+    {
+      "id": "asset:vector_ios_app_activity_dashboard_001",
+      "type": "asset",
+      "entity_type": "photo",
+      "title": "Vector iOS App - Activity Dashboard",
+      "description": "Snapshot from a Vector iOS app variant focused on physical activity, connected to the Vector Watch. Users could see their steps, active calories, sleep, and other key metrics in a dashboard view with circular progress indicators.",
+      "path": "/kb-assets/vector/iOS-app-view-activity-dashboard.png",
+      "related_entities": [
+        "project:vector_watch"
+      ],
+      "tags": [
+        "vector",
+        "ios",
+        "app",
+        "dashboard",
+        "activity-tracking",
+        "fitness",
+        "UI"
+      ],
+      "caption": "Vector iOS app activity dashboard",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio"
+      },
+      "blob_id": "vector/ios-app-view-activity-dashboard",
+      "file_extension": "png",
+      "storage_provider": "gcs"
+    },
+    {
+      "id": "asset:vector_ios_app_settings_devices_001",
+      "type": "asset",
+      "entity_type": "photo",
+      "title": "Vector iOS App - Settings and Devices",
+      "description": "Snapshot from the main Vector iOS app showing the device management interface. Users could connect multiple devices (Luna Black, Meridian Solar, Luna Pulse, Luna Sport) and control their settings and connection status.",
+      "path": "/kb-assets/vector/iOS-app-view-settings-devices.png",
+      "related_entities": [
+        "project:vector_watch"
+      ],
+      "tags": [
+        "vector",
+        "ios",
+        "app",
+        "settings",
+        "devices",
+        "management",
+        "UI"
+      ],
+      "caption": "Vector iOS app device settings",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio"
+      },
+      "blob_id": "vector/ios-app-view-settings-devices",
+      "file_extension": "png",
+      "storage_provider": "gcs"
+    },
+    {
+      "id": "asset:vector_watch_os_navigation_model_001",
+      "type": "asset",
+      "entity_type": "diagram",
+      "title": "Vector Watch OS Navigation Model",
+      "description": "Schema showing the conceptual structure of the Vector Watch OS UI and how users navigate between watchfaces, apps, and insights using gestures. Illustrates the hierarchical organization of content on the circular display.",
+      "path": "/kb-assets/vector/navigation-model.png",
+      "related_entities": [
+        "project:vector_watch"
+      ],
+      "tags": [
+        "vector",
+        "watch-os",
+        "navigation",
+        "UX",
+        "diagram",
+        "gestures",
+        "conceptual-model"
+      ],
+      "caption": "Vector Watch OS navigation conceptual model",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio"
+      },
+      "blob_id": "vector/navigation-model",
+      "file_extension": "png",
+      "storage_provider": "gcs"
+    },
+    {
+      "id": "asset:vector_watch_tracker_app_001",
+      "type": "asset",
+      "entity_type": "video",
+      "title": "Vector Watch Tracker App Navigation",
+      "description": "Video demonstration of navigating the Tracker app on the Vector Watch. Shows how physical activity tracking data is displayed and accessed on the watch interface.",
+      "path": "/kb-assets/vector/tracker app.mov",
+      "related_entities": [
+        "project:vector_watch"
+      ],
+      "tags": [
+        "vector",
+        "watch-os",
+        "tracker-app",
+        "video",
+        "demo",
+        "activity-tracking",
+        "UI"
+      ],
+      "caption": "Video showing navigation in the Vector Watch Tracker app",
+      "metadata": {
+        "format": "mov",
+        "source": "FRAM Design portfolio"
+      },
+      "blob_id": "vector/tracker-app",
+      "file_extension": "mov",
+      "storage_provider": "gcs"
+    },
+    {
+      "id": "asset:vector_ecosystem_explained_001",
+      "type": "asset",
+      "entity_type": "diagram",
+      "title": "Vector Ecosystem Explained",
+      "description": "A comprehensive overview of the Vector ecosystem, showing the interplay between physical products (Vector Watch V1, V2, V3), digital tools (Vector Builder, Watchface Builder, Vector Tracker app), and the Vector Cloud infrastructure.",
+      "path": "/kb-assets/vector/vector-ecosystem-explained.png",
+      "related_entities": [
+        "project:vector_watch"
+      ],
+      "tags": [
+        "vector",
+        "ecosystem",
+        "architecture",
+        "hardware",
+        "software",
+        "cloud",
+        "overview",
+        "diagram"
+      ],
+      "caption": "Overview of the Vector product and service ecosystem",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio"
+      },
+      "blob_id": "vector/vector-ecosystem-explained",
+      "file_extension": "png",
+      "storage_provider": "gcs"
+    },
+    {
+      "id": "asset:vector_watch_os_ui_primitives_001",
+      "type": "asset",
+      "entity_type": "diagram",
+      "title": "Vector Watch OS UI Primitives",
+      "description": "Diagram showcasing the UI primitives used in the Vector Watch OS, including the canvas, basic shapes (primitives), layer structure, and default components used for building watchfaces and apps.",
+      "path": "/kb-assets/vector/watch-os-ui-primitives.png",
+      "related_entities": [
+        "project:vector_watch"
+      ],
+      "tags": [
+        "vector",
+        "watch-os",
+        "UI-primitives",
+        "design-system",
+        "canvas",
+        "layers",
+        "components",
+        "diagram"
+      ],
+      "caption": "UI primitives and components for Vector Watch OS",
+      "metadata": {
+        "format": "png",
+        "source": "FRAM Design portfolio"
+      },
+      "blob_id": "vector/watch-os-ui-primitives",
+      "file_extension": "png",
+      "storage_provider": "gcs"
     }
   ],
   "_schema": {
