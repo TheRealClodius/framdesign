@@ -3057,6 +3057,16 @@ export async function POST(request: Request) {
             try {
               // Flush buffered chunks first
               for (const chunk of bufferedChunks) {
+                // DEBUG: Log raw chunk structure to diagnose empty responses
+                const debugChunk = chunk as any;
+                console.log(`[Debug Raw Chunk] candidates=${debugChunk.candidates?.length || 0}, parts=${debugChunk.candidates?.[0]?.content?.parts?.length || 0}, finishReason=${debugChunk.candidates?.[0]?.finishReason || 'none'}, hasUsageMeta=${!!debugChunk.usageMetadata}`);
+                if (debugChunk.candidates?.[0]?.content?.parts) {
+                  const parts = debugChunk.candidates[0].content.parts;
+                  for (let i = 0; i < parts.length; i++) {
+                    const p = parts[i];
+                    console.log(`[Debug Part ${i}] text=${!!p.text}, functionCall=${!!p.functionCall}, thoughtSignature=${!!p.thoughtSignature}`);
+                  }
+                }
                 enqueueTextFromChunk(chunk);
               }
 
