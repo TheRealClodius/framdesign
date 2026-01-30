@@ -1080,6 +1080,19 @@ export async function POST(request: Request) {
     // Inject Tool Memory Summary (Point B/C from tool-memory.md)
     // This ensures the agent is always aware of its "vision status" before answering
     const sessionId = userId || 'anonymous-text-session';
+
+    // IMPORTANT: Clear stale tool memory for new conversations
+    // A "new conversation" is detected when messages.length <= 2 (just first user message, or user + assistant)
+    // This prevents stale tool memory from previous sessions from confusing the model
+    if (messages.length <= 2) {
+      const existingCalls = toolMemoryStore.queryToolCalls(sessionId, { toolId: "", timeRange: 'all', includeErrors: true });
+      if (existingCalls.length > 0) {
+        console.log(`[ToolMemory] Clearing ${existingCalls.length} stale tool calls for new conversation (messages: ${messages.length})`);
+        toolMemoryStore.clearSession(sessionId);
+        loopDetector.clearSession(sessionId);
+      }
+    }
+
     const pastToolCalls = toolMemoryStore.queryToolCalls(sessionId, { toolId: "", timeRange: 'all', includeErrors: false });
     
     if (pastToolCalls.length > 0) {
@@ -3040,13 +3053,13 @@ export async function POST(request: Request) {
             let lateThoughtSignature: string | undefined = undefined;
 
             const enqueueTextFromChunk = (chunk: unknown) => {
-              const typed = chunk as { 
-                text?: string | (() => string); 
-                candidates?: Array<{ 
-                  content?: { parts?: Array<{ text?: string, functionCall?: any }> },
+              const typed = chunk as {
+                text?: string | (() => string);
+                candidates?: Array<{
+                  content?: { parts?: Array<{ text?: string, functionCall?: any, thoughtSignature?: string }> },
                   finishReason?: string,
                   safetyRatings?: Array<{ category: string, probability: string }>
-                }> 
+                }>
               };
               const candidates = typed.candidates?.[0]?.content?.parts || [];
               const finishReason = typed.candidates?.[0]?.finishReason;
@@ -3069,6 +3082,13 @@ export async function POST(request: Request) {
                 if (textParts.length > 0) {
                   text = textParts.join('');
                 }
+              }
+
+              // DEBUG: Log chunk contents when no text found
+              if (!text && candidates.length > 0) {
+                const hasThought = candidates.some((p: any) => p.thoughtSignature);
+                const hasFunction = candidates.some((p: any) => p.functionCall);
+                console.log(`[Debug] Chunk with no text: finishReason=${finishReason}, hasThought=${hasThought}, hasFunction=${hasFunction}, parts=${candidates.length}`);
               }
 
               if (text) {
@@ -3378,6 +3398,7 @@ export async function POST(request: Request) {
               // CRITICAL: Ensure we never return an empty response (truly last resort)
               // If agent produced no text AND no late tool call was executed, provide a fallback
               if (!accumulatedFullText.trim()) {
+                console.warn(`[Empty Response Debug] Triggering fallback. chunksProcessed=${chunksProcessed}, bytesSent=${bytesSent}, lateFunctionCall=${lateFunctionCall ? (lateFunctionCall as {name: string}).name : 'none'}, bufferedChunks=${bufferedChunks.length}`);
                 const fallbackMessage = "I'm ready to help. Could you please clarify what you'd like to know?";
                 console.warn(`[Empty Response] Agent returned no text - using fallback message`);
                 const encoded = encoder.encode(fallbackMessage);

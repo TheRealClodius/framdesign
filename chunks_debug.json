@@ -5,11 +5,100 @@
         "content": {
           "parts": [
             {
+              "text": "My apologies. To accurately describe the visuals of the image, I need to retrieve its",
+              "thoughtSignature": "CmEBcsjafMhDsnbYepzXUZ/pdg18xG0N0Kw0xXpwV7cJ3xWZ26NZmZ4QZs0us8JLCXWoBkNF17wK1V4xO6rc/E2E9lPEP/I1zAElyzZoTyodAlNhC+OsfACNXTWR3Cw0lo0HCuYBAXLI2nxdKYHR4Dcj2hCsMItIc8MT/ttVQNlLn5V8t5qmLCpk9PxeY48f0cgUjmiRxQ2OL4Lutfi4B7qK1+7yaMAQdYfK2pxMLd8CH5rfc3XvjJCcR42+8xyCDsNJTAQIkXRPvykAMx11o9IpiUFymfU+CQ/Rv66fwTon8rLZ36nrD8rgbGbhCJNYyW/q33vfYDrejQhQnoG5C013JMZ4Df2HBImd160Sxuu6BOM0s4iAuZXfaACuxWGsxf2RWh2VZQ7BrChP3EzLkKs8vo0udz3GHskzp92Q0sIJgNpjt8SrcmAhSW8KkQEBcsjafHJg158G5EQL6+f3rd0ozYtMGU8PoByPvNBOhGKeICuOoNg96iWAwFG0Bni4ODlI0Pj0iwOhHBgahzkONw4UQnw7wVNdWAcYfwkcev5xQ4JptXS4fs/2Jr5g0fbrDpOCqW7YGpfzE0NLjGbOalq9lp+5ZHi167x5W11RtLySoLBd6g5sIJsC5mSIMz36"
+            }
+          ],
+          "role": "model"
+        },
+        "index": 0
+      }
+    ],
+    "modelVersion": "gemini-2.5-flash",
+    "responseId": "VY98adv0FOL5xs0PqbOY-AM",
+    "usageMetadata": {
+      "promptTokenCount": 27257,
+      "candidatesTokenCount": 17,
+      "totalTokenCount": 27367,
+      "promptTokensDetails": [
+        {
+          "modality": "TEXT",
+          "tokenCount": 27257
+        }
+      ],
+      "thoughtsTokenCount": 93
+    },
+    "sdkHttpResponse": {
+      "headers": {
+        "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+        "content-disposition": "attachment",
+        "content-type": "text/event-stream",
+        "date": "Fri, 30 Jan 2026 11:00:37 GMT",
+        "server": "scaffolding on HTTPServer2",
+        "server-timing": "gfet4t7; dur=1429",
+        "transfer-encoding": "chunked",
+        "vary": "Origin, X-Origin, Referer",
+        "x-content-type-options": "nosniff",
+        "x-frame-options": "SAMEORIGIN",
+        "x-xss-protection": "0"
+      }
+    }
+  },
+  {
+    "candidates": [
+      {
+        "content": {
+          "parts": [
+            {
+              "text": " pixel data. I will do so now.\n\n---STATUS---\n{\"status\":\"Fetching pixel data for Autopilot tool calls interface in dark mode\"}\n---ENDSTATUS---\n"
+            }
+          ],
+          "role": "model"
+        },
+        "index": 0
+      }
+    ],
+    "modelVersion": "gemini-2.5-flash",
+    "responseId": "VY98adv0FOL5xs0PqbOY-AM",
+    "usageMetadata": {
+      "promptTokenCount": 27257,
+      "candidatesTokenCount": 52,
+      "totalTokenCount": 27402,
+      "promptTokensDetails": [
+        {
+          "modality": "TEXT",
+          "tokenCount": 27257
+        }
+      ],
+      "thoughtsTokenCount": 93
+    },
+    "sdkHttpResponse": {
+      "headers": {
+        "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+        "content-disposition": "attachment",
+        "content-type": "text/event-stream",
+        "date": "Fri, 30 Jan 2026 11:00:37 GMT",
+        "server": "scaffolding on HTTPServer2",
+        "server-timing": "gfet4t7; dur=1429",
+        "transfer-encoding": "chunked",
+        "vary": "Origin, X-Origin, Referer",
+        "x-content-type-options": "nosniff",
+        "x-frame-options": "SAMEORIGIN",
+        "x-xss-protection": "0"
+      }
+    }
+  },
+  {
+    "candidates": [
+      {
+        "content": {
+          "parts": [
+            {
               "functionCall": {
                 "name": "kb_get",
                 "args": {
-                  "include_image_data": false,
-                  "id": "asset:desktop_agent_full_app_canvas_001"
+                  "include_image_data": true,
+                  "id": "asset:autopilot_tool_calls_dark_001"
                 }
               }
             }
@@ -21,33 +110,27 @@
       }
     ],
     "modelVersion": "gemini-2.5-flash",
-    "responseId": "HIN8aYmeE9-9xN8PxI3tmQg",
+    "responseId": "VY98adv0FOL5xs0PqbOY-AM",
     "usageMetadata": {
-      "promptTokenCount": 36877,
-      "candidatesTokenCount": 37,
-      "totalTokenCount": 36914,
-      "cachedContentTokenCount": 14029,
+      "promptTokenCount": 27257,
+      "candidatesTokenCount": 88,
+      "totalTokenCount": 27438,
       "promptTokensDetails": [
         {
           "modality": "TEXT",
-          "tokenCount": 36877
+          "tokenCount": 27257
         }
       ],
-      "cacheTokensDetails": [
-        {
-          "modality": "TEXT",
-          "tokenCount": 14029
-        }
-      ]
+      "thoughtsTokenCount": 93
     },
     "sdkHttpResponse": {
       "headers": {
         "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
         "content-disposition": "attachment",
         "content-type": "text/event-stream",
-        "date": "Fri, 30 Jan 2026 10:08:28 GMT",
+        "date": "Fri, 30 Jan 2026 11:00:37 GMT",
         "server": "scaffolding on HTTPServer2",
-        "server-timing": "gfet4t7; dur=2149",
+        "server-timing": "gfet4t7; dur=1429",
         "transfer-encoding": "chunked",
         "vary": "Origin, X-Origin, Referer",
         "x-content-type-options": "nosniff",
