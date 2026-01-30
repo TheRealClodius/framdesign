@@ -1411,10 +1411,6 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
       return;
     }
 
-    // Unlock audio context during user interaction (required for mobile)
-    // This ensures sounds play if agent starts voice session in response
-    unlockAudio();
-
     const userMessage = input.trim();
     setInput("");
     setMessages((prev) => [...prev, { id: generateMessageId(), role: "user", content: userMessage, timestamp: Date.now() }]);
