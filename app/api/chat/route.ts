@@ -635,27 +635,13 @@ async function getSystemPromptCache(ai: GoogleGenAI, providerSchemas: ProviderSc
         return null;
       }
 
-      // Build system prompt content with acknowledgment
-      const systemContent = [
-        {
-          role: "user" as const,
-          parts: [{ text: FRAM_SYSTEM_PROMPT }],
-        },
-        {
-          role: "model" as const,
-          parts: [{ text: "UNDERSTOOD." }],
-        }
-      ];
-
-      // Check token count first (optional, but good practice)
-      // Note: this model might not support caching yet
-      // We'll try to create cache, but fall back gracefully if it fails
-      // Include tools in cache so we don't need to pass them when using cached content
+      // Create cache with system prompt and tools only
+      // NOTE: Do NOT include contents with the system prompt as a user message -
+      // this causes confusion when the actual user message arrives
       const cache = await ai.caches.create({
         model: "gemini-2.5-flash",
         config: {
           systemInstruction: FRAM_SYSTEM_PROMPT,
-          contents: systemContent,
           tools: [{ functionDeclarations: providerSchemas }],
           ttl: `${CACHE_CONFIG.TTL_SECONDS}s`,
           displayName: "fram-system-prompt"
@@ -3057,16 +3043,6 @@ export async function POST(request: Request) {
             try {
               // Flush buffered chunks first
               for (const chunk of bufferedChunks) {
-                // DEBUG: Log raw chunk structure to diagnose empty responses
-                const debugChunk = chunk as any;
-                console.log(`[Debug Raw Chunk] candidates=${debugChunk.candidates?.length || 0}, parts=${debugChunk.candidates?.[0]?.content?.parts?.length || 0}, finishReason=${debugChunk.candidates?.[0]?.finishReason || 'none'}, hasUsageMeta=${!!debugChunk.usageMetadata}`);
-                if (debugChunk.candidates?.[0]?.content?.parts) {
-                  const parts = debugChunk.candidates[0].content.parts;
-                  for (let i = 0; i < parts.length; i++) {
-                    const p = parts[i];
-                    console.log(`[Debug Part ${i}] text=${!!p.text}, functionCall=${!!p.functionCall}, thoughtSignature=${!!p.thoughtSignature}`);
-                  }
-                }
                 enqueueTextFromChunk(chunk);
               }
 
