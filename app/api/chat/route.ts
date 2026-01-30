@@ -27,7 +27,6 @@ import { UsageService } from '@/lib/services/usage-service';
 import { toolMemoryStore } from '@/tools/_core/tool-memory-store';
 import { loopDetector } from '@/tools/_core/loop-detector';
 import { toolMemoryDedup } from '@/tools/_core/tool-memory-dedup';
-import { toolMemorySummarizer } from '@/tools/_core/tool-memory-summarizer';
 import { hashArgs } from '@/tools/_core/utils/hash-args';
 import { estimateTokens as estimateTokensForJson } from '@/tools/_core/utils/estimate-tokens';
 
@@ -863,6 +862,132 @@ async function retryWithBackoff<T>(
   throw lastError;
 }
 
+interface ToolExecutionContext {
+  conversationHash: string;
+  messages: RawMessage[];
+  sessionId: string;
+  observability?: ObservabilityData | null;
+}
+
+interface ToolExecutionResult {
+  ok: boolean;
+  data?: unknown;
+  error?: { type: string; message: string; retryable: boolean; details?: unknown };
+  duration: number;
+  meta?: Record<string, unknown>;
+}
+
+/**
+ * Execute a tool with standard recording, retry, and observability
+ * Consolidates common tool execution logic from the three tool handling blocks
+ */
+async function executeToolWithContext(
+  toolName: string,
+  args: Record<string, unknown>,
+  thoughtSignature: string | undefined,
+  ctx: ToolExecutionContext
+): Promise<ToolExecutionResult> {
+  const turnNumber = Math.ceil(ctx.messages.length / 2);
+  const state = createStateController({ mode: 'text', isActive: true }) as StateController;
+
+  // Record tool call
+  recordToolCall(ctx.conversationHash, turnNumber, toolName, args, thoughtSignature, 0);
+
+  const toolMetadata = toolRegistry.getToolMetadata(toolName) as ToolMetadata | null;
+
+  const executionContext = {
+    clientId: `text-${Date.now()}`,
+    ws: null,
+    geminiSession: null,
+    args,
+    capabilities: { voice: false },
+    session: {
+      isActive: state.get('isActive'),
+      toolsVersion: toolRegistry.getVersion(),
+      state: state.getSnapshot()
+    },
+    meta: {
+      perplexityApiKey: process.env.PERPLEXITY_API_KEY
+    }
+  };
+
+  const startTime = Date.now();
+
+  // Check for loops
+  const loopCheck = loopDetector.detectLoop(ctx.sessionId, turnNumber, toolName, args);
+  if (loopCheck.detected) {
+    const duration = Date.now() - startTime;
+    const error = { type: 'LOOP_DETECTED', message: loopCheck.message || 'Loop detected', retryable: false };
+    recordToolResult(ctx.conversationHash, turnNumber, toolName, { error: true, ...error }, 0);
+
+    // Record observability
+    if (ctx.observability) {
+      ctx.observability.toolCalls.push({
+        position: ctx.observability.toolCalls.length + 1,
+        chainPosition: 0,
+        toolId: toolName,
+        args,
+        thoughtSignature,
+        startTime,
+        duration,
+        ok: false,
+        result: null,
+        error
+      });
+      ctx.observability.totalDuration = Date.now() - ctx.observability.requestStartTime;
+    }
+
+    return { ok: false, error, duration };
+  }
+
+  loopDetector.recordCall(ctx.sessionId, turnNumber, toolName, args, null);
+
+  // Execute with retry
+  const result = await retryToolExecution(
+    () => toolRegistry.executeTool(toolName, executionContext),
+    { mode: 'text', maxRetries: 3, toolId: toolName, toolMetadata: toolMetadata || {}, clientId: `text-${Date.now()}` }
+  );
+
+  const duration = Date.now() - startTime;
+
+  // Record result
+  recordToolResult(ctx.conversationHash, turnNumber, toolName,
+    result.ok ? (result.data as Record<string, unknown>) :
+    { error: true, type: result.error?.type, message: result.error?.message, retryable: result.error?.retryable },
+    0);
+
+  // Record observability
+  if (ctx.observability) {
+    ctx.observability.toolCalls.push({
+      position: ctx.observability.toolCalls.length + 1,
+      chainPosition: 0,
+      toolId: toolName,
+      args,
+      thoughtSignature,
+      startTime,
+      duration,
+      ok: result.ok,
+      result: result.ok ? result.data : null,
+      error: result.ok ? null : result.error
+    });
+    ctx.observability.totalDuration = Date.now() - ctx.observability.requestStartTime;
+  }
+
+  // Audit log
+  console.log(JSON.stringify({
+    event: 'tool_execution',
+    toolId: toolName,
+    toolVersion: toolMetadata?.version || 'unknown',
+    registryVersion: toolRegistry.getVersion(),
+    duration,
+    ok: result.ok,
+    category: toolMetadata?.category || 'unknown',
+    mode: 'text'
+  }));
+
+  return { ...result, duration };
+}
+
 export async function POST(request: Request) {
   // T0: Request received
   const requestStartTime = Date.now();
@@ -906,11 +1031,6 @@ export async function POST(request: Request) {
     // Log for debugging (API key presence, not the key itself)
     console.log("GEMINI_API_KEY present:", !!apiKey);
     console.log("GEMINI_API_KEY length:", apiKey ? apiKey.length : 0);
-
-    // Ensure the tool memory summarizer is initialized with the API key
-    if (apiKey) {
-      toolMemorySummarizer.reinitialize();
-    }
 
     if (!apiKey) {
       // Return a mock response if no API key is configured
@@ -1621,111 +1741,34 @@ export async function POST(request: Request) {
       // If function call detected early, handle it and return JSON (no stream)
       const ignoreUserCall = functionCalls.find(c => c.name === "ignore_user");
       const ignoreUserPart = functionCallParts.find(p => p.functionCall.name === "ignore_user");
-      
+
       if (ignoreUserCall) {
-        // Initialize state controller
-        const turnNumber = Math.ceil(messages.length / 2);
-        const state = createStateController({
-          mode: 'text',
-          isActive: true
-        }) as StateController;
-
-        // Record tool call
-        recordToolCall(
+        const ignoreUserArgs = toRecord(ignoreUserCall.args || {});
+        const ctx: ToolExecutionContext = {
           conversationHash,
-          turnNumber,
-          'ignore_user',
-          ignoreUserCall.args || {},
-          ignoreUserPart?.thoughtSignature,
-          0
-        );
-
-        // Get tool metadata
-        const toolMetadata = toolRegistry.getToolMetadata('ignore_user') as ToolMetadata | null;
-
-        // Build execution context
-        const executionContext = {
-          clientId: `text-${Date.now()}`,
-          ws: null,  // No WebSocket in text mode
-          geminiSession: null,
-          args: ignoreUserCall.args,
-          session: {
-            isActive: state.get('isActive'),
-            toolsVersion: toolRegistry.getVersion(),
-            state: state.getSnapshot()
-          }
+          messages,
+          sessionId: userId || 'anonymous',
+          observability
         };
 
-        // Execute tool through registry with retry logic
-        const startTime = Date.now();
-        const result = await retryToolExecution(
-          () => toolRegistry.executeTool('ignore_user', executionContext),
-          {
-            mode: 'text',
-            maxRetries: 3,
-            toolId: 'ignore_user',
-            toolMetadata: (toolMetadata || {}) as object,
-            clientId: `text-${Date.now()}`
-          }
-        );
-        const duration = Date.now() - startTime;
-
-        const ignoreUserArgs = toRecord(ignoreUserCall.args || {});
-
-        // Record tool result
-        recordToolResult(
-          conversationHash,
-          turnNumber,
+        const result = await executeToolWithContext(
           'ignore_user',
-          result.ok ? (result.data as Record<string, unknown>) : {
-            error: true,
-            type: result.error.type,
-            message: result.error.message,
-            retryable: result.error.retryable,
-            details: result.error.details
-          },
-          0
+          ignoreUserArgs,
+          ignoreUserPart?.thoughtSignature,
+          ctx
         );
-
-        // Collect observability data
-        if (observability) {
-          observability.toolCalls.push({
-            position: observability.toolCalls.length + 1,
-            chainPosition: 0,
-            toolId: 'ignore_user',
-            args: ignoreUserArgs,
-            thoughtSignature: ignoreUserPart?.thoughtSignature,
-            startTime: startTime,
-            duration: duration,
-            ok: result.ok,
-            result: result.ok ? result.data : null,
-            error: result.ok ? null : result.error
-          });
-          observability.totalDuration = Date.now() - observability.requestStartTime;
-        }
-
-        // Structured audit logging
-        console.log(JSON.stringify({
-          event: 'tool_execution',
-          toolId: 'ignore_user',
-          toolVersion: toolMetadata?.version || 'unknown',
-          registryVersion: toolRegistry.getVersion(),
-          duration,
-          ok: result.ok,
-          category: toolMetadata?.category || 'unknown',
-          mode: 'text'
-        }));
 
         // Return response based on result
         if (result.ok) {
+          const resultData = result.data as Record<string, unknown>;
           const response = {
-            message: result.data.farewellMessage || ignoreUserArgs.farewell_message,
+            message: resultData.farewellMessage || ignoreUserArgs.farewell_message,
             timeout: {
-              duration: result.data.durationSeconds || ignoreUserArgs.duration_seconds,
-              until: result.data.timeoutUntil
+              duration: resultData.durationSeconds || ignoreUserArgs.duration_seconds,
+              until: resultData.timeoutUntil
             }
           };
-          
+
           // Append observability if enabled
           if (observability) {
             (response as { observability?: ObservabilityData }).observability = {
@@ -1737,14 +1780,14 @@ export async function POST(request: Request) {
               requestStartTime: observability.requestStartTime
             };
           }
-          
+
           return NextResponse.json(response);
         } else {
           console.error('ignore_user tool failed:', result.error);
           const errorResponse = {
-            error: result.error.message
+            error: result.error?.message
           };
-          
+
           // Append observability even on error
           if (observability) {
             (errorResponse as { observability?: ObservabilityData }).observability = {
@@ -1756,7 +1799,7 @@ export async function POST(request: Request) {
               requestStartTime: observability.requestStartTime
             };
           }
-          
+
           return NextResponse.json(errorResponse, { status: 500 });
         }
       }
@@ -1766,98 +1809,25 @@ export async function POST(request: Request) {
       const startVoicePart = functionCallParts.find(p => p.functionCall.name === "start_voice_session");
 
       if (startVoiceCall) {
-        // Initialize state controller
-        const turnNumber = Math.ceil(messages.length / 2);
-        const state = createStateController({
-          mode: 'text',
-          isActive: true
-        }) as StateController;
-
-        // Record tool call
-        recordToolCall(
+        const startVoiceArgs = (startVoiceCall.args || {}) as Record<string, unknown>;
+        const ctx: ToolExecutionContext = {
           conversationHash,
-          turnNumber,
-          'start_voice_session',
-          startVoiceCall.args || {},
-          startVoicePart?.thoughtSignature,
-          0
-        );
-
-        const toolMetadata = toolRegistry.getToolMetadata('start_voice_session') as ToolMetadata | null;
-
-        const executionContext = {
-          clientId: `text-${Date.now()}`,
-          ws: null,
-          geminiSession: null,
-          args: startVoiceCall.args || {},
-          session: {
-            isActive: state.get('isActive'),
-            toolsVersion: toolRegistry.getVersion(),
-            state: state.getSnapshot()
-          }
+          messages,
+          sessionId: userId || 'anonymous',
+          observability
         };
 
-        const startTime = Date.now();
-        const result = await retryToolExecution(
-          () => toolRegistry.executeTool('start_voice_session', executionContext),
-          {
-            mode: 'text',
-            maxRetries: 3,
-            toolId: 'start_voice_session',
-            toolMetadata: toolMetadata ? (toolMetadata as object) : {},
-            clientId: `text-${Date.now()}`
-          }
-        );
-        const duration = Date.now() - startTime;
-
-        // Record tool result
-        recordToolResult(
-          conversationHash,
-          turnNumber,
+        const result = await executeToolWithContext(
           'start_voice_session',
-          result.ok ? (result.data as Record<string, unknown>) : {
-            error: true,
-            type: result.error.type,
-            message: result.error.message,
-            retryable: result.error.retryable,
-            details: result.error.details
-          },
-          0
+          startVoiceArgs,
+          startVoicePart?.thoughtSignature,
+          ctx
         );
-
-        // Collect observability data
-        if (observability) {
-          observability.toolCalls.push({
-            position: observability.toolCalls.length + 1,
-            chainPosition: 0,
-            toolId: 'start_voice_session',
-            args: startVoiceCall.args || {},
-            thoughtSignature: startVoicePart?.thoughtSignature,
-            startTime: startTime,
-            duration: duration,
-            ok: result.ok,
-            result: result.ok ? result.data : null,
-            error: result.ok ? null : result.error
-          });
-          observability.totalDuration = Date.now() - observability.requestStartTime;
-        }
-
-        console.log(JSON.stringify({
-          event: 'tool_execution',
-          toolId: 'start_voice_session',
-          toolVersion: toolMetadata?.version || 'unknown',
-          registryVersion: toolRegistry.getVersion(),
-          duration,
-          ok: result.ok,
-          category: toolMetadata?.category || 'unknown',
-          mode: 'text'
-        }));
 
         if (result.ok) {
           // Filter out empty or too-short pending_request values
-          // Schema allows null/empty, but we normalize to null for consistency
-          let pendingRequest = startVoiceCall.args?.pending_request || null;
-          if (pendingRequest && typeof pendingRequest === 'string' && pendingRequest.trim().length < 3) {
+          let pendingRequest = startVoiceArgs.pending_request || null;
+          if (pendingRequest && typeof pendingRequest === 'string' && (pendingRequest as string).trim().length < 3) {
             pendingRequest = null;
           }
 
@@ -1882,7 +1852,7 @@ export async function POST(request: Request) {
             startVoiceSession: true,
             pendingRequest: pendingRequest
           };
-          
+
           // Append observability if enabled
           if (observability) {
             (response as { observability?: ObservabilityData }).observability = {
@@ -1894,14 +1864,14 @@ export async function POST(request: Request) {
               requestStartTime: observability.requestStartTime
             };
           }
-          
+
           return NextResponse.json(response);
         } else {
           console.error('start_voice_session tool failed:', result.error);
           const errorResponse = {
-            error: result.error.message
+            error: result.error?.message
           };
-          
+
           // Append observability even on error
           if (observability) {
             (errorResponse as { observability?: ObservabilityData }).observability = {
@@ -1913,7 +1883,7 @@ export async function POST(request: Request) {
               requestStartTime: observability.requestStartTime
             };
           }
-          
+
           return NextResponse.json(errorResponse, { status: 500 });
         }
       }
@@ -1921,165 +1891,102 @@ export async function POST(request: Request) {
       // Handle all other function calls (kb_search, kb_get, end_voice_session, etc.)
       const otherFunctionCall = functionCalls.find(c => c.name !== "ignore_user" && c.name !== "start_voice_session");
       const otherFunctionPart = functionCallParts.find(p => p.functionCall.name !== "ignore_user" && p.functionCall.name !== "start_voice_session");
-      
+
       if (otherFunctionCall && otherFunctionCall.name) {
         const toolName = otherFunctionCall.name;
+        const toolArgs = (otherFunctionCall.args || {}) as Record<string, unknown>;
         console.log(`Handling function call: ${toolName}`);
         const toolErrorNotices: Array<{ toolName: string; type: string; message: string }> = [];
-        
-        // Initialize state controller
-        const turnNumber = Math.ceil(messages.length / 2);
-        const state = createStateController({
-          mode: 'text',
-          isActive: true
-        }) as StateController;
 
-        // Record tool call
-        recordToolCall(
-          conversationHash,
-          turnNumber,
-          toolName,
-          otherFunctionCall.args || {},
-          otherFunctionPart?.thoughtSignature,
-          0
-        );
-
-        // Get tool metadata
+        // Get tool metadata early for validation
         const toolMetadata = toolRegistry.getToolMetadata(toolName) as ToolMetadata | null;
-        
         if (!toolMetadata) {
           console.error(`Unknown tool: ${toolName}`);
-          return NextResponse.json({
-            error: `Unknown tool: ${toolName}`
-          }, { status: 400 });
+          return NextResponse.json({ error: `Unknown tool: ${toolName}` }, { status: 400 });
         }
 
-        // Build execution context
         const sessionId = userId || 'anonymous-text-session';
-        const executionContext = {
-          clientId: `text-${Date.now()}`,
-          ws: null,
-          geminiSession: null,
-          args: otherFunctionCall.args || {},
-          capabilities: { voice: false },
-          session: {
-            isActive: state.get('isActive'),
-            toolsVersion: toolRegistry.getVersion(),
-            state: state.getSnapshot()
-          },
-          meta: {
-            perplexityApiKey: process.env.PERPLEXITY_API_KEY
-          }
-        };
+        const turnNumber = Math.ceil(messages.length / 2);
 
         // Pre-execution deduplication check (tool memory)
-        const dedupCheck = toolMemoryDedup.checkForDuplicate(
-          sessionId,
-          toolName,
-          otherFunctionCall.args || {}
-        );
+        const dedupCheck = toolMemoryDedup.checkForDuplicate(sessionId, toolName, toolArgs);
 
-        let result;
-        let duration;
+        let result: ToolExecutionResult;
         const startTime = Date.now();
 
         if (dedupCheck.isDuplicate) {
+          // Use cached result from deduplication
           console.log(`[ToolMemory] Reusing cached result for ${toolName} (call: ${dedupCheck.originalCallId})`);
-          result = dedupCheck.cachedResult;
-          duration = Date.now() - startTime; // Should be ~0ms (instant)
-        } else {
-        // Check for loop before execution
-        const loopCheck = loopDetector.detectLoop(sessionId, turnNumber, toolName, otherFunctionCall.args || {});
-        if (loopCheck.detected) {
-          console.warn(`[Loop Detection] Loop detected for ${toolName}: ${loopCheck.message}`);
-          result = {
-            ok: false,
-            error: {
-              type: 'LOOP_DETECTED',
-              message: loopCheck.message,
-              retryable: false
-            }
-          };
-        } else {
-          // Record call
-          loopDetector.recordCall(sessionId, turnNumber, toolName, otherFunctionCall.args || {}, null);
+          result = { ...dedupCheck.cachedResult, duration: 0 };
 
-          // Execute tool through registry with retry logic
-          result = await retryToolExecution(
-            () => toolRegistry.executeTool(toolName, executionContext),
-            {
-              mode: 'text',
-              maxRetries: 3,
+          // Record observability for deduplicated call
+          if (observability) {
+            observability.toolCalls.push({
+              position: observability.toolCalls.length + 1,
+              chainPosition: 0,
               toolId: toolName,
-              toolMetadata: toolMetadata ? (toolMetadata as object) : {},
-              clientId: `text-${Date.now()}`
-            }
-          );
-        }
-          duration = Date.now() - startTime;
+              args: toolArgs,
+              thoughtSignature: otherFunctionPart?.thoughtSignature,
+              startTime,
+              duration: 0,
+              ok: result.ok,
+              result: result.ok ? result.data : null,
+              error: result.ok ? null : result.error
+            });
+            observability.totalDuration = Date.now() - observability.requestStartTime;
+          }
+
+          // Audit log for deduplicated call
+          console.log(JSON.stringify({
+            event: 'tool_execution',
+            toolId: toolName,
+            toolVersion: toolMetadata?.version || 'unknown',
+            registryVersion: toolRegistry.getVersion(),
+            duration: 0,
+            ok: result.ok,
+            category: toolMetadata?.category || 'unknown',
+            mode: 'text',
+            deduplicated: true
+          }));
+        } else {
+          // Execute through unified helper (handles recording, loop detection, observability, logging)
+          const ctx: ToolExecutionContext = {
+            conversationHash,
+            messages,
+            sessionId,
+            observability
+          };
+          result = await executeToolWithContext(toolName, toolArgs, otherFunctionPart?.thoughtSignature, ctx);
 
           // Enhanced timing log for slow tool calls
-          if (duration > 500) {
-            console.log(`[Tool] ⏱️ SLOW TOOL CALL: ${toolName} took ${duration}ms`);
+          if (result.duration > 500) {
+            console.log(`[Tool] SLOW TOOL CALL: ${toolName} took ${result.duration}ms`);
             if (result.meta?._timing) {
-              console.log(`[Tool] ⏱️ Breakdown: ${JSON.stringify(result.meta._timing)}`);
+              console.log(`[Tool] Breakdown: ${JSON.stringify(result.meta._timing)}`);
             }
           }
 
-          // Record in tool memory store (post-execution)
+          // Record in tool memory store (post-execution, separate from tool session)
           const callId = `call-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
           toolMemoryStore.recordToolCall(sessionId, {
             id: callId,
             toolId: toolName,
-            args: otherFunctionCall.args || {},
-            argsHash: hashArgs(otherFunctionCall.args || {}),
+            args: toolArgs,
+            argsHash: hashArgs(toolArgs),
             timestamp: Date.now(),
-            turn: 1, // TODO: Track actual turn number
-            duration: duration,
+            turn: turnNumber,
+            duration: result.duration,
             fullResponse: result,
-            summary: null, // Will be generated async
+            summary: null,
             ok: result.ok,
             error: result.ok ? null : result.error,
             tokens: estimateTokensForJson(JSON.stringify(result))
           });
         }
 
-        // Collect observability data
-        if (observability) {
-          observability.toolCalls.push({
-            position: observability.toolCalls.length + 1,
-            chainPosition: 0,
-            toolId: toolName,
-            args: otherFunctionCall.args || {},
-            thoughtSignature: otherFunctionPart?.thoughtSignature,
-            startTime: startTime,
-            duration: duration,
-            ok: result.ok,
-            result: result.ok ? result.data : null,
-            error: result.ok ? null : result.error
-          });
-          observability.totalDuration = Date.now() - observability.requestStartTime;
-        }
-
-        console.log(JSON.stringify({
-          event: 'tool_execution',
-          toolId: toolName,
-          toolVersion: toolMetadata?.version || 'unknown',
-          registryVersion: toolRegistry.getVersion(),
-          duration,
-          ok: result.ok,
-          category: toolMetadata?.category || 'unknown',
-          mode: 'text'
-        }));
-
         // Handle tool errors by sending them back to the model
-        // The model will interpret the error and respond naturally to the user
         if (!result.ok) {
           console.error(`${toolName} tool failed:`, result.error);
-          
-          // Don't return an error response - instead, send the error back to the model
-          // as a functionResponse so it can handle it naturally
-          // The error object already contains: type, message, retryable, details
         }
 
         // Check if KB search results are relevant
@@ -2147,10 +2054,10 @@ export async function POST(request: Request) {
           toolName,
           result.ok ? (cleanedResultData as Record<string, unknown>) : {
             error: true,
-            type: result.error.type,
-            message: result.error.message,
-            retryable: result.error.retryable,
-            details: result.error.details
+            type: result.error?.type,
+            message: result.error?.message,
+            retryable: result.error?.retryable,
+            details: result.error?.details
           },
           0
         );
@@ -2163,10 +2070,10 @@ export async function POST(request: Request) {
           // Send cleaned data to model
           response: result.ok ? (cleanedResultData as Record<string, unknown>) : {
             error: true,
-            type: result.error.type,
-            message: result.error.message,
-            retryable: result.error.retryable,
-            details: result.error.details
+            type: result.error?.type,
+            message: result.error?.message,
+            retryable: result.error?.retryable,
+            details: result.error?.details
           }
         }
       }
@@ -2255,6 +2162,24 @@ export async function POST(request: Request) {
                 1
               );
 
+              // Create execution context for auto-chained tool
+              const autoState = createStateController({ mode: 'text', isActive: true }) as StateController;
+              const autoExecutionContext = {
+                clientId: `text-${Date.now()}`,
+                ws: null,
+                geminiSession: null,
+                args: autoArgs,
+                capabilities: { voice: false },
+                session: {
+                  isActive: autoState.get('isActive'),
+                  toolsVersion: toolRegistry.getVersion(),
+                  state: autoState.getSnapshot()
+                },
+                meta: {
+                  perplexityApiKey: process.env.PERPLEXITY_API_KEY
+                }
+              };
+
               const autoStartTime = Date.now();
               let autoResult;
 
@@ -2272,7 +2197,7 @@ export async function POST(request: Request) {
               } else {
                 loopDetector.recordCall(sessionId, turnNumber, autoToolName, autoArgs, null);
                 autoResult = await retryToolExecution(
-                  () => toolRegistry.executeTool(autoToolName, { ...executionContext, args: autoArgs }),
+                  () => toolRegistry.executeTool(autoToolName, autoExecutionContext),
                   {
                     mode: "text",
                     maxRetries: 3,
@@ -2412,13 +2337,13 @@ export async function POST(request: Request) {
         if (!result.ok) {
           toolErrorNotices.push({
             toolName,
-            type: result.error.type,
-            message: result.error.message
+            type: result.error?.type || 'UNKNOWN',
+            message: result.error?.message || 'Unknown error'
           });
           updatedContents.push({
             role: "user" as const,
             parts: [{
-              text: `IMPORTANT: The tool "${toolName}" failed with a ${result.error.type} error. You must tell the user this happened and include the error message verbatim: "${result.error.message}". If the message includes suggestions or next steps, surface them explicitly.`
+              text: `IMPORTANT: The tool "${toolName}" failed with a ${result.error?.type || 'UNKNOWN'} error. You must tell the user this happened and include the error message verbatim: "${result.error?.message || 'Unknown error'}". If the message includes suggestions or next steps, surface them explicitly.`
             }]
           });
         }
@@ -2635,6 +2560,8 @@ export async function POST(request: Request) {
                       startsWith: perplexityApiKey?.substring(0, 4) || 'N/A'
                     });
 
+                    // Create state controller for chained execution
+                    const chainedState = createStateController({ mode: 'text', isActive: true }) as StateController;
                     const chainedExecutionContext = {
                       clientId: `text-${Date.now()}`,
                       ws: null,
@@ -2642,9 +2569,9 @@ export async function POST(request: Request) {
                       args: nextFunctionCall.args || {},
                       capabilities: { voice: false },
                       session: {
-                        isActive: state.get('isActive'),
+                        isActive: chainedState.get('isActive'),
                         toolsVersion: toolRegistry.getVersion(),
-                        state: state.getSnapshot()
+                        state: chainedState.getSnapshot()
                       },
                       meta: {
                         perplexityApiKey: perplexityApiKey
@@ -3012,9 +2939,6 @@ export async function POST(request: Request) {
                     .catch(err => console.warn(`[Usage] Failed to record usage for ${userId}:`, err));
                 }
 
-                // Trigger background summarization for this turn (tool memory)
-                toolMemorySummarizer.enqueueSummarization(userId || 'anonymous-text-session')
-                  .catch(err => console.warn(`[ToolMemory] Summarization failed:`, err));
 
                 // T6: Final response sent (chained path)
                 const requestEndTime = Date.now();
@@ -3446,9 +3370,6 @@ export async function POST(request: Request) {
                   .catch(err => console.warn(`[Usage] Failed to record usage for ${userId}:`, err));
               }
 
-              // Trigger background summarization for this turn (tool memory)
-              toolMemorySummarizer.enqueueSummarization(userId || 'anonymous-text-session')
-                .catch(err => console.warn(`[ToolMemory] Summarization failed:`, err));
 
               controller.close();
             } catch (error) {

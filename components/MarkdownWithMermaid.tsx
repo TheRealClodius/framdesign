@@ -6,6 +6,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 import type { Components } from "react-markdown";
+import { parseAssetUrl, normalizeAssetPath, refreshAssetUrl } from '@/lib/utils/asset-url';
 
 // Lazy load MermaidRenderer to avoid SSR issues
 const MermaidRenderer = dynamic(() => import("./MermaidRenderer"), {
@@ -44,61 +45,6 @@ const ImageModal = dynamic(() => import("./ImageModal"), {
   loading: () => null, // Don't show loading state for modal
 });
 
-// Extract blob_id and extension from GCS signed URL (shared utility)
-function extractBlobIdFromGcsUrl(url: string): { blob_id: string; extension: string } | null {
-  try {
-    if (!url.includes('storage.googleapis.com') || !url.includes('/assets/')) return null;
-    const urlObj = new URL(url);
-    const pathname = urlObj.pathname;
-    const assetsIndex = pathname.indexOf('/assets/');
-    if (assetsIndex === -1) return null;
-    const assetPath = pathname.substring(assetsIndex + '/assets/'.length);
-    const lastDotIndex = assetPath.lastIndexOf('.');
-    if (lastDotIndex === -1) return null;
-    const blobId = assetPath.substring(0, lastDotIndex);
-    const extension = assetPath.substring(lastDotIndex + 1);
-    return (blobId && extension) ? { blob_id: blobId, extension } : null;
-  } catch {
-    return null;
-  }
-}
-
-// Extract blob_id and extension from local /kb-assets paths
-function extractBlobIdFromLocalAssetPath(path: string): { blob_id: string; extension: string } | null {
-  try {
-    let pathname = path;
-    if (path.startsWith("http://") || path.startsWith("https://")) {
-      pathname = new URL(path).pathname;
-    }
-    const assetsIndex = pathname.indexOf('/kb-assets/');
-    if (assetsIndex === -1) return null;
-    const assetPath = pathname.substring(assetsIndex + '/kb-assets/'.length);
-    const lastDotIndex = assetPath.lastIndexOf('.');
-    if (lastDotIndex === -1) return null;
-    const blobId = assetPath.substring(0, lastDotIndex);
-    const extension = assetPath.substring(lastDotIndex + 1);
-    return (blobId && extension) ? { blob_id: blobId, extension } : null;
-  } catch {
-    return null;
-  }
-}
-
-// Refresh expired GCS signed URL (shared utility)
-async function refreshGcsUrl(blobId: string, extension: string): Promise<string | null> {
-  try {
-    const response = await fetch('/api/refresh-asset-url', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ blob_id: blobId, extension }),
-    });
-    if (!response.ok) return null;
-    const data = await response.json();
-    return data.url || null;
-  } catch {
-    return null;
-  }
-}
-
 // Video component with error handling and URL refresh
 function VideoWithError({ src, children, controls, ...props }: { src?: string; children?: React.ReactNode; controls?: boolean; [key: string]: any }) {
   const [videoError, setVideoError] = useState(false);
@@ -131,10 +77,10 @@ function VideoWithError({ src, children, controls, ...props }: { src?: string; c
     
     // Try refreshing the signed URL from blob storage before failing
     if (!hasTriedRefresh && urlToCheck) {
-      const blobInfo = extractBlobIdFromGcsUrl(urlToCheck) || extractBlobIdFromLocalAssetPath(urlToCheck);
+      const blobInfo = parseAssetUrl(urlToCheck);
       if (blobInfo) {
         video.setAttribute("data-refresh-attempted", "true");
-        const freshUrl = await refreshGcsUrl(blobInfo.blob_id, blobInfo.extension);
+        const freshUrl = await refreshAssetUrl(blobInfo.blobId, blobInfo.extension);
         if (freshUrl) {
           console.log('[VideoWithError] Refreshed signed URL:', freshUrl);
           setCurrentSrc(freshUrl);
@@ -204,55 +150,11 @@ function ChatImage({
 }) {
   const [isLoading, setIsLoading] = useState(true);
 
-  // Normalize image path
-  const normalizeImagePath = (path: string | undefined): string => {
-    if (!path) return "";
-    if (path.startsWith("http://") || path.startsWith("https://")) return path;
-    const hasEncodedChars = path.includes("%");
-    try {
-      let pathToEncode = path;
-      if (hasEncodedChars) {
-        try {
-          let decoded = path;
-          let previousDecoded = path;
-          for (let i = 0; i < 3; i++) {
-            try {
-              decoded = decodeURIComponent(previousDecoded);
-              if (decoded === previousDecoded) break;
-              previousDecoded = decoded;
-            } catch { break; }
-          }
-          if (decoded !== path && !decoded.includes("%")) pathToEncode = decoded;
-        } catch { pathToEncode = path; }
-      }
-      const parts = pathToEncode.split("/");
-      const encodedParts = parts.map((part, index) => {
-        if (index === 0 && part === "") return "";
-        if (pathToEncode.includes("/kb-assets/") && index === parts.length - 1 && part.includes("_")) {
-          part = part.replace(/_/g, " ");
-        }
-        if (part.includes("%")) {
-          try {
-            const decoded = decodeURIComponent(part);
-            if (decoded !== part) {
-              const fixed = decoded.replace(/_/g, " ");
-              return encodeURIComponent(fixed);
-            }
-          } catch { return part; }
-        }
-        return encodeURIComponent(part);
-      });
-      let normalized = encodedParts.join("/");
-      if (pathToEncode.startsWith("/") && !normalized.startsWith("/")) normalized = "/" + normalized;
-      return normalized;
-    } catch { return path; }
-  };
-
   let normalizedSrc: string;
   if (src instanceof Blob) {
     normalizedSrc = URL.createObjectURL(src);
   } else if (typeof src === 'string' || src === undefined) {
-    normalizedSrc = normalizeImagePath(src);
+    normalizedSrc = normalizeAssetPath(src || '');
   } else {
     normalizedSrc = "";
   }
@@ -307,10 +209,10 @@ function ChatImage({
           const hasTriedRefresh = img.getAttribute("data-refresh-attempted") === "true";
 
           if (!hasTriedRefresh) {
-            const blobInfo = extractBlobIdFromGcsUrl(currentSrc) || extractBlobIdFromLocalAssetPath(currentSrc);
+            const blobInfo = parseAssetUrl(currentSrc);
             if (blobInfo) {
               img.setAttribute("data-refresh-attempted", "true");
-              const freshUrl = await refreshGcsUrl(blobInfo.blob_id, blobInfo.extension);
+              const freshUrl = await refreshAssetUrl(blobInfo.blobId, blobInfo.extension);
               if (freshUrl) {
                 img.src = freshUrl;
                 return;

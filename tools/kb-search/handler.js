@@ -5,53 +5,11 @@
  */
 
 import { ErrorType, ToolError } from '../_core/error-types.js';
-
-// Import blob storage service for GCS URL resolution and optional image fetch
-let resolveBlobUrl;
-let fetchAssetBuffer;
-async function loadBlobService() {
-  if (!resolveBlobUrl || !fetchAssetBuffer) {
-    try {
-      const blobModule = await import('@/lib/services/blob-storage-service');
-      resolveBlobUrl = blobModule.resolveBlobUrl || blobModule.default?.resolveBlobUrl;
-      fetchAssetBuffer = blobModule.fetchAssetBuffer || blobModule.default?.fetchAssetBuffer;
-    } catch (importError) {
-      // Fallback for Node.js runtime (voice server)
-      // Use a function to create the import path dynamically so webpack doesn't analyze it
-      try {
-        const getImportPath = (base) => `../../lib/services/${base}`;
-        const blobPath = getImportPath('blob-storage-service');
-        const blobModule = await import(/* webpackIgnore: true */ blobPath);
-        resolveBlobUrl = blobModule.resolveBlobUrl || blobModule.default?.resolveBlobUrl;
-        fetchAssetBuffer = blobModule.fetchAssetBuffer || blobModule.default?.fetchAssetBuffer;
-      } catch (fallbackError) {
-        console.warn('[kb_search] Failed to load blob storage service:', fallbackError);
-        // Will skip markdown generation for assets if service unavailable
-      }
-    }
-  }
-  return { resolveBlobUrl, fetchAssetBuffer };
-}
-
-function extractHttpStatus(error) {
-  if (!error || typeof error !== 'object') return undefined;
-  return (
-    error.status ||
-    error.statusCode ||
-    error.code ||
-    error.response?.status ||
-    error.response?.statusCode ||
-    error.data?.status ||
-    error.data?.statusCode
-  );
-}
-
-function isServiceUnavailable(error) {
-  const status = extractHttpStatus(error);
-  if (status === 503) return true;
-  const message = (error?.message || String(error || '')).toLowerCase();
-  return message.includes('service unavailable') || message.includes('503');
-}
+import {
+  extractHttpStatus,
+  isServiceUnavailable,
+  loadBlobService
+} from '../_core/helpers.js';
 
 /**
  * Execute kb_search tool

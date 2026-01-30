@@ -33,6 +33,52 @@ export type Message = {
 };
 
 /**
+ * Safe localStorage wrapper that handles SSR (server-side rendering)
+ */
+const safeStorage = {
+  get(key: string): string | null {
+    if (typeof window === 'undefined') return null;
+    try {
+      return localStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  },
+
+  set(key: string, value: string): void {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem(key, value);
+    } catch {
+      // Storage full or unavailable
+    }
+  },
+
+  remove(key: string): void {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.removeItem(key);
+    } catch {
+      // Ignore errors
+    }
+  },
+
+  getJSON<T>(key: string, fallback: T): T {
+    const value = this.get(key);
+    if (!value) return fallback;
+    try {
+      return JSON.parse(value) as T;
+    } catch {
+      return fallback;
+    }
+  },
+
+  setJSON(key: string, value: unknown): void {
+    this.set(key, JSON.stringify(value));
+  }
+};
+
+/**
  * Generate a unique message ID
  */
 export function generateMessageId(): string {
@@ -43,25 +89,21 @@ export function generateMessageId(): string {
  * Get or generate a persistent user ID for global budget tracking
  */
 export function getUserId(): string {
-  if (typeof window === "undefined") return "server-side";
-  
-  let userId = localStorage.getItem(STORAGE_KEYS.USER_ID);
+  let userId = safeStorage.get(STORAGE_KEYS.USER_ID);
   if (!userId) {
     userId = `user-${Math.random().toString(36).slice(2, 11)}-${Date.now().toString(36)}`;
-    localStorage.setItem(STORAGE_KEYS.USER_ID, userId);
+    safeStorage.set(STORAGE_KEYS.USER_ID, userId);
   }
-  return userId;
+  return userId || "server-side";
 }
 
 /**
  * Get timeout expiration timestamp from storage
  */
 export function getTimeoutUntil(): number | null {
-  if (typeof window === "undefined") return null;
-  
-  const stored = localStorage.getItem(STORAGE_KEYS.TIMEOUT);
+  const stored = safeStorage.get(STORAGE_KEYS.TIMEOUT);
   if (!stored) return null;
-  
+
   const until = parseInt(stored, 10);
   return Date.now() < until ? until : null;
 }
@@ -70,16 +112,14 @@ export function getTimeoutUntil(): number | null {
  * Set timeout expiration timestamp in storage
  */
 export function setTimeoutUntil(until: number): void {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(STORAGE_KEYS.TIMEOUT, until.toString());
+  safeStorage.set(STORAGE_KEYS.TIMEOUT, until.toString());
 }
 
 /**
  * Clear timeout from storage
  */
 export function clearTimeout(): void {
-  if (typeof window === "undefined") return;
-  localStorage.removeItem(STORAGE_KEYS.TIMEOUT);
+  safeStorage.remove(STORAGE_KEYS.TIMEOUT);
 }
 
 /**
@@ -94,11 +134,10 @@ export function isBlocked(): boolean {
  * Mark user as budget exhausted in storage
  */
 export function setBudgetExhausted(exhausted: boolean): void {
-  if (typeof window === "undefined") return;
   if (exhausted) {
-    localStorage.setItem(STORAGE_KEYS.BUDGET_EXHAUSTED, "true");
+    safeStorage.set(STORAGE_KEYS.BUDGET_EXHAUSTED, "true");
   } else {
-    localStorage.removeItem(STORAGE_KEYS.BUDGET_EXHAUSTED);
+    safeStorage.remove(STORAGE_KEYS.BUDGET_EXHAUSTED);
   }
 }
 
@@ -106,8 +145,7 @@ export function setBudgetExhausted(exhausted: boolean): void {
  * Check if user is marked as budget exhausted in storage
  */
 export function isBudgetExhausted(): boolean {
-  if (typeof window === "undefined") return false;
-  return localStorage.getItem(STORAGE_KEYS.BUDGET_EXHAUSTED) === "true";
+  return safeStorage.get(STORAGE_KEYS.BUDGET_EXHAUSTED) === "true";
 }
 
 /**
@@ -127,23 +165,11 @@ export function sanitizeMessagesForStorage(
  * Load messages from storage
  */
 export function loadMessagesFromStorage(maxMessages: number): Message[] {
-  if (typeof window === "undefined") return [];
-  
-  const stored = localStorage.getItem(STORAGE_KEYS.CONVERSATION);
-  if (!stored) return [];
-  
-  try {
-    const parsedMessages = JSON.parse(stored);
-    if (!Array.isArray(parsedMessages) || parsedMessages.length === 0) {
-      return [];
-    }
-    
-    return sanitizeMessagesForStorage(parsedMessages, maxMessages);
-  } catch (error) {
-    console.error("Failed to parse stored messages:", error);
-    localStorage.removeItem(STORAGE_KEYS.CONVERSATION);
+  const parsedMessages = safeStorage.getJSON<Message[]>(STORAGE_KEYS.CONVERSATION, []);
+  if (!Array.isArray(parsedMessages) || parsedMessages.length === 0) {
     return [];
   }
+  return sanitizeMessagesForStorage(parsedMessages, maxMessages);
 }
 
 /**
@@ -154,18 +180,18 @@ export function saveMessagesToStorage(
   maxMessages: number
 ): void {
   if (typeof window === "undefined") return;
-  
+
   const messagesToSave = sanitizeMessagesForStorage(messages, maxMessages);
-  
+
   if (messagesToSave.length === 0) {
-    localStorage.removeItem(STORAGE_KEYS.CONVERSATION);
+    safeStorage.remove(STORAGE_KEYS.CONVERSATION);
     return;
   }
-  
+
   const save = () => {
-    localStorage.setItem(STORAGE_KEYS.CONVERSATION, JSON.stringify(messagesToSave));
+    safeStorage.setJSON(STORAGE_KEYS.CONVERSATION, messagesToSave);
   };
-  
+
   if ("requestIdleCallback" in window) {
     requestIdleCallback(save);
   } else {
@@ -177,6 +203,5 @@ export function saveMessagesToStorage(
  * Clear all chat history from storage
  */
 export function clearChatHistory(): void {
-  if (typeof window === "undefined") return;
-  localStorage.removeItem(STORAGE_KEYS.CONVERSATION);
+  safeStorage.remove(STORAGE_KEYS.CONVERSATION);
 }

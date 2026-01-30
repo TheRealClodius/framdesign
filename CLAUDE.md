@@ -223,12 +223,6 @@ The system always retains full tool outputs, giving agents summaries in context 
 - Full responses always retrievable via `getFullResponse(sessionId, callId)`
 - Duplicate detection via similarity matching (85% threshold)
 
-**Server-Side: Async Summarization** (`tools/_core/tool-memory-summarizer.js`)
-- Generates 150-token summaries for calls beyond position 10 (for context injection)
-- Uses Gemini Flash Lite with fallback to rule-based summaries
-- **Summaries are for context injection only** - full responses remain stored
-- Agent sees summaries in `[SYSTEM CONTEXT]` to know what tools were called
-
 **Server-Side: Deduplication** (`tools/_core/tool-memory-dedup.js`)
 - Pre-execution duplicate detection for retrieval tools
 - Returns cached full results when similarity >= 85%
@@ -241,7 +235,6 @@ The system always retains full tool outputs, giving agents summaries in context 
 - Enables accurate conversation reconstruction across page reloads
 
 **Agent Access: query_tool_memory Tool** (`tools/query-tool-memory/`)
-- Agent sees summaries in context, can request full output when needed
 - `get_full_response_for`: Retrieve complete tool output for any call_id
 - Query with filters: toolId, timeRange, includeErrors
 - Full responses available for all 50 calls in the window
@@ -272,7 +265,6 @@ RESEND_API_KEY=          # Email service
 ```bash
 npm test message-windowing    # Test message handling
 npm test token-estimation     # Test token counting
-npm test summarization        # Test summarization logic
 npm test context-stack        # Test context stack management
 ```
 
@@ -438,7 +430,7 @@ npm test context-stack        # Test context stack management
 ### Key Strengths
 - Accurate information retrieval from knowledge base
 - Appropriate tool selection and minimal usage
-- Efficient context management with summarization
+- Efficient context management
 - Fast response times with excellent caching
 - Strong safety (no hallucinations, grounded responses)
 - Functional multimodal capabilities (image + text)

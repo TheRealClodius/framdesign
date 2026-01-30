@@ -33,7 +33,6 @@ import { loopDetector } from '../tools/_core/loop-detector.js';
 import { UsageService } from '../lib/services/usage-service.ts';
 import { toolMemoryStore } from '../tools/_core/tool-memory-store.js';
 import { toolMemoryDedup } from '../tools/_core/tool-memory-dedup.js';
-import { toolMemorySummarizer } from '../tools/_core/tool-memory-summarizer.js';
 import { hashArgs } from '../tools/_core/utils/hash-args.js';
 import { estimateTokensForObject } from '../tools/_core/utils/estimate-tokens.js';
 import {
@@ -51,8 +50,6 @@ const __dirname = dirname(__filename);
 // Load environment variables from voice-server/.env regardless of cwd
 config({ path: join(__dirname, '.env') });
 
-// Reinitialize tool memory summarizer with the newly loaded environment variables
-toolMemorySummarizer.reinitialize();
 
 // Load tool registry at startup
 let geminiToolSchemas = [];
@@ -1084,9 +1081,6 @@ wss.on('connection', async (ws, req) => {
         }
         state.set('hasSentGeneratingSignal', false);
 
-        // Trigger background summarization for completed turn (tool memory)
-        toolMemorySummarizer.enqueueSummarization(clientId)
-          .catch(err => console.warn(`[${clientId}] [ToolMemory] Summarization failed:`, err));
 
         // Start new turn for loop detection and metrics (NEW)
         currentTurn++;
