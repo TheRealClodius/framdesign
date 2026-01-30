@@ -8,8 +8,7 @@
 import { ErrorType, ToolError } from '../_core/error-types.js';
 import {
   extractHttpStatus,
-  isServiceUnavailable,
-  loadBlobService
+  isServiceUnavailable
 } from '../_core/helpers.js';
 
 function normalizeEntityId(rawId) {
@@ -143,11 +142,23 @@ export async function execute(context) {
 
       if (blobId && extension) {
         try {
-          const blobService = await loadBlobService();
-          if (!blobService.resolveBlobUrl) {
+          // Import blob storage service using same pattern as embedding/vector services
+          let resolveBlobUrl, fetchAssetBuffer;
+          try {
+            const blobModule = await import('@/lib/services/blob-storage-service');
+            resolveBlobUrl = blobModule.resolveBlobUrl || blobModule.default?.resolveBlobUrl;
+            fetchAssetBuffer = blobModule.fetchAssetBuffer || blobModule.default?.fetchAssetBuffer;
+          } catch {
+            const getPath = (name) => `../../lib/services/${name}`;
+            const blobModule = await import(/* webpackIgnore: true */ getPath('blob-storage-service'));
+            resolveBlobUrl = blobModule.resolveBlobUrl || blobModule.default?.resolveBlobUrl;
+            fetchAssetBuffer = blobModule.fetchAssetBuffer || blobModule.default?.fetchAssetBuffer;
+          }
+
+          if (!resolveBlobUrl) {
             throw new Error('Blob storage service not available');
           }
-          assetUrl = await blobService.resolveBlobUrl(blobId, extension);
+          assetUrl = await resolveBlobUrl(blobId, extension);
           const caption = metadata.caption || metadata.title || '';
 
           // Handle videos with HTML video tag, images/GIFs with markdown
@@ -167,11 +178,11 @@ export async function execute(context) {
               });
 
               try {
-                if (!blobService.fetchAssetBuffer) {
+                if (!fetchAssetBuffer) {
                   imageDataFetchError = 'fetchAssetBuffer service not available';
                   throw new Error(imageDataFetchError);
                 }
-                const imageBuffer = await blobService.fetchAssetBuffer(blobId, extension);
+                const imageBuffer = await fetchAssetBuffer(blobId, extension);
 
                 // Determine MIME type from extension
                 const mimeTypeMap = {

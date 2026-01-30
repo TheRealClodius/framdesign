@@ -7,8 +7,7 @@
 import { ErrorType, ToolError } from '../_core/error-types.js';
 import {
   extractHttpStatus,
-  isServiceUnavailable,
-  loadBlobService
+  isServiceUnavailable
 } from '../_core/helpers.js';
 
 /**
@@ -177,8 +176,18 @@ export async function execute(context) {
       };
     }
 
-    // Load blob service for asset URL resolution
-    const blobService = await loadBlobService();
+    // Load blob service for asset URL resolution using direct imports
+    let resolveBlobUrl, fetchAssetBuffer;
+    try {
+      const blobModule = await import('@/lib/services/blob-storage-service');
+      resolveBlobUrl = blobModule.resolveBlobUrl || blobModule.default?.resolveBlobUrl;
+      fetchAssetBuffer = blobModule.fetchAssetBuffer || blobModule.default?.fetchAssetBuffer;
+    } catch {
+      const getPath = (name) => `../../lib/services/${name}`;
+      const blobModule = await import(/* webpackIgnore: true */ getPath('blob-storage-service'));
+      resolveBlobUrl = blobModule.resolveBlobUrl || blobModule.default?.resolveBlobUrl;
+      fetchAssetBuffer = blobModule.fetchAssetBuffer || blobModule.default?.fetchAssetBuffer;
+    }
     
     // Transform results to standard format
     const transformedResults = await Promise.all(rawResults.map(async (result) => {
@@ -206,9 +215,9 @@ export async function execute(context) {
         const extension = result.metadata?.file_extension;
         const caption = result.metadata?.caption || result.metadata?.title || '';
         
-        if (blobId && extension && blobService?.resolveBlobUrl) {
+        if (blobId && extension && resolveBlobUrl) {
           try {
-            const assetUrl = await blobService.resolveBlobUrl(blobId, extension);
+            const assetUrl = await resolveBlobUrl(blobId, extension);
             const entityType = result.metadata?.entity_type || '';
             
             // Handle videos with HTML video tag, images/GIFs with markdown
@@ -294,9 +303,9 @@ export async function execute(context) {
       const blobId = topResult.metadata?.blob_id;
       const extension = topResult.metadata?.file_extension;
 
-      if (isVisual && blobId && extension && blobService?.fetchAssetBuffer) {
+      if (isVisual && blobId && extension && fetchAssetBuffer) {
         try {
-          const imageBuffer = await blobService.fetchAssetBuffer(blobId, extension);
+          const imageBuffer = await fetchAssetBuffer(blobId, extension);
           const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5MB cap to avoid oversized payloads
           if (imageBuffer.length > MAX_IMAGE_BYTES) {
             console.warn(`[kb_search] Skipping image data for ${topResult.id} (size ${Math.round(imageBuffer.length / 1024)}KB)`);
