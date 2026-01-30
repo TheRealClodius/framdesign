@@ -1,97 +1,81 @@
 # kb_search
 
-Semantic search over the knowledge base. Returns people, labs, projects, and **visual assets** (photos, diagrams, videos, GIFs) with scores and citations. Voice mode auto-clamps to 3 results.
+Semantic search over the Fram knowledge base (people, labs, projects, and visual assets). Use it to *discover* what exists and to pull in the most relevant evidence for a user’s question.
+
+## Purpose
+
+- **Discovery**: Find relevant KB entities when you don’t know the exact ID yet.
+- **Curation**: Retrieve a small set of the most relevant items (and visuals) to support a narrative.
+
+## When to Use
+
+- **Fram/Andrei/project questions** where you need grounded facts from the KB.
+- **Exploratory design discussions** where a concrete project or visual example would clarify the point.
+- **Visual storytelling**: user asks for screenshots, diagrams, product photos, motion/video references.
+
+## When NOT to Use
+
+- **You already have the exact KB ID** → use `kb_get` instead (faster, complete content).
+- **The user wants truly current information** (news, up-to-date stats) → use `perplexity_search`.
+- **You’re about to “inventory dump” projects**: search only if you’ll surface a *small*, relevant set.
 
 ## Parameters
 
-- **query** (required): Natural language search query (3-500 chars)
-- **top_k** (optional): Number of results to return (default: 5, max: 10, voice mode: auto-clamps to 3)
-- **filters** (optional): Filter results by type
-  - `type`: Filter by entity type:
-    - Documents: `"person"`, `"lab"`, `"project"`
-    - Visual assets: `"photo"`, `"diagram"`, `"video"`, `"gif"`
-- **include_snippets** (optional): Include text snippets in results (default: true)
+- **query** (required): Natural-language query (3–500 chars)
+- **top_k** (optional): Number of results (default: 5, max: 10)
+  - **Voice mode**: auto-clamps to **3** regardless of `top_k`
+- **filters** (optional):
+  - `type`: `"person" | "lab" | "project" | "photo" | "diagram" | "video" | "gif"`
+- **include_snippets** (optional): Include short text snippets (default: true)
+
+## Returns
+
+- A ranked list of results with `id`, `type`, `title`, `score`, and optional snippets.
+- For **assets**, results include `metadata.markdown` (ready to paste into the response).
+
+## Usage Patterns
+
+- **KB-first for Fram facts**: use this before `perplexity_search` for anything Fram/Andrei/project-related.
+- **Find → then fetch**: use `kb_search` to discover IDs, then `kb_get` for full detail.
+- **Visuals as evidence**: 1 strong visual beats 5 generic ones; pick what supports the story.
 
 ## Examples
 
-**Basic search:**
+**Basic discovery**
 ```json
-{
-  "query": "Who worked on Vector Watch?"
-}
+{ "query": "Project overview: <project name from user>" }
 ```
-Returns top 5 results (or 3 in voice mode) with snippets and relevance scores.
 
-**Search for images/visuals:**
+**Find visuals**
 ```json
 {
-  "query": "Autopilot interface screenshots",
+  "query": "Interface screenshots for <project name from user>",
   "filters": { "type": "photo" }
 }
 ```
-Returns photo assets. Use the `metadata.markdown` field directly in your response - it contains the ready-to-use image markdown with correct URLs.
 
-**Filtered search:**
+**Narrow to people**
 ```json
 {
-  "query": "AI and machine learning expertise",
-  "top_k": 8,
-  "filters": { "type": "person" }
+  "query": "<topic or domain the user mentioned>",
+  "filters": { "type": "person" },
+  "top_k": 8
 }
 ```
-Returns up to 8 person entities.
 
-**Without snippets:**
+**Faster search (no snippets)**
 ```json
-{
-  "query": "Vector Watch project",
-  "include_snippets": false
-}
+{ "query": "<Fram/Andrei/lab question>", "include_snippets": false }
 ```
-Returns results without text snippets (faster).
 
 ## Using Asset Results
 
-When results include visual assets (photos, diagrams, videos, GIFs):
-- **Always use `metadata.markdown`** - it contains pre-formatted markdown with correct GCS URLs
-- **Do not construct image paths manually** - copy the markdown value verbatim
-- For videos, the markdown contains an HTML video tag
+- **Always use `metadata.markdown`** for images/videos/diagrams/gifs.
+- **Do not construct URLs manually**.
 
-Example asset shape:
-```json
-{
-  "id": "asset:autopilot_tool_calls_dark_001",
-  "type": "photo",
-  "title": "Autopilot Tool Calls - Dark Mode",
-  "metadata": {
-    "markdown": "![Autopilot Tool Calls - Dark Mode](https://storage.googleapis.com/...)",
-    "url": "https://storage.googleapis.com/...",
-    "caption": "Autopilot tool calls interface in dark mode"
-  }
-}
-```
-Simply include `metadata.markdown` in your response to display the image.
+## Pitfalls / Watch Out
 
-## Proactive Visual Search
-
-When users ask about projects, **proactively search for visuals** to enrich your response:
-- Project overview: `{ "query": "Autopilot interface overview", "filters": { "type": "photo" } }`
-- Architecture: `{ "query": "Autopilot architecture", "filters": { "type": "diagram" } }`
-- UI explorations: `{ "query": "Autopilot component design", "filters": { "type": "photo" } }`
-
-## Watch Out
-
-- **Empty results is success**: If no matches found, returns `ok: true` with empty results array.
-- **Voice mode clamping**: Results automatically clamped to max 3 in voice mode regardless of `top_k` parameter.
-- **Snippet truncation**: Snippets are max 200 chars. Use `kb_get` to retrieve full document content.
-- **Don't retry on empty**: Empty results are deterministic. Reformulate query or adjust filters instead of retrying.
-- **Filter logic is AND**: Multiple filters are combined with AND logic (not OR).
-- **Use kb_search for images first**: Before using perplexity_search for visuals, try kb_search.
-
-## Skip Searches for Generic Names
-
-Before searching for person names, consider whether the name is likely to be in the knowledge base.
-
-**Skip searches for** placeholder names ("John Doe", "Jane Doe", "Test User") or generic names without any Fram context.
-
-**Instead, respond directly**: "The name '[name]' does not appear in Fram Design's knowledge base. I only have information about people directly connected to Fram Design's work."
+- **Empty results can be correct**: treat it as “no match”; reformulate query or adjust `filters`.
+- **Snippets are short** (~200 chars): use `kb_get` if you need full content.
+- **Filter logic is AND** (when multiple filters exist).
+- **Skip generic-name fishing**: don’t search placeholder or contextless names; respond that the KB is scoped to Fram/Andrei’s work.
