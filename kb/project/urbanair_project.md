@@ -18,7 +18,7 @@ domains:
 
 ## Overview
 
-UrbanAir (originally pitched as Neobility) is a mobility aggregator designed to simplify urban transportation. The core vision is based on the premise that the future of mobility is multi-modal, requiring a flexible network of alternative options like ridesharing, vehicle renting, and e-scooters to supplement traditional public transport.
+UrbanAir (created by Neobility) is a mobility aggregator designed to simplify urban transportation. The core vision is based on the premise that the future of mobility is multi-modal, requiring a flexible network of alternative options like ridesharing, vehicle renting, and e-scooters to supplement traditional public transport.
 
 ## Context and Problem
 
