@@ -120,3 +120,65 @@ export const recordRegistryLoadTime = (duration) => {
 export const recordToolExecution = (toolId, duration, success) => {
   metrics.recordExecution(toolId, { duration, ok: success });
 };
+
+// Session tracking compatibility (simplified - stores in memory)
+let sessionData = { tools: {}, turns: 0, contextTokens: 0 };
+
+export const startSession = () => {
+  sessionData = { tools: {}, turns: 0, contextTokens: 0, startTime: Date.now() };
+};
+
+export const endSession = () => {
+  const result = { ...sessionData, duration: Date.now() - (sessionData.startTime || Date.now()) };
+  sessionData = { tools: {}, turns: 0, contextTokens: 0 };
+  return result;
+};
+
+export const recordSessionToolCall = (toolId, duration, success) => {
+  if (!sessionData.tools[toolId]) {
+    sessionData.tools[toolId] = { count: 0, successCount: 0, failureCount: 0, totalDuration: 0 };
+  }
+  sessionData.tools[toolId].count++;
+  sessionData.tools[toolId].totalDuration += duration;
+  if (success) sessionData.tools[toolId].successCount++;
+  else sessionData.tools[toolId].failureCount++;
+};
+
+export const startNewTurn = () => {
+  sessionData.turns++;
+};
+
+export const setContextInitTokens = (tokens) => {
+  sessionData.contextTokens = tokens;
+};
+
+export const getSessionMetrics = () => ({ ...sessionData });
+
+export const recordResponseMetrics = (toolId, responseSize, tokenEstimate) => {
+  metrics.recordExecution(toolId, { duration: 0, ok: true, responseSize, tokenEstimate });
+};
+
+export const getMetrics = () => {
+  const summary = metrics.getSummary();
+  // Transform to expected format
+  const toolExecutions = {};
+  for (const [toolId, stats] of Object.entries(summary.tools)) {
+    toolExecutions[toolId] = {
+      count: stats.count,
+      successCount: Math.round(stats.count * (1 - stats.errorRate)),
+      failureCount: Math.round(stats.count * stats.errorRate),
+      successRate: 1 - stats.errorRate,
+      avgLatency: stats.avgDuration,
+      p50Latency: stats.p50,
+      p95Latency: stats.p95,
+      p99Latency: stats.p99
+    };
+  }
+  return { toolExecutions, uptime: summary.uptime, totalCalls: summary.totalCalls };
+};
+
+export const resetMetrics = () => {
+  metrics.tools.clear();
+  metrics.globalStats = { totalCalls: 0, startTime: Date.now() };
+  sessionData = { tools: {}, turns: 0, contextTokens: 0 };
+};
