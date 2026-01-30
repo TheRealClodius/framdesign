@@ -3,6 +3,8 @@
  * Keeps last N tool calls per session, FIFO eviction
  */
 
+import { calculateArgsSimilarity } from './utils/similarity.js';
+
 const MAX_CALLS_PER_SESSION = 50;
 const SESSION_TTL_MS = 60 * 60 * 1000; // 1 hour
 
@@ -145,6 +147,33 @@ class ToolMemoryStore {
    */
   clearSession(sessionId) {
     this.sessions.delete(sessionId);
+  }
+
+  /**
+   * Find a similar past call for deduplication
+   * @param {string} sessionId - Session identifier
+   * @param {string} toolId - Tool ID to match
+   * @param {object} args - Arguments to compare
+   * @param {number} threshold - Minimum similarity threshold (0-1)
+   * @returns {object|null} - Matching call or null
+   */
+  findSimilarCall(sessionId, toolId, args, threshold = 0.85) {
+    const session = this.sessions.get(sessionId);
+    if (!session) return null;
+
+    // Filter to matching tool, most recent first
+    const matchingCalls = session.calls
+      .filter(c => c.toolId === toolId && c.ok !== false)
+      .reverse();
+
+    for (const call of matchingCalls) {
+      const similarity = calculateArgsSimilarity(args, call.args);
+      if (similarity >= threshold) {
+        return call;
+      }
+    }
+
+    return null;
   }
 }
 
