@@ -20,8 +20,14 @@ describe('Environment Feature: Connectivity & Auth', () => {
     });
 
     test('Qdrant configuration should be present', () => {
-      const QDRANT_URL = process.env.QDRANT_URL || 'http://localhost:6333';
-      expect(QDRANT_URL).toMatch(/^https?:\/\//);
+      // Runtime uses QDRANT_CLUSTER_ENDPOINT (not QDRANT_URL)
+      const QDRANT_CLUSTER_ENDPOINT =
+        process.env.QDRANT_CLUSTER_ENDPOINT || 'http://localhost:6333';
+      const QDRANT_API_KEY = process.env.QDRANT_API_KEY || 'mock_qdrant_key';
+
+      expect(QDRANT_CLUSTER_ENDPOINT).toMatch(/^https?:\/\//);
+      expect(QDRANT_API_KEY).toBeDefined();
+      expect(QDRANT_API_KEY.length).toBeGreaterThan(0);
     });
   });
 
