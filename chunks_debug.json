@@ -6,12 +6,10 @@
           "parts": [
             {
               "functionCall": {
-                "name": "kb_search",
+                "name": "kb_get",
                 "args": {
-                  "filters": {
-                    "type": "photo"
-                  },
-                  "query": "Vector Watch interface"
+                  "include_image_data": false,
+                  "id": "asset:desktop_agent_full_app_canvas_001"
                 }
               }
             }
@@ -23,22 +21,22 @@
       }
     ],
     "modelVersion": "gemini-2.5-flash",
-    "responseId": "Q1x7aaPzOL7l7M8Py-TkqAM",
+    "responseId": "HIN8aYmeE9-9xN8PxI3tmQg",
     "usageMetadata": {
-      "promptTokenCount": 18462,
-      "candidatesTokenCount": 25,
-      "totalTokenCount": 18487,
-      "cachedContentTokenCount": 14825,
+      "promptTokenCount": 36877,
+      "candidatesTokenCount": 37,
+      "totalTokenCount": 36914,
+      "cachedContentTokenCount": 14029,
       "promptTokensDetails": [
         {
           "modality": "TEXT",
-          "tokenCount": 18462
+          "tokenCount": 36877
         }
       ],
       "cacheTokensDetails": [
         {
           "modality": "TEXT",
-          "tokenCount": 14825
+          "tokenCount": 14029
         }
       ]
     },
@@ -47,9 +45,9 @@
         "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
         "content-disposition": "attachment",
         "content-type": "text/event-stream",
-        "date": "Thu, 29 Jan 2026 13:10:28 GMT",
+        "date": "Fri, 30 Jan 2026 10:08:28 GMT",
         "server": "scaffolding on HTTPServer2",
-        "server-timing": "gfet4t7; dur=1414",
+        "server-timing": "gfet4t7; dur=2149",
         "transfer-encoding": "chunked",
         "vary": "Origin, X-Origin, Referer",
         "x-content-type-options": "nosniff",

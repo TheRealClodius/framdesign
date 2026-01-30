@@ -99,7 +99,11 @@ async function ensureCollection(): Promise<void> {
           field_name: 'file_path',
           field_schema: 'keyword',
         });
-        console.log('[vector-store] Created payload indexes (entity_id, entity_type, file_path)');
+        await client.createPayloadIndex(COLLECTION_NAME, {
+          field_name: 'related_entities',
+          field_schema: 'keyword', // Qdrant indexes each array element
+        });
+        console.log('[vector-store] Created payload indexes (entity_id, entity_type, file_path, related_entities)');
       } catch (indexError: any) {
         // Indexes might already exist or creation might fail - log but don't fail
         console.warn('[vector-store] Warning creating indexes:', indexError.message);
@@ -227,12 +231,24 @@ export async function searchSimilar(
     const client = getQdrantClient();
 
     // Build filter if provided
+    // Supports both exact match filters and array membership filters ($contains)
     let queryFilter: any = undefined;
     if (filters && Object.keys(filters).length > 0) {
-      const mustConditions = Object.entries(filters).map(([key, value]) => ({
-        key: key,
-        match: { value: value },
-      }));
+      const mustConditions = Object.entries(filters).map(([key, value]) => {
+        // Handle array contains filter (marked with $contains)
+        // This is used for filtering by related_entities array field
+        if (typeof value === 'object' && value !== null && '$contains' in value) {
+          return {
+            key: key,
+            match: { any: [value.$contains] },
+          };
+        }
+        // Standard exact match
+        return {
+          key: key,
+          match: { value: value },
+        };
+      });
 
       queryFilter = {
         must: mustConditions,

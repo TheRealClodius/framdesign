@@ -151,11 +151,16 @@ export async function execute(context) {
     
     // Map schema filter field names to Qdrant payload field names
     // Schema uses 'type' but Qdrant index is on 'entity_type'
+    // 'related_to' maps to 'related_entities' array with $contains marker
     const qdrantFilters = {};
     if (args.filters) {
       for (const [key, value] of Object.entries(args.filters)) {
         if (key === 'type') {
           qdrantFilters['entity_type'] = value;
+        } else if (key === 'related_to') {
+          // Map related_to to related_entities array field with $contains marker
+          // This signals vector-store-service to use array membership filtering
+          qdrantFilters['related_entities'] = { $contains: value };
         } else {
           qdrantFilters[key] = value;
         }

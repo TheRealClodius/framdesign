@@ -3035,6 +3035,10 @@ export async function POST(request: Request) {
             let bytesSent = 0;
             let accumulatedFullText = "";
 
+            // Track late function calls that arrive after the buffering window
+            let lateFunctionCall: { name: string; args: Record<string, unknown> } | null = null;
+            let lateThoughtSignature: string | undefined = undefined;
+
             const enqueueTextFromChunk = (chunk: unknown) => {
               const typed = chunk as { 
                 text?: string | (() => string); 
@@ -3086,10 +3090,19 @@ export async function POST(request: Request) {
                 }
                 
                 if (candidates.length > 0 && candidates.some((p: any) => p.functionCall)) {
-                  // This is a function call chunk that wasn't handled in the early detection
-                  // (shouldn't happen for the first turn, but good for debugging)
-                  const calls = candidates.filter((p: any) => p.functionCall).map((p: any) => p.functionCall.name);
-                  debugLog(`[Gemini API] Stream chunk contains function calls: ${calls.join(', ')}`);
+                  // Late function call detected - track it for execution after stream completes
+                  const functionCallPart = candidates.find((p: any) => p.functionCall) as any;
+                  if (functionCallPart && !lateFunctionCall) {
+                    lateFunctionCall = {
+                      name: functionCallPart.functionCall.name,
+                      args: functionCallPart.functionCall.args || {}
+                    };
+                    // Extract thoughtSignature if present (sibling to functionCall in the part)
+                    if (functionCallPart.thoughtSignature) {
+                      lateThoughtSignature = functionCallPart.thoughtSignature;
+                    }
+                    console.log(`[Late Function Call] Detected ${lateFunctionCall.name} during streaming (past buffer window)`);
+                  }
                 } else if (candidates.length > 0 && candidates.some((p: any) => p.thoughtSignature)) {
                   const thoughtPart = candidates.find((p: any) => p.thoughtSignature) as any;
                   debugLog(`[Gemini API] Stream chunk contains thoughtSignature (length: ${thoughtPart?.thoughtSignature?.length || 0})`);
@@ -3113,8 +3126,257 @@ export async function POST(request: Request) {
 
               console.log(`Stream completed: ${chunksProcessed} chunks, ${bytesSent} bytes`);
 
-              // CRITICAL: Ensure we never return an empty response
-              // If agent produced no text (only thinking blocks), provide a fallback
+              // Check if we have a late function call that needs execution
+              const meaningfulTextThreshold = 50;
+              const hasMinimalText = accumulatedFullText.trim().length < meaningfulTextThreshold;
+
+              if (lateFunctionCall !== null && hasMinimalText) {
+                // Capture with explicit type to help TypeScript
+                const pendingLateCall = lateFunctionCall as { name: string; args: Record<string, unknown> };
+                console.log(`[Late Function Call] Executing ${pendingLateCall.name} (accumulated text: "${accumulatedFullText.trim().slice(0, 100)}...")`);
+
+                try {
+                  // Initialize state controller (same as early detection path)
+                  const turnNumber = Math.ceil(messages.length / 2);
+                  const lateState = createStateController({
+                    mode: 'text',
+                    isActive: true
+                  }) as StateController;
+
+                  // Record tool call
+                  recordToolCall(
+                    conversationHash,
+                    turnNumber,
+                    pendingLateCall.name,
+                    pendingLateCall.args,
+                    lateThoughtSignature,
+                    0
+                  );
+
+                  // Get tool metadata
+                  const lateToolMetadata = toolRegistry.getToolMetadata(pendingLateCall.name) as ToolMetadata | null;
+
+                  if (!lateToolMetadata) {
+                    console.error(`[Late Function Call] Unknown tool: ${pendingLateCall.name}`);
+                    // Fall through to fallback
+                  } else {
+                    // Build execution context
+                    const sessionId = userId || 'anonymous-text-session';
+                    const lateExecutionContext = {
+                      clientId: `text-late-${Date.now()}`,
+                      ws: null,
+                      geminiSession: null,
+                      args: pendingLateCall.args,
+                      capabilities: { voice: false },
+                      session: {
+                        isActive: lateState.get('isActive'),
+                        toolsVersion: toolRegistry.getVersion(),
+                        state: lateState.getSnapshot()
+                      },
+                      meta: {
+                        perplexityApiKey: process.env.PERPLEXITY_API_KEY
+                      }
+                    };
+
+                    // Deduplication check
+                    const dedupCheck = toolMemoryDedup.checkForDuplicate(
+                      sessionId,
+                      pendingLateCall.name,
+                      pendingLateCall.args
+                    );
+
+                    let lateResult;
+                    let lateDuration;
+                    const lateStartTime = Date.now();
+
+                    if (dedupCheck.isDuplicate) {
+                      console.log(`[Late Function Call] Reusing cached result (call: ${dedupCheck.originalCallId})`);
+                      lateResult = dedupCheck.cachedResult;
+                      lateDuration = 0;
+                    } else {
+                      // Loop detection
+                      const loopCheck = loopDetector.detectLoop(sessionId, turnNumber, pendingLateCall.name, pendingLateCall.args);
+                      if (loopCheck.detected) {
+                        console.warn(`[Late Function Call] Loop detected: ${loopCheck.message}`);
+                        lateResult = {
+                          ok: false,
+                          error: { type: 'LOOP_DETECTED', message: loopCheck.message, retryable: false }
+                        };
+                      } else {
+                        loopDetector.recordCall(sessionId, turnNumber, pendingLateCall.name, pendingLateCall.args, null);
+
+                        // Execute tool
+                        lateResult = await retryToolExecution(
+                          () => toolRegistry.executeTool(pendingLateCall.name, lateExecutionContext),
+                          {
+                            mode: 'text',
+                            maxRetries: 3,
+                            toolId: pendingLateCall.name,
+                            toolMetadata: lateToolMetadata as object,
+                            clientId: `text-late-${Date.now()}`
+                          }
+                        );
+                      }
+                      lateDuration = Date.now() - lateStartTime;
+
+                      // Record in tool memory store
+                      const callId = `call-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+                      toolMemoryStore.recordToolCall(sessionId, {
+                        id: callId,
+                        toolId: pendingLateCall.name,
+                        args: pendingLateCall.args,
+                        argsHash: hashArgs(pendingLateCall.args),
+                        timestamp: Date.now(),
+                        turn: turnNumber,
+                        duration: lateDuration,
+                        fullResponse: lateResult,
+                        summary: null,
+                        ok: lateResult.ok,
+                        error: lateResult.ok ? null : lateResult.error,
+                        tokens: estimateTokensForJson(JSON.stringify(lateResult))
+                      });
+                    }
+
+                    console.log(`[Late Function Call] ${pendingLateCall.name} executed in ${lateDuration}ms, ok: ${lateResult.ok}`);
+
+                    // Clean result data
+                    const cleanedLateResultData = lateResult.ok ? JSON.parse(JSON.stringify(lateResult.data)) : null;
+
+                    // Extract image data if present
+                    let lateImageData = null;
+                    if (cleanedLateResultData?._imageData) {
+                      lateImageData = cleanedLateResultData._imageData;
+                      delete cleanedLateResultData._imageData;
+                    }
+
+                    if (cleanedLateResultData && typeof cleanedLateResultData === 'object') {
+                      delete cleanedLateResultData._timing;
+                      delete cleanedLateResultData._distance;
+                      if (Array.isArray(cleanedLateResultData.results)) {
+                        cleanedLateResultData.results.forEach((r: any) => {
+                          if (r.metadata) {
+                            delete r.metadata._distance;
+                            delete r.metadata.vector;
+                          }
+                        });
+                      }
+                    }
+
+                    // Record tool result
+                    recordToolResult(
+                      conversationHash,
+                      turnNumber,
+                      pendingLateCall.name,
+                      lateResult.ok ? cleanedLateResultData : {
+                        error: true,
+                        type: lateResult.error.type,
+                        message: lateResult.error.message,
+                        retryable: lateResult.error.retryable,
+                        details: lateResult.error.details
+                      },
+                      0
+                    );
+
+                    // Build response parts
+                    const lateResponseParts: any[] = [{
+                      functionResponse: {
+                        name: pendingLateCall.name,
+                        response: lateResult.ok ? cleanedLateResultData : {
+                          error: true,
+                          type: lateResult.error.type,
+                          message: lateResult.error.message,
+                          retryable: lateResult.error.retryable,
+                          details: lateResult.error.details
+                        }
+                      }
+                    }];
+
+                    // Add image data if available
+                    if (lateImageData?.mimeType && lateImageData?.data) {
+                      lateResponseParts.push({
+                        inlineData: { mimeType: lateImageData.mimeType, data: lateImageData.data }
+                      });
+                      console.log(`[Late Function Call] Including image data (${lateImageData.mimeType})`);
+                    }
+
+                    // Build updated contents for follow-up call
+                    const lateUpdatedContents = [
+                      ...contentsToSend,
+                      {
+                        role: "model" as const,
+                        parts: [{
+                          functionCall: { name: pendingLateCall.name, args: pendingLateCall.args },
+                          thoughtSignature: lateThoughtSignature
+                        }]
+                      },
+                      {
+                        role: "user" as const,
+                        parts: lateResponseParts
+                      }
+                    ];
+
+                    // Make follow-up API call
+                    const lateFollowUpStream = await retryWithBackoff(async () => {
+                      const config: GeminiConfig = {};
+                      if (cachedContent?.trim()) {
+                        config.cachedContent = cachedContent;
+                      } else {
+                        config.tools = [{ functionDeclarations: providerSchemas }];
+                        config.systemInstruction = FRAM_SYSTEM_PROMPT;
+                      }
+
+                      return await ai.models.generateContentStream({
+                        model: "gemini-2.5-flash",
+                        contents: lateUpdatedContents,
+                        config
+                      });
+                    });
+
+                    // Stream the follow-up response
+                    let lateFollowUpText = "";
+                    for await (const chunk of lateFollowUpStream) {
+                      const typed = chunk as StreamChunk;
+                      const parts = typed?.candidates?.[0]?.content?.parts || [];
+
+                      for (const part of parts) {
+                        if (part.text) {
+                          lateFollowUpText += part.text;
+                          const encoded = encoder.encode(part.text);
+                          bytesSent += encoded.length;
+                          controller.enqueue(encoded);
+                        }
+                        // Note: We don't handle nested function calls here for v1
+                        // If needed, this could be extended to support chaining
+                      }
+                    }
+
+                    accumulatedFullText += lateFollowUpText;
+                    console.log(`[Late Function Call] Follow-up response streamed: ${lateFollowUpText.length} chars`);
+
+                    // Update observability
+                    if (observability) {
+                      observability.toolCalls.push({
+                        position: observability.toolCalls.length + 1,
+                        chainPosition: 0,
+                        toolId: pendingLateCall.name,
+                        args: pendingLateCall.args,
+                        thoughtSignature: lateThoughtSignature,
+                        startTime: lateStartTime,
+                        duration: lateDuration,
+                        ok: lateResult.ok,
+                        result: lateResult.ok ? lateResult.data : null,
+                        error: lateResult.ok ? null : lateResult.error
+                      });
+                    }
+                  }
+                } catch (lateToolError) {
+                  console.error(`[Late Function Call] Execution failed:`, lateToolError);
+                  // Fall through to fallback if needed
+                }
+              }
+
+              // CRITICAL: Ensure we never return an empty response (truly last resort)
+              // If agent produced no text AND no late tool call was executed, provide a fallback
               if (!accumulatedFullText.trim()) {
                 const fallbackMessage = "I'm ready to help. Could you please clarify what you'd like to know?";
                 console.warn(`[Empty Response] Agent returned no text - using fallback message`);

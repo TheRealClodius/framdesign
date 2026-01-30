@@ -312,19 +312,23 @@ async function processAssetManifest(): Promise<Array<{
 
     console.log(`   Processing asset: ${asset.id}`);
 
-    // Create text for embedding: title + description + tags
+    // Create text for embedding: title + description + tags + related_entities
     const tagsText = asset.tags ? asset.tags.join(', ') : '';
+    const relatedText = asset.related_entities
+      ? asset.related_entities.map(e => `related to ${e.replace(':', ' ').replace('_', ' ')}`).join(', ')
+      : '';
     const embeddingText = [
       asset.title || '',
       asset.description,
-      tagsText
+      tagsText,
+      relatedText
     ].filter(Boolean).join('\n');
 
     console.log(`   Generating embedding for asset ${asset.id}...`);
     const embedding = await generateEmbedding(embeddingText);
 
-    // Prepare metadata - flatten complex types
-    const flattenedMetadata: Record<string, string | number | boolean> = {
+    // Prepare metadata - flatten complex types (allow arrays for related_entities)
+    const flattenedMetadata: Record<string, string | number | boolean | string[]> = {
       entity_type: asset.entity_type || 'photo',
       entity_id: asset.id,
       title: asset.title || asset.id,
@@ -348,9 +352,9 @@ async function processAssetManifest(): Promise<Array<{
       flattenedMetadata.tags = JSON.stringify(asset.tags);
     }
 
-    // Add related_entities as JSON string if present
+    // Add related_entities as array if present (Qdrant supports arrays natively)
     if (asset.related_entities) {
-      flattenedMetadata.related_entities = JSON.stringify(asset.related_entities);
+      flattenedMetadata.related_entities = asset.related_entities;
     }
 
     // Add other metadata fields

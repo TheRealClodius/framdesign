@@ -26,6 +26,7 @@ Semantic search over the Fram knowledge base (people, labs, projects, and visual
   - **Voice mode**: auto-clamps to **3** regardless of `top_k`
 - **filters** (optional):
   - `type`: `"person" | "lab" | "project" | "photo" | "diagram" | "video" | "gif"`
+  - `related_to`: Entity ID to filter by relationship (e.g., `"project:third_ear"`, `"person:andrei_clodius"`). Useful for finding all visuals associated with a specific project or person.
 - **include_snippets** (optional): Include short text snippets (default: true)
 
 ## Returns
@@ -66,6 +67,23 @@ Semantic search over the Fram knowledge base (people, labs, projects, and visual
 **Faster search (no snippets)**
 ```json
 { "query": "<Fram/Andrei/lab question>", "include_snippets": false }
+```
+
+**Find visuals for a specific project**
+```json
+{
+  "query": "interface screenshots",
+  "filters": { "related_to": "project:third_ear" },
+  "top_k": 5
+}
+```
+
+**Combine type and relationship filters**
+```json
+{
+  "query": "demo videos",
+  "filters": { "type": "video", "related_to": "project:vector_watch" }
+}
 ```
 
 ## Using Asset Results

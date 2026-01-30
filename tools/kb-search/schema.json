@@ -30,6 +30,10 @@
             "type": "string",
             "enum": ["person", "lab", "project", "photo", "diagram", "video", "gif"],
             "description": "Filter by entity type (SINGLE value only). Use photo/diagram/video/gif to search for visual assets."
+          },
+          "related_to": {
+            "type": "string",
+            "description": "Filter assets by related entity ID (e.g., 'project:third_ear', 'person:andrei_clodius'). Useful for finding all visuals associated with a specific project or person."
           }
         }
       },

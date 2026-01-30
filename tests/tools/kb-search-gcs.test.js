@@ -166,4 +166,84 @@ describe('kb_search with GCS assets', () => {
     const assetResult = result.data.results.find(r => r.type === 'photo');
     expect(assetResult.metadata?.markdown).toBeDefined();
   });
+
+  test('filters by related_to parameter', async () => {
+    const mockContext = {
+      args: {
+        query: 'interface screenshots',
+        filters: { related_to: 'project:third_ear' },
+        top_k: 5,
+      },
+      capabilities: { voice: false },
+    };
+
+    // Mock searchSimilar to return filtered results
+    jest.mock('@/lib/services/vector-store-service', () => ({
+      searchSimilar: jest.fn().mockResolvedValue([
+        {
+          text: 'Third Ear interface screenshot',
+          score: 0.92,
+          metadata: {
+            entity_id: 'asset:third_ear_ui_001',
+            entity_type: 'photo',
+            title: 'Third Ear UI',
+            related_entities: ['project:third_ear'],
+            blob_id: 'third-ear/interface',
+            file_extension: 'png',
+          },
+        },
+      ]),
+    }));
+
+    jest.mock('@/lib/services/embedding-service', () => ({
+      generateQueryEmbedding: jest.fn().mockResolvedValue([0.1, 0.2, 0.3]),
+    }));
+
+    const result = await execute(mockContext);
+
+    expect(result.ok).toBe(true);
+    expect(result.data.results).toHaveLength(1);
+    expect(result.data.results[0].id).toBe('asset:third_ear_ui_001');
+    // Verify filters_applied includes the original filter
+    expect(result.data.filters_applied).toEqual({ related_to: 'project:third_ear' });
+  });
+
+  test('combines type and related_to filters', async () => {
+    const mockContext = {
+      args: {
+        query: 'demo',
+        filters: { type: 'video', related_to: 'project:vector_watch' },
+        top_k: 5,
+      },
+      capabilities: { voice: false },
+    };
+
+    jest.mock('@/lib/services/vector-store-service', () => ({
+      searchSimilar: jest.fn().mockResolvedValue([
+        {
+          text: 'Vector Watch demo video',
+          score: 0.88,
+          metadata: {
+            entity_id: 'asset:vector_watch_demo_001',
+            entity_type: 'video',
+            title: 'Vector Watch Demo',
+            related_entities: ['project:vector_watch'],
+            blob_id: 'vector/demo-video',
+            file_extension: 'mp4',
+          },
+        },
+      ]),
+    }));
+
+    jest.mock('@/lib/services/embedding-service', () => ({
+      generateQueryEmbedding: jest.fn().mockResolvedValue([0.1, 0.2, 0.3]),
+    }));
+
+    const result = await execute(mockContext);
+
+    expect(result.ok).toBe(true);
+    expect(result.data.results).toHaveLength(1);
+    expect(result.data.results[0].type).toBe('video');
+    expect(result.data.filters_applied).toEqual({ type: 'video', related_to: 'project:vector_watch' });
+  });
 });
