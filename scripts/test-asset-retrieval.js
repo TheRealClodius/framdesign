@@ -5,7 +5,7 @@
 
 import { config } from 'dotenv';
 import path from 'path';
-config({ path: path.join(process.cwd(), '.env.local'), override: true });
+config({ path: path.join(process.cwd(), '.env'), override: true });
 
 import { toolRegistry } from '../tools/_core/registry.js';
 

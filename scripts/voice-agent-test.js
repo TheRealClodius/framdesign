@@ -34,7 +34,6 @@ const __dirname = path.dirname(__filename);
 let geminiToolSchemas = [];
 
 // Load environment variables
-config({ path: '.env.local' });
 config({ path: '.env' });
 
 // Load tool registry at startup
@@ -746,8 +745,8 @@ async function main() {
   if (!process.env.GEMINI_API_KEY && !process.env.VERTEXAI_PROJECT) {
     console.error(formatError('Missing credentials'));
     console.log('\nPlease set one of:');
-    console.log('  - GEMINI_API_KEY in .env.local or .env (Google AI Studio)');
-    console.log('  - VERTEXAI_PROJECT in .env.local or .env (Vertex AI)');
+    console.log('  - GEMINI_API_KEY in .env (Google AI Studio)');
+    console.log('  - VERTEXAI_PROJECT in .env (Vertex AI)');
     process.exit(1);
   }
 

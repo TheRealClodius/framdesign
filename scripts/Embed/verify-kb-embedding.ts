@@ -12,7 +12,7 @@ import { config } from 'dotenv';
 import { getAllDocumentIds, hasDocuments } from '../../lib/services/vector-store-service';
 
 // Load environment variables
-config({ path: path.join(process.cwd(), '.env.local') });
+config({ path: path.join(process.cwd(), '.env') });
 
 const KB_DIR = path.join(process.cwd(), 'kb');
 

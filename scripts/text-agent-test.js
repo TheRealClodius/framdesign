@@ -24,9 +24,7 @@ import {
 } from './text-agent-test-formatter.js';
 import { TEST_QUESTIONS } from './text-agent-test-questions.js';
 
-// Load environment variables from .env.local (Next.js convention)
-// Falls back to .env if .env.local doesn't exist
-config({ path: '.env.local' });
+// Load environment variables from .env
 config({ path: '.env' });
 
 // Parse command line arguments

@@ -103,9 +103,9 @@ npx tsx scripts/Embed/embed-kb.ts
 ```
 
 **Requirements:**
-- `GEMINI_API_KEY` must be set in `.env.local`
-- `QDRANT_CLUSTER_ENDPOINT` must be set in `.env.local`
-- `QDRANT_API_KEY` must be set in `.env.local`
+- `GEMINI_API_KEY` must be set in `.env`
+- `QDRANT_CLUSTER_ENDPOINT` must be set in `.env`
+- `QDRANT_API_KEY` must be set in `.env`
 
 ### Document ID Format
 

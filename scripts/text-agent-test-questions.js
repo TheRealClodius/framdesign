@@ -25,7 +25,8 @@ export const TEST_QUESTIONS = [
   // Multimodal image follow-up (ensure asset is re-fetched with image data)
   "Show me an image of Desktop Agent",
   "Describe the image visuals",
-  
+  "Show me more images from this project",
+
   "Show me any other project image",
   "Describe this image",
   

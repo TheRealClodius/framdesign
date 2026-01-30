@@ -11,7 +11,7 @@ import { config } from 'dotenv';
 import path from 'path';
 
 // Load environment variables
-config({ path: path.join(process.cwd(), '.env.local') });
+config({ path: path.join(process.cwd(), '.env') });
 
 async function testVoiceKbTools() {
   console.log('🎤 Testing KB Tools in Voice Mode Context\n');

@@ -4,7 +4,7 @@
 
 import { config } from 'dotenv';
 import path from 'path';
-config({ path: path.join(process.cwd(), '.env.local'), override: true });
+config({ path: path.join(process.cwd(), '.env'), override: true });
 
 // Direct Qdrant test
 async function testAssetInQdrant() {

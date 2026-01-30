@@ -84,7 +84,7 @@ gcloud iam service-accounts keys create ./gcs-key.json \
 
 ### Step 2: Configure Environment Variables
 
-Create/update `.env.local`:
+Create/update `.env`:
 
 ```env
 GCS_PROJECT_ID=your-project-id

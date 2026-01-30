@@ -56,7 +56,7 @@ npx tsx scripts/Testing/kb/verify-kb-tools.ts
 ## Prerequisites
 
 - KB must be embedded (run `npx tsx scripts/Embed/embed-kb.ts`)
-- `GEMINI_API_KEY` in `.env.local`
+- `GEMINI_API_KEY` in `.env`
 - Tool registry built (`npm run build:tools`)
 
 ## Related Documentation

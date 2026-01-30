@@ -97,9 +97,9 @@ npx tsx scripts/Embed/embed-kb.ts
 ```
 
 **Requirements**:
-- `GEMINI_API_KEY` must be set in `.env.local`
-- `QDRANT_CLUSTER_ENDPOINT` must be set in `.env.local`
-- `QDRANT_API_KEY` must be set in `.env.local`
+- `GEMINI_API_KEY` must be set in `.env`
+- `QDRANT_CLUSTER_ENDPOINT` must be set in `.env`
+- `QDRANT_API_KEY` must be set in `.env`
 - `@qdrant/js-client-rest` package installed
 
 **Output**:
@@ -144,7 +144,7 @@ The system uses Qdrant Cloud for vector storage:
 
 **Issue**: "QDRANT_CLUSTER_ENDPOINT is required" error
 - **Cause**: Environment variable not set
-- **Solution**: Set `QDRANT_CLUSTER_ENDPOINT` and `QDRANT_API_KEY` in `.env.local`
+- **Solution**: Set `QDRANT_CLUSTER_ENDPOINT` and `QDRANT_API_KEY` in `.env`
 
 **Issue**: Embedding API rate limits
 - **Cause**: Too many requests to Gemini API

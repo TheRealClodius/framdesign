@@ -18,7 +18,6 @@ import { fileURLToPath } from 'url';
 import { TEST_QUESTIONS } from './text-agent-test-questions.js';
 
 // Load environment variables
-config({ path: '.env.local' });
 config({ path: '.env' });
 
 const __filename = fileURLToPath(import.meta.url);

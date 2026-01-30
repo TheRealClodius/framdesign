@@ -11,7 +11,7 @@ import path from 'path';
 import { searchSimilar } from '../../../lib/services/vector-store-service';
 
 // Load environment variables
-config({ path: path.join(process.cwd(), '.env.local') });
+config({ path: path.join(process.cwd(), '.env') });
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 // Note: text-embedding-004 was shut down Jan 14, 2026

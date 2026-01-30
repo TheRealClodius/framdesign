@@ -6,8 +6,8 @@
 import { QdrantClient } from '@qdrant/js-client-rest';
 import { config } from 'dotenv';
 
-// Load .env.local
-config({ path: '.env.local' });
+// Load .env
+config({ path: '.env' });
 
 async function testQdrantConnection() {
   console.log('Testing Qdrant connection...\n');
@@ -19,7 +19,7 @@ async function testQdrantConnection() {
     console.error('❌ Missing environment variables:');
     if (!endpoint) console.error('  - QDRANT_CLUSTER_ENDPOINT');
     if (!apiKey) console.error('  - QDRANT_API_KEY');
-    console.error('\nMake sure they are set in .env.local file');
+    console.error('\nMake sure they are set in .env file');
     process.exit(1);
   }
 

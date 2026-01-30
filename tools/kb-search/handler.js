@@ -71,9 +71,13 @@ export async function execute(context) {
   const isVoiceMode = capabilities?.voice === true;
   const includeImageData = Boolean(args.include_image_data) && !isVoiceMode;
 
-  if (topK > 3) {
-    topK = 3; // Clamp for stability
-    console.log('[kb_search] Stability clamp: clamped top_k from', originalTopK, 'to 3');
+  // Clamp top_k based on mode:
+  // - Voice mode: max 3 (to keep responses concise)
+  // - Text mode: max 10 (as documented in schema)
+  const maxTopK = isVoiceMode ? 3 : 10;
+  if (topK > maxTopK) {
+    topK = maxTopK;
+    console.log(`[kb_search] ${isVoiceMode ? 'Voice mode' : 'Max limit'} clamp: clamped top_k from ${originalTopK} to ${topK}`);
   }
 
   try {

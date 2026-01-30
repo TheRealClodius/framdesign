@@ -8,7 +8,7 @@ import { config } from 'dotenv';
 import path from 'path';
 
 // Load environment variables
-config({ path: path.join(process.cwd(), '.env.local') });
+config({ path: path.join(process.cwd(), '.env') });
 
 async function verifyIds() {
   console.log('🔍 Verifying KB Tool IDs\n');

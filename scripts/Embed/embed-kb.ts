@@ -36,9 +36,9 @@
  * Usage: npx tsx scripts/Embed/embed-kb.ts
  *
  * Requirements:
- * - GEMINI_API_KEY in .env.local
- * - QDRANT_CLUSTER_ENDPOINT in .env.local
- * - QDRANT_API_KEY in .env.local
+ * - GEMINI_API_KEY in .env
+ * - QDRANT_CLUSTER_ENDPOINT in .env
+ * - QDRANT_API_KEY in .env
  * - @qdrant/js-client-rest installed
  */
 
