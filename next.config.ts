@@ -48,7 +48,7 @@ const nextConfig: NextConfig = {
     });
 
     // Completely exclude .node native binary files from Webpack processing
-    // These are native Node.js addons (like LanceDB) that must be loaded at runtime
+    // These are native Node.js addons that must be loaded at runtime
     // We use a custom loader that returns an empty module since the actual loading
     // happens via Node.js native require at runtime
     config.module.rules.push({

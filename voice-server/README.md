@@ -1,11 +1,11 @@
 # FRAM Voice Server
 
-WebSocket proxy server for Gemini Live API. Protects API keys and handles real-time voice conversations.
+WebSocket proxy server for Gemini Live API. Protects API keys and handles real-time voice conversations with tool calling.
 
 ## Architecture
 
 ```
-Browser (ChatInterface) ← WebSocket → Voice Server ← Gemini Live API
+Browser (Voice UI) ← WebSocket → Voice Server ← Gemini Live API
                                       (Railway)
 ```
 
@@ -20,12 +20,21 @@ npm install
 
 ### 2. Environment Variables
 
-Create `.env` file:
+Create `voice-server/.env`:
 
 ```env
-GEMINI_API_KEY=your_gemini_api_key_here
-PORT=8080
+# Vertex AI Live (recommended)
+VERTEXAI_PROJECT=your_gcp_project
+VERTEXAI_LOCATION=us-central1
+GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
+
+# Optional fallback / utilities
+GEMINI_API_KEY=your_ai_studio_key
+QDRANT_CLUSTER_ENDPOINT=https://your-qdrant-url
+QDRANT_API_KEY=your-qdrant-key
+PERPLEXITY_API_KEY=your-perplexity-key
 ALLOWED_ORIGINS=http://localhost:3000,https://framdesign.com
+PORT=8080
 ```
 
 ### 3. Run Locally
@@ -34,11 +43,11 @@ ALLOWED_ORIGINS=http://localhost:3000,https://framdesign.com
 npm run dev
 ```
 
-Server will start on `ws://localhost:8080`
+Server starts on `ws://localhost:8080`.
 
 ## Deployment to Railway
 
-See [RAILWAY_DEPLOYMENT.md](./RAILWAY_DEPLOYMENT.md) for detailed step-by-step instructions.
+See `RAILWAY_DEPLOYMENT.md` for step-by-step instructions.
 
 ### Quick Start
 
@@ -52,34 +61,22 @@ railway login
 # 3. Navigate to voice-server directory
 cd voice-server
 
-# 4. Initialize Railway project (name it: FRAM-WEBSITE-G-LIVE-API)
+# 4. Initialize Railway project
 railway init
 
 # 5. Link to project
 railway link
 
 # 6. Set environment variables
-railway variables set GEMINI_API_KEY="your-api-key-here"
-railway variables set ALLOWED_ORIGINS="http://localhost:3000,https://your-production-domain.com"
+railway variables set VERTEXAI_PROJECT="your-project"
+railway variables set ALLOWED_ORIGINS="http://localhost:3000,https://your-domain.com"
+# Add credentials per Railway guidelines
 
 # 7. Deploy
 railway up
-
-# 8. Get your WebSocket URL
-railway domain
 ```
 
-**Important:** Use `wss://` (secure WebSocket) for the production URL from Railway.
-
-### Environment Variables
-
-Required environment variables:
-
-- `GEMINI_API_KEY` (required) - Your Google Gemini API key
-- `ALLOWED_ORIGINS` (required) - Comma-separated list of allowed origins (e.g., `http://localhost:3000,https://your-domain.com`)
-- `PORT` (optional) - Railway auto-assigns this, don't override
-
-See [RAILWAY_DEPLOYMENT.md](./RAILWAY_DEPLOYMENT.md) for complete deployment guide.
+Use `wss://` for production WebSocket URL from Railway.
 
 ## Protocol
 
@@ -89,75 +86,57 @@ See [RAILWAY_DEPLOYMENT.md](./RAILWAY_DEPLOYMENT.md) for complete deployment gui
 ```json
 {
   "type": "start",
-  "systemPrompt": "You are FRAM...",
-  "conversationHistory": []
+  "conversationHistory": [{ "role": "user", "content": "Hi" }],
+  "pendingRequest": "Optional pending request from text agent",
+  "userId": "optional-user-id"
 }
 ```
 
 **Send Audio:**
 ```json
-{
-  "type": "audio",
-  "data": "base64_pcm_audio_data"
-}
+{ "type": "audio", "data": "base64_pcm_audio_data" }
 ```
 
 **Send Text:**
 ```json
-{
-  "type": "text",
-  "data": "Hello"
-}
+{ "type": "text", "data": "Hello" }
 ```
 
 **Stop Session:**
 ```json
-{
-  "type": "stop"
-}
+{ "type": "stop" }
 ```
 
 ### Server → Client Messages
 
 **Connected:**
 ```json
-{
-  "type": "connected",
-  "clientId": "123-abc",
-  "timestamp": 1234567890
-}
+{ "type": "connected", "clientId": "123-abc", "timestamp": 1234567890 }
 ```
 
 **Session Started:**
 ```json
-{
-  "type": "started",
-  "sessionId": "123-abc"
-}
+{ "type": "started", "sessionId": "123-abc" }
+```
+
+**Tool Call Started (for UI thinking sound):**
+```json
+{ "type": "tool_call_started", "toolCount": 2 }
 ```
 
 **Audio Response:**
 ```json
-{
-  "type": "audio",
-  "data": "base64_pcm_audio_data"
-}
+{ "type": "audio", "data": "base64_pcm_audio_data" }
 ```
 
 **Text Response:**
 ```json
-{
-  "type": "text",
-  "data": "Hello! How can I help?"
-}
+{ "type": "text", "data": "Hello! How can I help?" }
 ```
 
 **Error:**
 ```json
-{
-  "type": "error",
-  "error": "Error message"
-}
+{ "type": "error", "error": "Error message" }
 ```
 
 ## Monitoring
@@ -166,15 +145,12 @@ Health check endpoint: `http://localhost:8080/health`
 
 Returns:
 ```json
-{
-  "status": "ok",
-  "timestamp": 1234567890
-}
+{ "status": "ok", "timestamp": 1234567890 }
 ```
 
 ## Security
 
-- **Origin validation**: Only configured origins can connect
-- **API key protection**: Never exposed to browser
-- **Rate limiting**: Add if needed (future enhancement)
-- **Authentication**: Add if needed (future enhancement)
+- Origin validation: only configured origins can connect
+- API key protection: never exposed to the browser
+- Rate limiting: not enabled by default
+- Authentication: not enabled by default

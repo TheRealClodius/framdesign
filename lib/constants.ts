@@ -25,6 +25,7 @@ export const BUDGET_EXHAUSTED_MESSAGE = "We've just hit an iceberg in our conver
 export const CACHE_CONFIG = {
   TTL_SECONDS: 3600,
   MIN_MESSAGES_FOR_CACHE: 3,
+  MAX_CONVERSATION_CACHE_ENTRIES: 200,
 } as const;
 
 // Token estimation

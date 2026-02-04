@@ -20,6 +20,7 @@ import {
   STREAM_CONFIG,
 } from "@/lib/constants";
 import { estimateTokens, estimateMessageTokens, countTokens } from "@/lib/token-count";
+import { ConversationCache } from "@/lib/services/conversation-cache";
 import { toolRegistry } from '@/tools/_core/registry';
 import { createStateController } from '@/tools/_core/state-controller';
 import { retryWithBackoff as retryToolExecution } from '@/tools/_core/retry-handler';
@@ -224,15 +225,11 @@ function selectTopVisualResultId(
 
 // Schema conversion removed - using canonical JSON Schema directly from registry
 
-// In-memory cache store for conversation caches
-// Key: conversation hash, Value: { cacheName: string, cachedMessageCount: number, summary: string | null, summaryUpToIndex: number, createdAt: number }
-const conversationCacheStore = new Map<string, { 
-  cacheName: string; 
-  cachedMessageCount: number; 
-  summary: string | null;
-  summaryUpToIndex: number;
-  createdAt: number 
-}>();
+// In-memory conversation cache (bounded LRU + TTL)
+const conversationCache = new ConversationCache({
+  ttlSeconds: CACHE_CONFIG.TTL_SECONDS,
+  maxEntries: CACHE_CONFIG.MAX_CONVERSATION_CACHE_ENTRIES
+});
 
 // In-memory store for tool call/result events per conversation
 // Key: conversation hash, Value: { lastAccess: number, eventsByTurn: Map<turnNumber, ToolEvent[]> }
@@ -701,7 +698,7 @@ async function getConversationCache(
   contentsToSend: ContentMessage[];
   summary: string | null;
 }> {
-  const cached = conversationCacheStore.get(conversationHash);
+  const cached = conversationCache.get(conversationHash);
 
   // Check if we have a valid cache
   if (cached) {
@@ -734,7 +731,7 @@ async function getConversationCache(
       }
     } else {
       // Cache expired, remove it
-      conversationCacheStore.delete(conversationHash);
+      conversationCache.delete(conversationHash);
       try {
         if (ai.caches && typeof ai.caches.delete === 'function' && cached.cacheName) {
           await ai.caches.delete({ name: cached.cacheName });
@@ -792,12 +789,13 @@ async function getConversationCache(
 
       // Store cache reference
       const cacheName = cache.name || null;
-      conversationCacheStore.set(conversationHash, {
+      conversationCache.set(conversationHash, {
         cacheName: cacheName || "",
         cachedMessageCount: summaryUpToIndex,
         summary: summary,
         summaryUpToIndex: summaryUpToIndex,
-        createdAt: Date.now()
+        createdAt: Date.now(),
+        lastAccess: Date.now()
       });
 
       console.log(`Summary cache created: ${cacheName} (summary up to index ${summaryUpToIndex})`);
@@ -1034,7 +1032,7 @@ export async function POST(request: Request) {
 
     // Get conversation hash for cache tracking
     const conversationHash = hashConversation(messages, timeoutExpired);
-    const cached = conversationCacheStore.get(conversationHash);
+    const cached = conversationCache.get(conversationHash);
 
     // Implement message windowing: keep last MAX_RAW_MESSAGES messages
     const totalMessages = messages.length;

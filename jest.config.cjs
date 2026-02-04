@@ -42,7 +42,7 @@ const customJestConfig = {
   ],
   // Allow importing .js files from tools directory as ES modules
   transformIgnorePatterns: [
-    'node_modules/(?!(@google/genai|@lancedb)/)',
+    'node_modules/(?!(@google/genai)/)',
   ],
 }
 

@@ -1,16 +1,23 @@
 # KB Embedding Scripts
 
 This directory contains scripts for embedding Knowledge Base (KB) documents into a vector store for semantic search.
+The canonical embed entrypoint is `scripts/embed-kb.ts`. The script in this folder is a thin wrapper.
 
 ## Files
 
-- **`embed-kb.ts`** - Main embedding script that processes KB markdown files
+- **`embed-kb.ts`** - Thin wrapper that delegates to `scripts/embed-kb.ts`
+- **`../embed-kb.ts`** - Canonical embedding script that processes KB markdown files
 - **`verify-kb-embedding.ts`** - Verification script to check embedding status
 - **`EMBEDDING_CHECKLIST.md`** - Checklist for modifying the embedding process
 
 ## Quick Start
 
 ### Embed KB Documents
+```bash
+npx tsx scripts/embed-kb.ts
+```
+
+### Embed KB Documents (wrapper)
 ```bash
 npx tsx scripts/Embed/embed-kb.ts
 ```
@@ -40,7 +47,7 @@ When modifying the embedding script or vector store service, **MUST** follow the
 - **NEVER** add frontmatter `id` to metadata as `id`
 - Frontmatter `id` MUST be stored as `entity_id` in metadata
 - This prevents overwriting the document's unique chunk ID
-- See line 185 in `embed-kb.ts`: `if (key === 'id') continue;`
+- See `scripts/embed-kb.ts`: `if (key === 'id') continue;`
 
 ### 3. Metadata ID Exclusion
 - **ALWAYS** skip `id` field when merging metadata into Qdrant payloads
@@ -54,7 +61,7 @@ When modifying the embedding script or vector store service, **MUST** follow the
 
 ### 5. File Exclusion
 - `README.md` is excluded from embedding (documentation only)
-- See line 80 in `embed-kb.ts`: `entry.name !== 'README.md'`
+- See `scripts/embed-kb.ts`: `entry.name !== 'README.md'`
 
 ## Common Mistakes to Avoid
 

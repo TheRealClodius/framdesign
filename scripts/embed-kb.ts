@@ -2,7 +2,7 @@
  * KB Embedding Script
  *
  * Reads all markdown files from kb/ directory, generates embeddings using Gemini,
- * and stores them in LanceDB vector database.
+ * and stores them in Qdrant vector database.
  *
  * Usage: npx tsx scripts/embed-kb.ts
  */
@@ -176,7 +176,7 @@ async function processMarkdownFile(filePath: string): Promise<Array<{
     const embedding = await generateEmbedding(chunkText);
 
     // Flatten metadata - convert arrays and objects to JSON strings
-    // This prevents LanceDB schema inference errors
+    // This prevents schema inference errors in the vector store
     const flattenedMetadata: Record<string, string | number | boolean> = {
       file_path: relativePath,
       chunk_index: i,
@@ -244,7 +244,7 @@ async function embedKB() {
 
   // Upsert all documents to vector store
   if (allDocuments.length > 0) {
-    console.log('\n💾 Storing embeddings in LanceDB...');
+    console.log('\n💾 Storing embeddings in Qdrant...');
     await upsertDocuments(allDocuments);
     console.log('✅ Successfully stored all embeddings!');
   }

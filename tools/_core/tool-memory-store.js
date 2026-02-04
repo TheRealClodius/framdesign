@@ -15,6 +15,7 @@ class ToolMemoryStore {
     this.RECENT_COUNT = 10; // Keep full responses for recent calls
     this.SUMMARY_COUNT = 40; // Keep summaries for older calls
     this.MAX_AGE_MS = 60 * 60 * 1000; // 1 hour
+    this.SESSION_TTL_MS = 60 * 60 * 1000; // 1 hour idle timeout
   }
 
   /**
@@ -23,10 +24,12 @@ class ToolMemoryStore {
    * @returns {object} - SessionMemory object
    */
   getOrCreateSession(sessionId) {
+    this.cleanupExpiredSessions();
     if (!this.sessionMemory.has(sessionId)) {
       this.sessionMemory.set(sessionId, {
         sessionId,
         startTime: Date.now(),
+        lastAccess: Date.now(),
         toolCalls: [],
         slidingWindow: {
           recentCount: this.RECENT_COUNT,
@@ -34,7 +37,32 @@ class ToolMemoryStore {
         }
       });
     }
-    return this.sessionMemory.get(sessionId);
+    const session = this.sessionMemory.get(sessionId);
+    session.lastAccess = Date.now();
+    return session;
+  }
+
+  /**
+   * Update session lastAccess timestamp
+   */
+  touchSession(sessionId) {
+    const session = this.sessionMemory.get(sessionId);
+    if (session) {
+      session.lastAccess = Date.now();
+    }
+  }
+
+  /**
+   * Clean up sessions that have been idle past SESSION_TTL_MS
+   */
+  cleanupExpiredSessions() {
+    const now = Date.now();
+    for (const [sessionId, session] of this.sessionMemory.entries()) {
+      const lastAccess = session.lastAccess || session.startTime;
+      if (now - lastAccess > this.SESSION_TTL_MS) {
+        this.sessionMemory.delete(sessionId);
+      }
+    }
   }
 
   /**
@@ -44,6 +72,7 @@ class ToolMemoryStore {
    * @returns {void}
    */
   recordToolCall(sessionId, record) {
+    this.cleanupExpiredSessions();
     const session = this.getOrCreateSession(sessionId);
 
     // Validate required fields
@@ -57,6 +86,7 @@ class ToolMemoryStore {
       ...record,
       timestamp: record.timestamp || Date.now()
     });
+    this.touchSession(sessionId);
 
     console.log(`[ToolMemory] Recorded call: ${record.toolId} (${record.id})`);
 
@@ -74,10 +104,12 @@ class ToolMemoryStore {
    * @returns {Array} - Array of matching tool call records
    */
   queryToolCalls(sessionId, filters = {}) {
+    this.cleanupExpiredSessions();
     const session = this.sessionMemory.get(sessionId);
     if (!session) {
       return [];
     }
+    this.touchSession(sessionId);
 
     let results = [...session.toolCalls];
 
@@ -189,6 +221,7 @@ class ToolMemoryStore {
 
     const calls = session.toolCalls;
     if (calls.length === 0) {
+      this.sessionMemory.delete(sessionId);
       return;
     }
 
@@ -224,6 +257,10 @@ class ToolMemoryStore {
       delete call._keepFull;
       delete call._markedForDeletion;
     });
+
+    if (session.toolCalls.length === 0) {
+      this.sessionMemory.delete(sessionId);
+    }
   }
 
   /**
@@ -298,6 +335,20 @@ class ToolMemoryStore {
 
     // Re-apply window policy to potentially clear full response
     this.applyWindowPolicy(sessionId);
+  }
+
+  /**
+   * Clears all sessions (test helper)
+   */
+  clearAll() {
+    this.sessionMemory.clear();
+  }
+
+  /**
+   * Returns total session count (test helper)
+   */
+  getSessionCount() {
+    return this.sessionMemory.size;
   }
 
   /**

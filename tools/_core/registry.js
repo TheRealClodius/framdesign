@@ -35,7 +35,7 @@ const REGISTRY_PATH = join(__dirname, '..', 'tool_registry.json');
 
 // Static import map for Webpack compatibility
 // Webpack can statically analyze these imports at build time
-const HANDLER_IMPORTS = {
+export const HANDLER_IMPORTS = {
   'end_voice_session': () => import('../end-voice-session/handler.js'),
   'ignore_user': () => import('../ignore-user/handler.js'),
   'kb_get': () => import('../kb-get/handler.js'),

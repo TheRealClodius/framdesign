@@ -27,6 +27,7 @@ import { buildSystemInstruction } from './config.js';
 import { toolRegistry } from '../tools/_core/registry.js';
 import { createStateController } from '../tools/_core/state-controller.js';
 import { GeminiLiveTransport } from './providers/gemini-live-transport.js';
+import { assertLiveApiAvailable, assertLiveSession } from './live-session-guard.js';
 import { ErrorType } from '../tools/_core/error-types.js';
 import { retryWithBackoff } from '../tools/_core/retry-handler.js';
 import { loopDetector } from '../tools/_core/loop-detector.js';
@@ -1437,6 +1438,7 @@ wss.on('connection', async (ws, req) => {
             console.log(`  - Tool declarations (${toolRegistry.tools.size} tools): ~${toolDeclTokens} tokens`);
             console.log(`  - Gemini context limit: 1,000,000 tokens`);
 
+            assertLiveApiAvailable(ai);
             geminiSession = await ai.live.connect({
               model: 'gemini-live-2.5-flash-native-audio',
               config: config,
@@ -1524,6 +1526,7 @@ wss.on('connection', async (ws, req) => {
                 }
               }
             });
+            assertLiveSession(geminiSession);
 
             // Initialize transport now that session exists
             transport = new GeminiLiveTransport(geminiSession);

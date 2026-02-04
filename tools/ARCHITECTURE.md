@@ -13,22 +13,24 @@
 **Direct Tool Calling**
 
 All tools are directly exposed to both agents:
-- Text agent: Tools declared in API request via `parametersJsonSchema`
+- Text agent: Tools declared in API request via `parametersJsonSchema` (canonical JSON Schema from registry)
 - Voice agent: Tools declared in session config via Gemini Native schemas
 - No discovery step - models call tools directly
 
-**Available Tools (5):**
+**Available Tools (7):**
 1. `kb_search` - Semantic search over knowledge base
 2. `kb_get` - Direct retrieval by entity ID
-3. `ignore_user` - Block disrespectful users (action tool)
-4. `start_voice_session` - Transition to voice mode (text-only)
-5. `end_voice_session` - End voice session gracefully (voice-only)
+3. `perplexity_search` - Web search via Perplexity API
+4. `query_tool_memory` - Query past tool calls
+5. `ignore_user` - Block disrespectful users (action tool)
+6. `start_voice_session` - Transition to voice mode (text-only)
+7. `end_voice_session` - End voice session gracefully (voice-only)
 
 **Context Window Monitoring**
 - Session init token estimates logged at startup
 - Per-tool response token averages tracked
-- Peak context usage monitored via `/metrics` endpoint
-- At 5 tools, context usage is minimal (~10-15k tokens for all tool declarations)
+- Optional metrics endpoint available (not wired by default)
+- Tool schema size is tracked in text agent logs
 
 ## Directory Structure
 
@@ -40,6 +42,10 @@ tools/
 │   ├── registry.js         # Runtime registry loader
 │   ├── state-controller.js # State management helper
 │   ├── metrics.js          # Response metrics, token tracking, session metrics
+│   ├── metrics-endpoint.js # Optional HTTP endpoint for metrics
+│   ├── tool-memory-store.js # Tool call memory store
+│   ├── tool-memory-dedup.js # Pre-execution dedup for retrieval tools
+│   ├── tool-memory-summarizer.js # Background summarization
 │   └── loop-detector.js    # Loop detection (same call 3x, empty results 2x)
 │
 ├── _build/                 # Build-time infrastructure (run once, generate artifact)
@@ -54,7 +60,7 @@ tools/
 │   ├── guide.md            # Tool documentation (simplified format)
 │   └── handler.js          # Execution logic
 │
-└── tool_registry.json      # GENERATED BUILD ARTIFACT (gitignored)
+└── tool_registry.json      # GENERATED BUILD ARTIFACT (checked in for deploys)
 ```
 
 ## Agent Integration
@@ -86,7 +92,7 @@ import { GeminiLiveTransport } from './providers/gemini-live-transport.js';
 - Max 800ms per retrieval tool (soft limit, logs warning)
 - Loop detection: Same tool+args 3x or empty results 2x → feedback to agent
 
-**Available Tools:** 5 tools, all directly callable.
+**Available Tools:** 7 tools, all directly callable.
 
 ### Text Agent (`app/api/chat/route.ts`)
 
@@ -97,30 +103,27 @@ import { createStateController } from '@/tools/_core/state-controller.js';
 import { ErrorType, ToolError } from '@/tools/_core/error-types';
 ```
 
-**Mode:** HTTP streaming with Google Gemini API (gemini-3-flash-preview)
+**Mode:** HTTP streaming with Google Gemini API (`gemini-2.5-flash`)
 
 **Integration Status:** ✅ **COMPLETE**
 
 **Implementation:**
 - Registry loads on first API request: `await toolRegistry.load()`
-- Provider schemas: `toolRegistry.getProviderSchemas('geminiNative')` converted to JSON Schema format
-- Uses `parametersJsonSchema` format for Gemini 3 (not Type.* enums)
-- Schema conversion: uppercase types ("OBJECT", "STRING") → lowercase ("object", "string")
+- Provider schemas use canonical JSON Schema (`tool.jsonSchema`) via `parametersJsonSchema`
 - Tool execution via `toolRegistry.executeTool()`
 - State controller initialized per request
 
 **Constraints:**
-- Max 5 retrieval calls per turn (text flexibility)
-- Max 2s per retrieval tool (soft limit)
-- Can use fuller tool context when needed
+- Token budget enforcement (30k target)
+- Chain limit for tool calls (max 5 per request)
+- Loop detection for repeated calls
 
-**Available Tools:** 5 tools, all directly callable.
+**Available Tools:** 7 tools, all directly callable.
 
 **Next.js Configuration:**
 - Webpack configured to handle markdown files
 - Path alias `@/` configured for tool imports
-- Handler loading uses `require()` for Next.js (bypasses webpack bundling)
-- Dynamic imports work for both Node.js and Next.js environments
+- Handler loading uses a static import map in `tools/_core/registry.js` for bundler compatibility
 
 ## Build Process
 
@@ -258,12 +261,9 @@ Tools can return intents for orchestrator to apply:
 2. **Adapter Layer** - Converts schemas at build time (OpenAI, Gemini Native)
 3. **Transport Layer** - Abstracts tool call/response protocol (per agent)
 
-**Gemini 3 Format Handling:**
+**Gemini Format Handling:**
 - **Voice Server:** Uses `geminiNative` schemas with Type.* enums (via Gemini Live API)
-- **Text Agent:** Uses `geminiNative` schemas converted to JSON Schema format with `parametersJsonSchema`
-  - Converts uppercase types ("OBJECT", "STRING") to lowercase ("object", "string")
-  - Uses `parametersJsonSchema` field instead of `parameters` field
-  - Compatible with Gemini 3's dual format support
+- **Text Agent:** Uses canonical JSON Schema directly via `parametersJsonSchema`
 
 **Result:** Switch providers in 2 lines:
 ```javascript
@@ -394,18 +394,18 @@ Example response:
 
 **Tracked at Session Init:**
 - System prompt token count
-- Tool declaration token count (5 tools, direct exposure)
+- Tool declaration token count (7 tools, direct exposure)
 - Total session init context
 
 **Logged Example:**
 ```
 [Context] Session init: ~X tokens
   - System prompt: ~Y tokens
-  - Tool declarations (5 tools): ~Z tokens
+  - Tool declarations (7 tools): ~Z tokens
 ```
 
 **Monitoring Strategy:**
-1. Track session init baseline (~10-15k tokens for 5 tools)
+1. Track session init baseline (~10-15k tokens for 7 tools, varies by schema size)
 2. Monitor per-tool response averages (typically 80-500 tokens)
 3. Alert if peak usage trends toward 900k+ tokens
 4. Monitor tool count growth (add complexity only when needed)
@@ -493,8 +493,8 @@ endSession(sessionId);
 5. `kb_get` - Get knowledge base entity (text + voice)
 
 ### Integration Status
-- ✅ Voice server: Fully integrated, all 5 tools directly exposed
-- ✅ Text agent: Fully integrated, all 5 tools directly exposed
+- ✅ Voice server: Fully integrated, all 7 tools directly exposed
+- ✅ Text agent: Fully integrated, all 7 tools directly exposed
 - ✅ Registry: Loads successfully in both environments
 - ✅ Handler loading: Works for Node.js and Next.js
 - ✅ State management: Centralized via state controller

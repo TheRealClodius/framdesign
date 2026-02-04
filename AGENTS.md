@@ -1,17 +1,18 @@
 # AGENTS.md - Architecture Guide for AI Agents
 
-This document provides AI agents with a quick architectural overview of the framdesign repository to enable efficient work on tasks without extensive codebase exploration.
+This document provides AI agents with a quick architectural overview of the framdesign repository to enable efficient work without extensive codebase exploration.
 
 ## Executive Summary
 
-**FRAM** is a dual-agent conversational system featuring:
-- **Text Agent**: Next.js API routes using Google Gemini 2.5 Flash
-- **Voice Agent**: WebSocket server using Google Gemini Live API (2.5 Flash Native Audio)
-- **Unified Tool System**: Shared tool registry supporting both agents (5 tools)
-- **Knowledge Base**: Qdrant vector database + Google Cloud Storage for assets
-- **Deployment**: Vercel (text/frontend) + Railway (voice server)
+FRAM is a dual-agent conversational system with a shared tool registry, a Qdrant-backed knowledge base, and a WebSocket voice stack.
 
-**Technology Stack**: Next.js 16, Node.js 24, Google Gemini 2.5 API, Qdrant, GCS, WebSocket
+- Text agent: Next.js API routes streaming with Gemini 2.5 Flash, tool calling, system prompt caching, conversation caching, tool-memory dedup/summarization, and auto-chained asset retrieval.
+- Voice agent: WebSocket server using Gemini Live (gemini-live-2.5-flash-native-audio) with strict tool budgets, session state control, and real-time audio streaming.
+- Tool system: Build-time registry with canonical JSON Schema plus provider schemas; 7 tools (kb_search, kb_get, perplexity_search, query_tool_memory, ignore_user, start_voice_session, end_voice_session).
+- Knowledge base: Markdown in `kb/`, embeddings via `gemini-embedding-001` (768 dims), Qdrant vector store, and GCS signed URLs for assets.
+- Deployments: Vercel (text/front-end) + Railway (voice server).
+
+Technology stack: Next.js 16, React 19, Node.js 24, @google/genai, Qdrant, GCS, WebSocket, Perplexity API, Resend.
 
 ---
 
@@ -19,573 +20,225 @@ This document provides AI agents with a quick architectural overview of the fram
 
 ### 1. Text Agent (Primary Frontend)
 
-**Location**: [app/api/chat/route.ts](app/api/chat/route.ts)
+Location: `app/api/chat/route.ts`
 
-- **Type**: HTTP API streaming endpoint
-- **Port**: 3000 (development)
-- **Technology**: Next.js 16, Google Gemini 2.5 Flash
-- **Deployment**: Vercel (serverless functions)
-- **Key Features**:
-  - Streaming text responses
-  - Tool calling (5 tools available)
-  - Message windowing & automatic summarization
-  - Token estimation & budget enforcement
-  - Up to 5 retrieval calls per turn (flexible)
+- Type: HTTP API streaming endpoint (Next.js 16)
+- Port: 3000 (development)
+- Model: `gemini-2.5-flash`
+- Deployment: Vercel (serverless)
+- Key behaviors:
+- Streaming responses with status events (`---STATUS---` markers)
+- Tool calling through shared registry (Gemini Native schemas)
+- System prompt caching (Gemini caches) + conversation cache with TTL
+- Message windowing and token budget enforcement (30k token target)
+- Tool memory (dedup + summarization + loop detection)
+- Auto-chain: `kb_search` -> `kb_get` for visual “show me” requests
+- Optional web search via `perplexity_search` when KB is irrelevant
+- Global user budget via `UsageService` (Upstash Redis when configured; filesystem fallback for local)
 
-**Key Endpoints**:
-- `POST /api/chat` - Main chat endpoint with streaming
-- `POST /api/send` - Contact form email submission
-- `GET/POST /api/refresh-asset-url` - Asset URL generation
-- `GET /api/debug-env` - Environment debugging
+Key endpoints:
+- `POST /api/chat` - main chat endpoint (streaming)
+- `GET /api/budget` - per-user token budget status
+- `POST /api/send` - contact form email submission
+- `POST /api/refresh-asset-url` - refresh GCS signed URLs
+- `GET /api/debug-env` - env presence diagnostics
 
 ### 2. Voice Agent (WebSocket Server)
 
-**Location**: [voice-server/server.js](voice-server/server.js)
+Location: `voice-server/server.js`
 
-- **Type**: WebSocket proxy for Gemini Live API
-- **Port**: 8080 (development), Railway-assigned (production)
-- **Technology**: Node.js, `@google/genai` SDK
-- **Deployment**: Railway (persistent container)
-- **Key Features**:
-  - Real-time bidirectional audio streaming
-  - Tool calling with strict latency budgets
-  - Max 2 retrieval calls per turn (800ms each)
-  - Max 3 total tool calls per turn
-  - WebSocket protocol for client communication
+- Type: WebSocket proxy for Gemini Live API
+- Port: 8080 (development), Railway-assigned (production)
+- Model: `gemini-live-2.5-flash-native-audio`
+- Deployment: Railway (persistent container)
+- Auth: Vertex AI preferred (`VERTEXAI_PROJECT` + credentials); AI Studio key fallback for non-live flows
+- Key behaviors:
+- Real-time bidirectional audio streaming
+- Tool calling with strict latency budgets and hard gates
+- Max 2 retrieval calls per turn, max 3 total tool calls per turn
+- Loop detection for repeated tool calls
+- Tool call start signal for client “thinking” sound (`tool_call_started`)
+- Session state via shared state controller
 
-**WebSocket Protocol**:
-```javascript
-// Client → Server messages
-{ type: 'start', config: {...} }
-{ type: 'audio', data: base64AudioData }
-{ type: 'text', text: string }
-{ type: 'stop' }
-
-// Server → Client messages
-{ type: 'connected' }
-{ type: 'started', sessionId }
-{ type: 'audio', data: base64AudioData }
-{ type: 'text', text: string }
-{ type: 'error', message: string }
-```
+WebSocket protocol (core messages):
+- Client -> Server: `start`, `audio`, `text`, `stop`
+- Server -> Client: `connected`, `started`, `audio`, `text`, `error`, `tool_call_started`
 
 ### 3. Tool System (Shared Infrastructure)
 
-**Location**: [tools/](tools/)
+Location: `tools/`
 
-- **Type**: Unified tool registry and orchestration layer
-- **Technologies**: JSON Schema (Draft 2020-12), Ajv validation
-- **Available Tools** (5 total):
-  1. `kb_search` - Semantic search (retrieval, text+voice)
-  2. `kb_get` - Direct entity lookup (retrieval, text+voice)
-  3. `ignore_user` - Block disrespectful users (action, text+voice)
-  4. `start_voice_session` - Switch to voice mode (action, text-only)
-  5. `end_voice_session` - Exit voice mode (action, voice-only)
+- Build-time registry: `tools/_build/tool-builder.js` generates `tools/tool_registry.json`
+- Runtime loader: `tools/_core/registry.js` loads registry + handlers
+- Provider schemas: OpenAI + Gemini Native, no runtime conversion
+- Handler loading: static import map for bundlers (update `HANDLER_IMPORTS` when adding tools)
 
-**Key Modules**:
-- [tools/_core/registry.js](tools/_core/registry.js) - Tool loading & execution
-- [tools/_core/state-controller.js](tools/_core/state-controller.js) - Session state management
-- [tools/_core/error-types.js](tools/_core/error-types.js) - Error handling & intents
-- [tools/_core/metrics.js](tools/_core/metrics.js) - Performance tracking
-- [tools/_core/loop-detector.js](tools/_core/loop-detector.js) - Infinite loop prevention
-- [tools/_build/tool-builder.js](tools/_build/tool-builder.js) - Build artifact generator
+Available tools (7):
+- `kb_search` (retrieval): semantic search over KB
+- `kb_get` (retrieval): fetch full entity by ID, optional `include_image_data`
+- `perplexity_search` (retrieval): real-time web search via Perplexity API
+- `query_tool_memory` (utility): query recent tool call history
+- `ignore_user` (action): block abusive users
+- `start_voice_session` (action, text-only): switch to voice mode
+- `end_voice_session` (action, voice-only): end voice mode
+
+Supporting modules:
+- `tools/_core/tool-memory-store.js` - session-scoped tool memory
+- `tools/_core/tool-memory-dedup.js` - pre-execution dedup (retrieval tools)
+- `tools/_core/tool-memory-summarizer.js` - Gemini Flash Lite summaries
+- `tools/_core/loop-detector.js` - prevents repeated tool loops
+- `tools/_core/metrics.js` - in-memory execution metrics
 
 ### 4. Knowledge Base & Storage Services
 
-**Location**: [lib/services/](lib/services/)
+Location: `lib/services/`
 
-#### Vector Store Service
-- **File**: [lib/services/vector-store-service.ts](lib/services/vector-store-service.ts)
-- **Database**: Qdrant (cloud-hosted)
-- **Functions**: `searchSimilar()`, `upsertDocuments()`, `deleteDocuments()`
-
-#### Blob Storage Service
-- **File**: [lib/services/blob-storage-service.ts](lib/services/blob-storage-service.ts)
-- **Provider**: Google Cloud Storage (GCS)
-- **Functions**: `uploadAsset()`, `resolveBlobUrl()`, `generateSignedUrl()`
-
-#### Embedding Service
-- **File**: [lib/services/embedding-service.ts](lib/services/embedding-service.ts)
-- **Model**: Google Gemini embedding model (768-dimensional vectors)
-- **Function**: `generateQueryEmbedding()`
-
-#### Chat Service
-- **File**: [lib/services/chat-service.ts](lib/services/chat-service.ts)
-- **Provider**: Google Gemini API
-- **Purpose**: Text completion requests with tool calling
-
-#### Other Services
-- [lib/services/usage-service.ts](lib/services/usage-service.ts) - User API consumption tracking
-- [lib/services/contact-service.ts](lib/services/contact-service.ts) - Contact form via Resend
-- [lib/services/voice-service.ts](lib/services/voice-service.ts) - Voice session management
+- Vector store: `vector-store-service.ts` (Qdrant, collection `kb_documents`)
+- Embeddings: `embedding-service.ts` (Gemini `gemini-embedding-001`, 768 dims)
+- Blob storage: `blob-storage-service.ts` (GCS signed URLs, optional LRU cache)
+- Chat service: `chat-service.ts` (client-side streaming helper)
+- Voice client: `voice-service.ts` (browser audio + WebSocket)
 
 ---
 
-## Architecture Diagram
+## Architecture Diagram (Simplified)
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                        Clients                                  │
-│              (Browser, Mobile, Desktop)                         │
-└─────────────┬──────────────────────────┬──────────────────────┘
-              │                          │
-      ┌───────▼────────┐      ┌──────────▼─────────┐
-      │  Text Agent    │      │  Voice Agent       │
-      │  (Vercel)      │      │  (Railway)         │
-      │  Port 3000     │      │  Port 8080 (WSS)   │
-      │  Next.js API   │      │  WebSocket Server  │
-      └───────┬────────┘      └──────────┬─────────┘
-              │                          │
-        HTTP POST              WebSocket (wss://)
-              │                          │
-              └───────────┬──────────────┘
-                         │
-        ┌────────────────▼─────────────────┐
-        │   Unified Tool Registry          │
-        │   (tools/_core)                  │
-        │  • registry.js                   │
-        │  • state-controller.js           │
-        │  • error-types.js                │
-        │  • metrics.js                    │
-        │  • loop-detector.js              │
-        └────────┬──────────────┬──────────┘
-                 │              │
-        ┌────────▼────┐  ┌──────▼───────────┐
-        │ Gemini 2.5  │  │ Gemini Live API  │
-        │ Flash       │  │ (2.5 Flash       │
-        │ (Text)      │  │  Native Audio)   │
-        └────────┬────┘  └──────┬───────────┘
-                 │              │
-                 └──────┬───────┘
-                        │
-         ┌──────────────┼──────────────┐
-         │              │              │
-    ┌────▼───┐  ┌───────▼────┐  ┌─────▼──────┐
-    │ Qdrant │  │    GCS     │  │  Embedding │
-    │(Vector)│  │ (Blob)     │  │  Service   │
-    │  DB    │  │ Storage    │  │            │
-    └────────┘  └────────────┘  └────────────┘
-```
-
----
-
-## Service Communication Flows
-
-### Text Agent Chat Flow
-
-```
-User Query
-    ↓
-[Text Agent] POST /api/chat
-    ↓
-Load Tool Registry (first request only)
-    ↓
-Generate System Prompt + Tool Schemas
-    ↓
-Call Gemini 2.5 Flash API (streaming)
-    ↓
-Stream Response
-    ├─ Tool call detected?
-    │  ├─ Yes → Execute via toolRegistry.executeTool()
-    │  │  ├─ kb_search/kb_get → Query Qdrant
-    │  │  ├─ start_voice_session → Switch modes
-    │  │  └─ ignore_user → Block user
-    │  │
-    │  └─ Return tool result to LLM
-    │
-    └─ Continue streaming final response
-```
-
-### Voice Agent Chat Flow
-
-```
-User Audio Input
-    ↓
-[Voice Server] WebSocket Connection
-    ↓
-Authenticate Origin (CORS check)
-    ↓
-Load Tool Registry (startup only)
-    ↓
-Send to Gemini Live API
-    ↓
-Process Audio/Text Stream
-    ├─ Tool call detected?
-    │  ├─ Yes → Check Latency Budgets
-    │  │  ├─ Max 2 retrieval calls per turn
-    │  │  ├─ Max 3 total calls per turn
-    │  │  ├─ 800ms per retrieval (soft limit)
-    │  │  └─ Execute via toolRegistry.executeTool()
-    │  │
-    │  └─ Return tool result to Gemini
-    │
-    └─ Generate Audio Response
-```
-
-### Tool Execution Flow
-
-```
-toolRegistry.executeTool(toolId, context)
-    ↓
-Load Handler: tools/{toolId}/handler.js
-    ↓
-Validate Parameters (Ajv against schema.json)
-    ↓
-Create Execution Context
-    ├─ args: Validated parameters
-    ├─ clientId: Session identifier
-    ├─ ws: WebSocket (voice only)
-    ├─ session: State snapshot
-    └─ meta: Tool metadata
-    ↓
-Execute: handler.execute(context)
-    ├─ kb_search → embedQuery → searchSimilar (Qdrant)
-    ├─ kb_get → fetchEntity → resolveBlobUrl (GCS)
-    ├─ ignore_user → setTimeout → WebSocket message
-    ├─ start_voice_session → Mode switch
-    └─ end_voice_session → Cleanup
-    ↓
-Return ToolResponse
-{
-  ok: boolean,
-  data?: {...},
-  error?: {...},
-  intents?: [{type, value}],
-  meta?: {...}
-}
+Clients (Browser/Mobile)
+  |-- Text UI (Next.js) -> /api/chat -> Gemini 2.5 Flash
+  |-- Voice UI (WebSocket) -> voice-server -> Gemini Live API
+                          |-> Shared Tool Registry
+                          |-> Qdrant (KB)
+                          |-> GCS (Assets)
+                          |-> Perplexity (Web Search)
 ```
 
 ---
 
 ## Key Directories & Files
 
-| Path | Purpose |
-|------|---------|
-| [app/[locale]/](app/[locale]/) | Frontend UI pages (Next.js) |
-| [app/api/chat](app/api/chat) | Main text agent chat endpoint |
-| [components/](components/) | React components for UI |
-| [lib/config.ts](lib/config.ts) | Application configuration & prompts |
-| [lib/constants.ts](lib/constants.ts) | Constants (budgets, limits, defaults) |
-| [lib/services/](lib/services/) | Backend service wrappers |
-| [lib/storage.ts](lib/storage.ts) | Client-side localStorage utilities |
-| [lib/token-count.ts](lib/token-count.ts) | Token estimation logic |
-| [kb/](kb/) | Knowledge base content (Markdown files) |
-| [kb/people/](kb/people/) | Person profiles |
-| [kb/project/](kb/project/) | Project descriptions |
-| [kb/lab/](kb/lab/) | Lab/organization info |
-| [kb/assets/](kb/assets/) | Images referenced in KB |
-| [prompts/](prompts/) | System prompts & instructions |
-| [prompts/core.md](prompts/core.md) | Core system prompt for text agent |
-| [scripts/](scripts/) | Deployment & testing scripts |
-| [scripts/embed-kb.ts](scripts/embed-kb.ts) | Index KB content to Qdrant |
-| [tests/](tests/) | Test suites (unit, integration, E2E) |
-| [tools/](tools/) | Unified tool system (5 tools) |
-| [tools/_core/](tools/_core/) | Tool infrastructure |
-| [tools/{toolName}/](tools/) | Individual tool implementations |
-| [voice-server/](voice-server/) | WebSocket voice proxy server |
-| [voice-server/server.js](voice-server/server.js) | Voice server entry point |
-| [voice-server/providers/](voice-server/providers/) | Gemini Live transport layer |
-| [vercel.json](vercel.json) | Vercel deployment configuration |
-| [railway.json](railway.json) | Railway deployment configuration |
-| [package.json](package.json) | Dependencies & npm scripts |
+- `app/api/chat/route.ts` - text agent streaming + tool orchestration
+- `app/api/budget/route.ts` - budget endpoint
+- `app/api/send/route.ts` - contact form
+- `app/api/refresh-asset-url/route.ts` - GCS URL refresh
+- `voice-server/server.js` - voice server
+- `voice-server/providers/gemini-live-transport.js` - tool call protocol for Gemini Live
+- `tools/_core/registry.js` - tool loader + execution
+- `tools/_build/tool-builder.js` - registry build
+- `tools/tool_registry.json` - generated registry (required at runtime)
+- `lib/services/*` - backend service wrappers
+- `prompts/core.md` - text system prompt
+- `voice-server/prompts/core.md` - voice system prompt
+- `kb/**` - markdown KB content and assets
+- `scripts/embed-kb.ts` - KB indexing into Qdrant
 
 ---
 
-## External Dependencies
+## External Dependencies & Environment Variables
 
-| Service | Type | Purpose | Environment Variable |
-|---------|------|---------|---------------------|
-| **Google Gemini API** | LLM | Text completions, tool calling | `GEMINI_API_KEY` |
-| **Gemini Live API** | LLM | Voice streaming, audio processing | `GEMINI_API_KEY` |
-| **Qdrant** | Vector DB | Semantic search, KB indexing | `QDRANT_CLUSTER_ENDPOINT`, `QDRANT_API_KEY` |
-| **Google Cloud Storage** | Blob Storage | Image/asset storage | `GOOGLE_APPLICATION_CREDENTIALS` |
-| **Resend** | Email Service | Contact form delivery | `RESEND_API_KEY` |
-| **Google Analytics** | Analytics | Usage tracking | `NEXT_PUBLIC_GA_MEASUREMENT_ID` |
+Text agent (Vercel) common vars:
+- `GEMINI_API_KEY` (Gemini text + embeddings + tool summarizer fallback)
+- `QDRANT_CLUSTER_ENDPOINT`, `QDRANT_API_KEY`
+- `PERPLEXITY_API_KEY` (for `perplexity_search` tool)
+- `RESEND_API_KEY` and optional `CONTACT_EMAIL`
+- `NEXT_PUBLIC_VOICE_SERVER_URL`
+- `NEXT_PUBLIC_GA_MEASUREMENT_ID`
+- Upstash Redis:
+  - `UPSTASH_REDIS_REST_URL`
+  - `UPSTASH_REDIS_REST_TOKEN`
+- GCS credentials (one of):
+- `GCS_SERVICE_ACCOUNT_KEY` (base64 JSON)
+- `GOOGLE_APPLICATION_CREDENTIALS` (JSON string or file path)
+- `GCS_KEY_FILE` (file path)
+- Optional: `GCS_BUCKET_NAME`, `GCS_PROJECT_ID`
 
-### Required Environment Variables
-
-**Text Agent (Vercel)**:
-```bash
-GEMINI_API_KEY=<google-ai-key>
-GOOGLE_APPLICATION_CREDENTIALS=<base64-gcs-credentials>
-QDRANT_CLUSTER_ENDPOINT=<qdrant-url>
-QDRANT_API_KEY=<qdrant-api-key>
-RESEND_API_KEY=<resend-key>
-NEXT_PUBLIC_VOICE_SERVER_URL=<wss://voice-server-url>
-NEXT_PUBLIC_GA_MEASUREMENT_ID=<ga-id>
-USE_META_TOOLS=true
-```
-
-**Voice Server (Railway)**:
-```bash
-GEMINI_API_KEY=<google-ai-key>
-QDRANT_CLUSTER_ENDPOINT=<qdrant-url>
-QDRANT_API_KEY=<qdrant-api-key>
-ALLOWED_ORIGINS=<comma-separated-origins>
-```
+Voice server (Railway) common vars:
+- `VERTEXAI_PROJECT` (required for Live API)
+- `VERTEXAI_LOCATION` (optional, default `us-central1`)
+- `GOOGLE_APPLICATION_CREDENTIALS` (JSON string or file path) or ADC
+- `GEMINI_API_KEY` (fallback for non-live flows + tool summarizer)
+- `QDRANT_CLUSTER_ENDPOINT`, `QDRANT_API_KEY`
+- `PERPLEXITY_API_KEY` (if web search tool used)
+- `ALLOWED_ORIGINS` (comma-separated)
+- `PORT` (Railway assigns)
+- Upstash Redis (if shared usage limits enforced): `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`
+- GCS credentials if using `kb_get` for assets
 
 ---
 
 ## Development Setup
 
-### Prerequisites
-- **Node.js 24.x** (specified in [.nvmrc](.nvmrc) and [package.json](package.json))
-- **npm** (included with Node.js)
-- **Environment files**: `.env` in root and `voice-server/.env`
+Prerequisites:
+- Node.js 24.x (see `.nvmrc`)
+- npm
+- `.env` at repo root and `voice-server/.env` for voice server
 
-### Installation
-
+Install:
 ```bash
-# Install main app dependencies
 npm install
-
-# Install voice server dependencies (separate)
 cd voice-server && npm install && cd ..
+```
 
-# Build tool registry (REQUIRED before running)
+Build tools registry (required):
+```bash
 npm run build:tools
 ```
 
-### Development Servers
-
+Development servers:
 ```bash
-# Text agent only (frontend + API)
-npm run dev                      # http://localhost:3000
-
-# Voice agent only (separate terminal)
-npm run dev:voice                # ws://localhost:8080
-
-# Both together (concurrent)
-npm run dev:all
+npm run dev        # Text agent + UI
+npm run dev:voice  # Voice server
+npm run dev:all    # Text + voice + tools watcher
 ```
-
-### Build & Validation
-
-```bash
-# Lint code (MUST PASS)
-npm run lint
-
-# Build tool registry (REQUIRED)
-npm run build:tools
-
-# Run tests
-npm test -- --json --outputFile=test-results.json
-
-# Build for production (MUST PASS)
-npm run build
-```
-
----
-
-## Deployment Configuration
-
-### Text Agent - Vercel
-
-**Config**: [vercel.json](vercel.json)
-
-```json
-{
-  "buildCommand": "npm run build:tools && npm run build",
-  "outputDirectory": ".next",
-  "framework": "nextjs"
-}
-```
-
-**Deployment Process**:
-1. Build tool registry (`npm run build:tools`)
-2. Build Next.js app (`npm run build`)
-3. Deploy to Vercel (automatic HTTPS, CDN, serverless functions)
-
-**URL**: Production URL set in Vercel dashboard
-
-### Voice Server - Railway
-
-**Config**: [railway.json](railway.json)
-
-```json
-{
-  "build": {
-    "builder": "NIXPACKS",
-    "buildCommand": "npm run build:tools && cd voice-server && npm install"
-  },
-  "deploy": {
-    "startCommand": "cd voice-server && npm start",
-    "healthcheckPath": "/health"
-  }
-}
-```
-
-**Deployment Process**:
-1. Install all dependencies (root + voice-server)
-2. Build tool registry (`npm run build:tools`)
-3. Start WebSocket server on Railway-assigned port
-4. Deploy with auto-scaling
-
-**Health Check**: `GET /health` returns JSON status
 
 ---
 
 ## Testing & Validation
 
-**See [CLOUD.md](CLOUD.md) for complete testing guide.**
+- Lint: `npm run lint`
+- Tool registry build: `npm run build:tools`
+- Tests: `npm test`
+- Voice agent test: `npm run test:voice`
+- Text agent test: `npm run test:agent`
 
-### Quick Validation Workflow
-
-```bash
-# 1. Install dependencies
-npm install
-
-# 2. Lint (MUST PASS)
-npm run lint
-
-# 3. Build tool registry (MUST PASS)
-npm run build:tools
-
-# 4. Run tests
-npm test -- --json --outputFile=test-results.json
-
-# 5. Build verification (MUST PASS)
-npm run build
-```
-
-### Smart Test Targeting
-
-| Changed Files | Tests to Run |
-|---------------|--------------|
-| `tools/**` | `npm test tests/tools/` |
-| `app/api/chat/**` | `npm test tests/e2e/text-agent*` |
-| `lib/services/**` | `npm test tests/services/` |
-| `voice-server/**` | **Manual testing required** |
-| `kb/**/*.md`, `docs/**` | No tests needed |
-
-### Quality Gates (Must Pass)
-1. Lint: `npm run lint`
-2. Tool registry build: `npm run build:tools`
-3. Core tests: `npm test tests/tools/_core/`
-4. Production build: `npm run build`
+See `CLOUD.md` and `tests/TEST_SUMMARY.md` for coverage details.
 
 ---
 
 ## Critical Constraints & Budgets
 
-### Text Agent (Flexible)
-- **Max retrieval calls**: 5 per turn
-- **Max total tool calls**: 10 per turn
-- **Latency budget**: Soft limit per tool (logs warning)
-- **Context window**: Adaptive (message windowing enabled)
-- **Request timeout**: 30 seconds
+Text agent:
+- Token budget: `TOKEN_CONFIG.MAX_TOKENS` (30k)
+- Summary cap: `TOKEN_CONFIG.SUMMARY_WORD_LIMIT` (80 words)
+- Message windowing: `MESSAGE_LIMITS.MAX_RAW_MESSAGES` (20)
+- Tool chain limit: max 5 chained tool calls
+- User budget: 300k tokens total per user (`UsageService`)
 
-### Voice Agent (Strict - Latency Critical)
-- **Max retrieval calls**: 2 per turn
-- **Max total tool calls**: 3 per turn
-- **Retrieval latency budget**: 800ms per call (soft)
-- **Action latency budget**: 3s per call (soft)
-- **Loop detection**: Prevents infinite retries
-- **Restricted tools**: Cannot use `start_voice_session`
+Voice agent:
+- Max 2 retrieval tool calls per turn
+- Max 3 total tool calls per turn
+- Latency budgets from tool metadata (`latencyBudgetMs`)
+- Loop detection: same tool + args 3x or empty results 2x in a turn
 
-### Global Limits
-- **Message history**: Configurable (automatic windowing)
-- **Summarization trigger**: 60% of context window
-- **Cache TTL**: 24 hours (Gemini API)
-- **Tool execution timeout**: 2s (text), 500ms (voice)
+Tool memory:
+- Sliding window: last 50 calls, full responses kept for last 10
+- Summarization via Gemini Flash Lite (150-token budget)
 
 ---
 
-## Quick Reference
+## Decision Tree for Common Changes
 
-### Common Commands
-
-```bash
-# Development
-npm run dev                      # Start text agent dev server
-npm run dev:voice                # Start voice server dev server
-npm run dev:all                  # Start both servers concurrently
-
-# Building
-npm run build:tools              # Build tool registry (required!)
-npm run build                    # Build Next.js app for production
-
-# Testing
-npm run lint                     # Lint code
-npm test                         # Run all tests
-npm test tests/tools/            # Test tool system only
-npm test tests/e2e/              # Integration tests only
-
-# Knowledge Base
-npm run embed-kb                 # Re-index KB to Qdrant
-npm run verify-kb                # Validate KB structure
-```
-
-### Critical Paths for Changes
-
-**Tool Changes**:
-1. Edit `tools/{tool-name}/` files
-2. Run `npm run build:tools`
-3. Restart agents (both text and voice)
-4. Test: `npm test tests/tools/`
-
-**Service Changes**:
-1. Edit `lib/services/*.ts` files
-2. Test: `npm test tests/services/`
-3. Build: `npm run build`
-4. Deploy
-
-**API Changes**:
-1. Edit `app/api/**/*.ts` files
-2. Test: `npm test tests/e2e/`
-3. Build: `npm run build`
-4. Deploy to Vercel
-
-**Voice Server Changes**:
-1. Edit `voice-server/**/*.js` files
-2. **Manual testing required** (no automated tests)
-3. Deploy to Railway
-4. See [voice-server/README.md](voice-server/README.md)
-
-### Finding More Information
-
-| Topic | Documentation |
-|-------|---------------|
-| Testing & validation workflow | [CLOUD.md](CLOUD.md) |
-| Tool system architecture | [tools/ARCHITECTURE.md](tools/ARCHITECTURE.md) |
-| Creating new tools | [tools/README.md](tools/README.md) |
-| Tool metrics & observability | [tools/OBSERVABILITY.md](tools/OBSERVABILITY.md) |
-| Voice server manual testing | [voice-server/README.md](voice-server/README.md) |
-| Test coverage details | [tests/TEST_SUMMARY.md](tests/TEST_SUMMARY.md) |
+- Tool changes: edit `tools/{tool}/` -> `npm run build:tools` -> restart agents -> update static import map in `tools/_core/registry.js` if new tool
+- Text agent changes: edit `app/api/chat/` -> `npm test tests/e2e/` -> `npm run build`
+- Voice server changes: edit `voice-server/` -> manual testing -> deploy Railway
+- KB changes: edit `kb/**/*.md` -> `npm run embed-kb`
+- Prompt changes: edit `prompts/*.md` or `voice-server/prompts/*.md` -> restart agents
 
 ---
 
-## Decision Tree for Common Tasks
+## References
 
-```
-What task are you working on?
-├── Adding/modifying a tool
-│   └── Edit tools/{tool-name}/ → build:tools → restart agents → test
-├── Changing text agent behavior
-│   └── Edit app/api/chat/ → test e2e → build → deploy Vercel
-├── Changing voice agent behavior
-│   └── Edit voice-server/ → manual test → deploy Railway
-├── Updating services (DB, storage, etc.)
-│   └── Edit lib/services/ → test services → build → deploy both
-├── Modifying knowledge base content
-│   └── Edit kb/**/*.md → npm run embed-kb → verify search
-├── Updating system prompts
-│   └── Edit prompts/*.md → restart agents → test behavior
-└── Documentation only
-    └── Edit *.md files → no tests needed → commit
-```
-
----
-
-## Architecture Principles
-
-1. **Unified Tool System**: Both agents share the same tool registry - changes apply to both
-2. **Mode-Specific Constraints**: Voice has stricter latency budgets than text
-3. **Service Separation**: Text (Vercel serverless) and Voice (Railway persistent) deploy independently
-4. **Knowledge Base First**: All domain knowledge lives in `/kb/` as Markdown, indexed to Qdrant
-5. **Build-Time Validation**: Tool registry built before deployment, validated at build time
-6. **Fail-Safe Defaults**: Missing tools are gracefully skipped, missing KB entries return empty results
-
----
-
-This document should serve as your quick reference when working on the framdesign codebase. For detailed procedures, always refer to the specific documentation files linked throughout.
+- `CLOUD.md` - testing workflow
+- `tools/ARCHITECTURE.md` - tool system internals (note: may be outdated)
+- `voice-server/README.md` - voice server usage
+- `tests/TEST_SUMMARY.md` - test coverage
