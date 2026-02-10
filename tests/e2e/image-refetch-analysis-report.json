@@ -1,46 +1,5 @@
 {
   "testName": "Image Re-fetch and Analysis Integration Test",
-  "totalToolCalls": 2,
-  "toolCalls": [
-    {
-      "toolId": "kb_search",
-      "args": {
-        "query": "photo from Vector Watch project",
-        "top_k": 1,
-        "filters": {
-          "type": "photo",
-          "related_to": "project:vector_watch"
-        }
-      },
-      "ok": true,
-      "durationMs": 539,
-      "hasImageData": false,
-      "entityId": null,
-      "entityType": null,
-      "blobId": null,
-      "markdown": null,
-      "searchResults": [
-        {
-          "id": "asset:vector_watch_luna_001",
-          "score": 0.771948,
-          "blob_id": null
-        }
-      ]
-    },
-    {
-      "toolId": "kb_get",
-      "args": {
-        "id": "photo:vector_watch_luna_and_app",
-        "include_image_data": true
-      },
-      "ok": false,
-      "durationMs": 388,
-      "hasImageData": false,
-      "entityId": null,
-      "entityType": null,
-      "blobId": null,
-      "markdown": null,
-      "searchResults": null
-    }
-  ]
+  "totalToolCalls": 0,
+  "toolCalls": []
 }
