@@ -207,6 +207,20 @@ function isVisualShowRequest(text: string): boolean {
   return hasVisualNoun || (hasShowVerb && normalized.includes("me")) || (hasShowVerb && hasAnother);
 }
 
+function isProjectExplorationRequest(
+  text: string,
+  kbResults: Array<{ type?: string; _assetHints?: { count: number; sample?: Array<{ id: string; type: string; title: string }> } }>
+): boolean {
+  const normalized = (text || "").toLowerCase();
+  if (!normalized) return false;
+  const hasProjectWithAssets = kbResults.some(
+    r => r.type === 'project' && (r._assetHints?.count || 0) > 0
+  );
+  if (!hasProjectWithAssets) return false;
+  const hasExplorationSignal = /\b(tell|about|what|explain|describe|how|walk.*through|overview|details)\b/.test(normalized);
+  return hasExplorationSignal;
+}
+
 function selectTopVisualResultId(
   results: Array<{ id?: string; type?: string; metadata?: { entity_type?: string } }> = [],
   excludeIds: string[] = []
@@ -427,29 +441,44 @@ function hashSystemPrompt(prompt: string): string {
  */
 function areKbResultsRelevant(
   query: string,
-  results: Array<{ score?: number; title?: string; snippet?: string; id?: string }>
+  results: Array<{ score?: number; title?: string; snippet?: string; id?: string; type?: string }>
 ): boolean {
   if (!results || results.length === 0) {
     return false;
   }
 
-  // Extract query terms (lowercase, simple words)
-  const queryTerms = query.toLowerCase().split(/\s+/).filter(term => term.length > 2);
+  // Stop words to exclude from query term matching
+  const STOP_WORDS = new Set([
+    'the', 'and', 'for', 'with', 'about', 'this', 'that',
+    'from', 'what', 'how', 'who', 'where', 'when', 'which',
+    'tell', 'show', 'give', 'can', 'does', 'has', 'have',
+    'are', 'was', 'were', 'been', 'being', 'its', 'any'
+  ]);
+
+  // Extract query terms (lowercase, simple words, excluding stop words)
+  const queryTerms = query.toLowerCase().split(/\s+/)
+    .filter(term => term.length > 2 && !STOP_WORDS.has(term));
   if (queryTerms.length === 0) {
     return true; // Can't determine, assume relevant
   }
 
-  // Check if any result has a high enough score and matches query terms
-  const RELEVANCE_THRESHOLD = 0.4; // Scores below this are likely irrelevant
-  const hasRelevantScore = results.some(r => (r.score || 0) >= RELEVANCE_THRESHOLD);
-  
+  // Type-aware relevance thresholds
+  const ASSET_TYPES = new Set(['photo', 'video', 'gif', 'diagram']);
+  const ASSET_THRESHOLD = 0.30;  // Assets match on tags/description, need lower threshold
+  const TEXT_THRESHOLD = 0.35;   // Text entities (projects, people, labs)
+
+  const hasRelevantScore = results.some(r => {
+    const threshold = ASSET_TYPES.has(r.type || '') ? ASSET_THRESHOLD : TEXT_THRESHOLD;
+    return (r.score || 0) >= threshold;
+  });
+
   // Check if query terms appear in titles or snippets
   const hasQueryMatch = results.some(result => {
     const title = (result.title || '').toLowerCase();
     const snippet = (result.snippet || '').toLowerCase();
     const id = (result.id || '').toLowerCase();
     const combined = `${title} ${snippet} ${id}`;
-    
+
     // Check if any query term appears in the result
     return queryTerms.some(term => combined.includes(term));
   });
@@ -2315,6 +2344,183 @@ export async function POST(request: Request) {
                     text: `IMPORTANT: The tool "${autoToolName}" failed with a ${autoResult.error.type} error. You must tell the user this happened and include the error message verbatim: "${autoResult.error.message}". If the message includes suggestions or next steps, surface them explicitly.`
                   }]
                 });
+              }
+            }
+          }
+        }
+
+        // Phase 3: Project exploration auto-chain
+        // When a project with available assets is returned for an exploratory query,
+        // auto-fetch one representative asset even without an explicit visual request
+        if (
+          toolName === "kb_search" &&
+          result.ok &&
+          !isVisualShowRequest(lastUserMessageText) &&
+          isProjectExplorationRequest(
+            lastUserMessageText,
+            Array.isArray(cleanedResultData?.results) ? cleanedResultData.results : []
+          )
+        ) {
+          // Find the top project result that has asset hints
+          const kbResults = Array.isArray(cleanedResultData?.results) ? cleanedResultData.results : [];
+          const topProjectWithAssets = kbResults.find(
+            (r: any) => r.type === 'project' && r._assetHints?.count > 0 && r._assetHints?.sample?.length > 0
+          ) as { id: string; title: string; _assetHints: { count: number; sample: Array<{ id: string; type: string; title: string }> } } | undefined;
+
+          if (topProjectWithAssets) {
+            const sampleAsset = topProjectWithAssets._assetHints.sample[0];
+            const enrichAssetId = sampleAsset.id;
+            const enrichToolName = "kb_get";
+            const enrichArgs = { id: enrichAssetId, include_image_data: false };
+            const enrichToolMetadata = toolRegistry.getToolMetadata(enrichToolName) as ToolMetadata | null;
+
+            if (enrichToolMetadata) {
+              console.log(`[AutoChain] Project exploration detected for "${topProjectWithAssets.title}", auto-fetching asset ${enrichAssetId}`);
+
+              // Record auto-chained tool call
+              recordToolCall(
+                conversationHash,
+                turnNumber,
+                enrichToolName,
+                enrichArgs,
+                undefined,
+                1
+              );
+
+              // Create execution context for auto-chained tool
+              const enrichState = createStateController({ mode: 'text', isActive: true }) as StateController;
+              const enrichExecutionContext = {
+                clientId: `text-${Date.now()}`,
+                ws: null,
+                geminiSession: null,
+                args: enrichArgs,
+                capabilities: { voice: false },
+                session: {
+                  isActive: enrichState.get('isActive'),
+                  toolsVersion: toolRegistry.getVersion(),
+                  state: enrichState.getSnapshot()
+                },
+                meta: {
+                  perplexityApiKey: process.env.PERPLEXITY_API_KEY
+                }
+              };
+
+              const enrichStartTime = Date.now();
+              let enrichResult: any;
+
+              const enrichLoopCheck = loopDetector.detectLoop(sessionId, turnNumber, enrichToolName, enrichArgs);
+              if (enrichLoopCheck.detected) {
+                console.warn(`[Loop Detection] Project enrichment loop detected for ${enrichToolName}: ${enrichLoopCheck.message}`);
+                enrichResult = {
+                  ok: false,
+                  error: {
+                    type: "LOOP_DETECTED",
+                    message: enrichLoopCheck.message,
+                    retryable: false
+                  }
+                };
+              } else {
+                loopDetector.recordCall(sessionId, turnNumber, enrichToolName, enrichArgs, null);
+                enrichResult = await retryToolExecution(
+                  () => toolRegistry.executeTool(enrichToolName, enrichExecutionContext),
+                  {
+                    mode: "text",
+                    maxRetries: 3,
+                    toolId: enrichToolName,
+                    toolMetadata: enrichToolMetadata ? (enrichToolMetadata as object) : {},
+                    clientId: `text-${Date.now()}`
+                  }
+                );
+              }
+
+              const enrichDuration = Date.now() - enrichStartTime;
+              const enrichCallId = `call-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+              toolMemoryStore.recordToolCall(sessionId, {
+                id: enrichCallId,
+                toolId: enrichToolName,
+                args: enrichArgs,
+                argsHash: hashArgs(enrichArgs),
+                timestamp: Date.now(),
+                turn: 1,
+                duration: enrichDuration,
+                fullResponse: enrichResult,
+                summary: null,
+                ok: enrichResult.ok,
+                error: enrichResult.ok ? null : enrichResult.error,
+                tokens: estimateTokensForJson(JSON.stringify(enrichResult))
+              });
+
+              if (observability) {
+                observability.toolCalls.push({
+                  position: observability.toolCalls.length + 1,
+                  chainPosition: 1,
+                  toolId: enrichToolName,
+                  args: enrichArgs,
+                  thoughtSignature: undefined,
+                  startTime: enrichStartTime,
+                  duration: enrichDuration,
+                  ok: enrichResult.ok,
+                  result: enrichResult.ok ? enrichResult.data : null,
+                  error: enrichResult.ok ? null : enrichResult.error
+                });
+                observability.chainedCalls += 1;
+                observability.totalDuration = Date.now() - observability.requestStartTime;
+              }
+
+              if (enrichResult.ok) {
+                const cleanedEnrichData = JSON.parse(JSON.stringify(enrichResult.data));
+                if (cleanedEnrichData && typeof cleanedEnrichData === "object") {
+                  delete cleanedEnrichData._imageData;
+                  delete cleanedEnrichData._timing;
+                  delete cleanedEnrichData._distance;
+                }
+
+                // Record auto-chained tool result
+                recordToolResult(
+                  conversationHash,
+                  turnNumber,
+                  enrichToolName,
+                  cleanedEnrichData as Record<string, unknown>,
+                  1
+                );
+
+                const enrichResponseParts: any[] = [
+                  {
+                    functionResponse: {
+                      name: enrichToolName,
+                      response: cleanedEnrichData as Record<string, unknown>
+                    }
+                  }
+                ];
+
+                updatedContents.push(
+                  {
+                    role: "model" as const,
+                    parts: [{ functionCall: { name: enrichToolName, args: enrichArgs } }]
+                  },
+                  {
+                    role: "user" as const,
+                    parts: enrichResponseParts
+                  }
+                );
+
+                // Add guidance for the model
+                updatedContents.push({
+                  role: "user" as const,
+                  parts: [{
+                    text: "GUIDANCE: A representative visual has been fetched for the project being discussed. Include it if it supports the narrative. Skip it if irrelevant to the user's specific question."
+                  }]
+                });
+              } else {
+                // Record failure for observability (non-critical, no user-facing error)
+                recordToolResult(
+                  conversationHash,
+                  turnNumber,
+                  enrichToolName,
+                  { error: true, type: enrichResult.error?.type, message: enrichResult.error?.message, retryable: enrichResult.error?.retryable } as Record<string, unknown>,
+                  1
+                );
+                console.warn(`[AutoChain] Project enrichment failed for ${enrichAssetId}:`, enrichResult.error?.message);
               }
             }
           }

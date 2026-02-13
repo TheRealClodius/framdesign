@@ -280,6 +280,66 @@ export async function execute(context) {
       .sort((a, b) => b.score - a.score)
       .slice(0, topK); // Limit to requested topK entities
 
+    // Enrich top 2 non-asset results with related asset hints
+    // This lets the agent know what visuals are available without a separate search
+    const ASSET_TYPES = new Set(['photo', 'video', 'gif', 'diagram']);
+    const nonAssetResults = deduplicatedResults.filter(r => !ASSET_TYPES.has(r.type));
+    const topNonAssets = nonAssetResults.slice(0, 2);
+
+    if (!isVoiceMode && topNonAssets.length > 0 && queryEmbedding.length > 0) {
+      const assetHintStart = Date.now();
+      await Promise.all(topNonAssets.map(async (result) => {
+        try {
+          const entityId = result.id;
+          // Search for assets related to this entity using the same embedding
+          const assetResults = await searchSimilar(
+            queryEmbedding,
+            10, // Fetch up to 10 to get a good count
+            { related_entities: { $contains: entityId } }
+          );
+
+          // Filter to only visual asset types
+          const assetItems = (assetResults || []).filter(ar => {
+            const aType = ar.metadata?.entity_type || '';
+            return ASSET_TYPES.has(aType);
+          });
+
+          if (assetItems.length > 0) {
+            // Deduplicate by entity_id
+            const seenIds = new Set();
+            const uniqueAssets = [];
+            for (const a of assetItems) {
+              const aId = a.metadata?.entity_id || a.id;
+              if (!seenIds.has(aId)) {
+                seenIds.add(aId);
+                uniqueAssets.push(a);
+              }
+            }
+
+            // Collect types present
+            const assetTypeSet = new Set(uniqueAssets.map(a => a.metadata?.entity_type));
+
+            // Build sample (top 3 by relevance)
+            const sample = uniqueAssets.slice(0, 3).map(a => ({
+              id: a.metadata?.entity_id || a.id,
+              type: a.metadata?.entity_type || 'unknown',
+              title: a.metadata?.title || a.id
+            }));
+
+            result._assetHints = {
+              count: uniqueAssets.length,
+              types: Array.from(assetTypeSet),
+              sample
+            };
+          }
+        } catch (hintError) {
+          console.warn(`[kb_search] Failed to fetch asset hints for ${result.id}:`, hintError.message);
+          // Non-critical: continue without hints
+        }
+      }));
+      console.log(`[kb_search] Asset hints enrichment took ${Date.now() - assetHintStart}ms`);
+    }
+
     const latency = Date.now() - startTime;
     const chunksSearched = rawResults.length;
     const uniqueEntities = deduplicatedResults.length;
@@ -341,7 +401,7 @@ export async function execute(context) {
       query: args.query,
       filters_applied: args.filters || null,
       clamped: topK !== originalTopK,
-      _instructions: `KB search complete. Found ${uniqueEntities} unique entities. ${imageData ? `✅ Pixel data included for top result: '${imageDataFor?.title}'.` : "❌ No pixel data included. For visual analysis, call kb_get with include_image_data: true for the specific asset ID."} To show assets, use the provided 'metadata.markdown' fields.`,
+      _instructions: buildInstructions(uniqueEntities, imageData, imageDataFor, deduplicatedResults),
       _timing: finalTiming
     };
 
@@ -366,6 +426,41 @@ export async function execute(context) {
       retryable: false
     });
   }
+}
+
+/**
+ * Build the _instructions string, including asset hint guidance
+ */
+function buildInstructions(uniqueEntities, imageData, imageDataFor, results) {
+  let base = `KB search complete. Found ${uniqueEntities} unique entities. `;
+  base += imageData
+    ? `✅ Pixel data included for top result: '${imageDataFor?.title}'.`
+    : "❌ No pixel data included. For visual analysis, call kb_get with include_image_data: true for the specific asset ID.";
+  base += " To show assets, use the provided 'metadata.markdown' fields.";
+
+  // Add asset hint guidance for results that have them
+  const hintsLines = [];
+  for (const r of results) {
+    if (r._assetHints && r._assetHints.count > 0) {
+      const types = r._assetHints.types.join(', ');
+      hintsLines.push(
+        `${r.title} has ${r._assetHints.count} visual asset(s) (${types}). To show them, search with filters.related_to: "${r.id}".`
+      );
+    }
+  }
+  if (hintsLines.length > 0) {
+    base += '\n\nAsset availability:\n' + hintsLines.join('\n');
+    base += '\nWhen discussing these entities, consider fetching a representative visual to enrich the narrative.';
+  }
+
+  // Add suggestion seeds from related projects found in results
+  const projectResults = results.filter(r => r.type === 'project');
+  if (projectResults.length > 1) {
+    const related = projectResults.slice(1, 3).map(r => r.title);
+    base += `\nRelated projects found: ${related.join(', ')}. These can be suggested for further exploration.`;
+  }
+
+  return base;
 }
 
 /**

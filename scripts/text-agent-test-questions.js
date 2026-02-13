@@ -40,5 +40,10 @@ export const TEST_QUESTIONS = [
   "What makes Fram different from other design studios?",
   
   // Perplexity search test (requires real-time information)
-  "What are the latest developments in AI as of 2026?"
+  "What are the latest developments in AI as of 2026?",
+
+  // Asset surfacing and discovery tests (Q21-Q23)
+  "Tell me about the Third Ear project",
+  "What physical products has Andrei designed?",
+  "Show me something different from a different project"
 ];

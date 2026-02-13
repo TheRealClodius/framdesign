@@ -91,6 +91,24 @@ Semantic search over the Fram knowledge base (people, labs, projects, and visual
 - **Always use `metadata.markdown`** for images/videos/diagrams/gifs.
 - **Do not construct URLs manually**.
 
+## Discovery Recipes
+
+**Project deep dive** (user asks about a specific project):
+1. `kb_search` with project name query
+2. Note the project ID from results (e.g., `project:vector_watch`)
+3. `kb_search` with `filters.related_to: "project:vector_watch"` for related assets
+4. Pick 1-2 assets that support your narrative; include their `metadata.markdown`
+
+**Domain exploration** (user mentions a design domain):
+1. `kb_search` with domain query (e.g., "wearable design projects")
+2. Present the most relevant project with context
+3. If asset hints are available, fetch one representative visual
+
+**Progressive disclosure** (user wants to see more):
+1. `kb_search` with `related_to` filter for the current project
+2. Choose an asset showing a different aspect than what was already shown
+3. If no more assets exist, suggest exploring a related project
+
 ## Pitfalls / Watch Out
 
 - **Empty results can be correct**: treat it as “no match”; reformulate query or adjust `filters`.

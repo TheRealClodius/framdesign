@@ -1,5 +1,24 @@
 {
   "testName": "Image Re-fetch and Analysis Integration Test",
-  "totalToolCalls": 0,
-  "toolCalls": []
+  "totalToolCalls": 1,
+  "toolCalls": [
+    {
+      "toolId": "kb_search",
+      "args": {
+        "filters": {
+          "type": "photo",
+          "related_to": "project:vector_watch"
+        },
+        "query": "photo"
+      },
+      "ok": false,
+      "durationMs": 436,
+      "hasImageData": false,
+      "entityId": null,
+      "entityType": null,
+      "blobId": null,
+      "markdown": null,
+      "searchResults": null
+    }
+  ]
 }
