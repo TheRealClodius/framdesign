@@ -6,13 +6,15 @@ import { MESSAGE_LIMITS } from "./constants";
 import type { Message } from "./storage";
 
 /**
- * Prepare messages for sending to API (remove streaming, limit count, extract role/content)
+ * Prepare messages for sending to API (remove streaming, limit count, extract fields)
  * Also filters out any assistant messages that appear before the first user message,
  * since the Gemini API requires conversations to start with a user message.
+ *
+ * Preserves: role, content, timestamp (for time context in messages)
  */
 export function prepareMessagesForSend(
   messages: Message[]
-): Array<{ role: string; content: string }> {
+): Array<{ role: string; content: string; timestamp?: number }> {
   const filtered = messages.filter((m) => !m.streaming);
 
   // Find the index of the first user message
@@ -26,5 +28,9 @@ export function prepareMessagesForSend(
 
   return messagesFromFirstUser
     .slice(-MESSAGE_LIMITS.MAX_SENT_MESSAGES)
-    .map((m) => ({ role: m.role, content: m.content }));
+    .map((m) => ({
+      role: m.role,
+      content: m.content,
+      ...(m.timestamp ? { timestamp: m.timestamp } : {}),
+    }));
 }

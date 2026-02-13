@@ -297,7 +297,8 @@ export async function searchSimilar(
     });
   } catch (error: any) {
     // If collection doesn't exist, return empty results
-    if (error.message?.includes('doesn\'t exist') || error.message?.includes('not found')) {
+    const errorMsg = (error.message || '').toLowerCase();
+    if (errorMsg.includes('doesn\'t exist') || errorMsg.includes('not found')) {
       return [];
     }
     // Log detailed error information from Qdrant
@@ -333,7 +334,8 @@ export async function deleteDocuments(ids: string[]): Promise<void> {
     console.log(`[vector-store] Deleted ${ids.length} documents`);
   } catch (error: any) {
     // If collection doesn't exist, nothing to delete
-    if (error.message?.includes('doesn\'t exist') || error.message?.includes('not found')) {
+    const errorMsg = (error.message || '').toLowerCase();
+    if (errorMsg.includes('doesn\'t exist') || errorMsg.includes('not found')) {
       return;
     }
     console.error('[vector-store] Error deleting documents:', error);
@@ -378,7 +380,8 @@ export async function getAllDocumentIds(): Promise<string[]> {
     return allIds;
   } catch (error: any) {
     // If collection doesn't exist, return empty array
-    if (error.message?.includes('doesn\'t exist') || error.message?.includes('not found')) {
+    const errorMsg = (error.message || '').toLowerCase();
+    if (errorMsg.includes('doesn\'t exist') || errorMsg.includes('not found')) {
       return [];
     }
     console.error('[vector-store] Error getting document IDs:', error);
@@ -400,7 +403,8 @@ export async function hasDocuments(): Promise<boolean> {
     return (collectionInfo.points_count || 0) > 0;
   } catch (error: any) {
     // If collection doesn't exist, return false
-    if (error.message?.includes('doesn\'t exist') || error.message?.includes('not found')) {
+    const errorMsg = (error.message || '').toLowerCase();
+    if (errorMsg.includes('doesn\'t exist') || errorMsg.includes('not found')) {
       return false;
     }
     console.warn('[vector-store] Error checking documents:', error);

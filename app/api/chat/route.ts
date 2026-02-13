@@ -354,6 +354,7 @@ function recordToolResult(
 let systemPromptCache: string | null = null;
 let systemPromptCachePromise: Promise<string | null> | null = null;
 let systemPromptHash: string | null = null; // Hash of the system prompt to detect changes
+let systemPromptCacheCreatedAt: number = 0; // Timestamp when cache was created
 
 /**
  * Creates a hash of the conversation history to identify unique conversations
@@ -575,6 +576,46 @@ function toRecord(value: unknown): Record<string, unknown> {
 }
 
 /**
+ * Enforce Gemini API role alternation rules on a message array.
+ *
+ * Gemini requires:
+ * 1. Conversations MUST start with a "user" role message
+ * 2. Roles MUST strictly alternate: user → model → user → model
+ *
+ * When violations are detected (e.g. due to message windowing splitting
+ * on an assistant message, or messages being dropped after suggestion stripping),
+ * this function merges consecutive same-role messages by combining their parts.
+ */
+function enforceRoleAlternation(messages: ContentMessage[]): ContentMessage[] {
+  if (messages.length === 0) return messages;
+
+  const result: ContentMessage[] = [];
+
+  for (const msg of messages) {
+    const prev = result[result.length - 1];
+    if (prev && prev.role === msg.role) {
+      // Merge consecutive same-role messages by combining parts
+      prev.parts = [...prev.parts, ...msg.parts];
+      console.log(`[Role Alternation] Merged consecutive ${msg.role} messages (${prev.parts.length} parts total)`);
+    } else {
+      result.push({ ...msg, parts: [...msg.parts] });
+    }
+  }
+
+  // Ensure first message is "user" role (Gemini requirement)
+  if (result.length > 0 && result[0].role !== "user") {
+    // Prepend a minimal user context message
+    result.unshift({
+      role: "user",
+      parts: [{ text: "[Conversation continues]" }],
+    });
+    console.log(`[Role Alternation] Prepended user message — first message was "${result[1]?.role}"`);
+  }
+
+  return result;
+}
+
+/**
  * Enforce token budget by trimming summary and dropping oldest context items.
  */
 function enforceTokenBudget(
@@ -639,9 +680,21 @@ async function getSystemPromptCache(ai: GoogleGenAI, providerSchemas: ProviderSc
     console.log("System prompt changed, invalidating cache");
     systemPromptCache = null;
     systemPromptCachePromise = null;
+    systemPromptCacheCreatedAt = 0;
     // Note: We don't delete the old cache from Gemini API - it will expire naturally
   }
-  
+
+  // Invalidate cache if it has exceeded Gemini's TTL (with 60s safety margin)
+  if (systemPromptCache && systemPromptCacheCreatedAt > 0) {
+    const cacheAgeSeconds = (Date.now() - systemPromptCacheCreatedAt) / 1000;
+    if (cacheAgeSeconds >= CACHE_CONFIG.TTL_SECONDS - 60) {
+      console.log(`System prompt cache expired (age: ${cacheAgeSeconds.toFixed(0)}s, TTL: ${CACHE_CONFIG.TTL_SECONDS}s), recreating`);
+      systemPromptCache = null;
+      systemPromptCachePromise = null;
+      systemPromptCacheCreatedAt = 0;
+    }
+  }
+
   // Update hash to current
   systemPromptHash = currentPromptHash;
 
@@ -678,6 +731,7 @@ async function getSystemPromptCache(ai: GoogleGenAI, providerSchemas: ProviderSc
       });
 
       systemPromptCache = cache.name || null;
+      systemPromptCacheCreatedAt = Date.now();
       console.log("System prompt cache created:", cache.name);
       return cache.name || null;
     } catch (error: unknown) {
@@ -1528,6 +1582,11 @@ export async function POST(request: Request) {
       cachedContent = undefined;
       console.log("Caching disabled, sending summary + recent messages");
     }
+
+    // Enforce role alternation before sending to Gemini
+    // This fixes issues where message windowing splits on an assistant message,
+    // or where stripped assistant messages create consecutive same-role messages
+    contentsToSend = enforceRoleAlternation(contentsToSend);
 
     // Enforce token budget after cache decisions
     const budgetResult = enforceTokenBudget(contentsToSend, summary, TOKEN_CONFIG.MAX_TOKENS);
@@ -3051,7 +3110,42 @@ export async function POST(request: Request) {
                     accumulatedFullText += responseText;
                     console.log(`Final response streamed: ${responseText.length} bytes (after ${chainCount} chained calls)`);
                   } else {
-                    console.warn(`No text in final response after ${chainCount} chained calls`);
+                    console.warn(`No text in final response after ${chainCount} chained calls, retrying without cache...`);
+
+                    // Retry the last API call without cache
+                    try {
+                      const retryConfig: GeminiConfig = {
+                        tools: [{ functionDeclarations: providerSchemas }],
+                        systemInstruction: FRAM_SYSTEM_PROMPT
+                      };
+                      const retryStream = await ai.models.generateContentStream({
+                        model: "gemini-2.5-flash",
+                        contents: currentContents,
+                        config: retryConfig
+                      });
+                      for await (const chunk of retryStream) {
+                        const typed = chunk as StreamChunk;
+                        const parts = typed?.candidates?.[0]?.content?.parts || [];
+                        for (const part of parts) {
+                          if (part.text) {
+                            accumulatedFullText += part.text;
+                            const encoded = encoder.encode(part.text);
+                            totalBytesSent += encoded.length;
+                            controller.enqueue(encoded);
+                          }
+                        }
+                      }
+                      if (accumulatedFullText.trim()) {
+                        console.log(`[Chain Retry] Succeeded: ${accumulatedFullText.length} chars`);
+                        systemPromptCache = null;
+                        systemPromptCachePromise = null;
+                        systemPromptCacheCreatedAt = 0;
+                      } else {
+                        console.warn(`[Chain Retry] Also produced no text`);
+                      }
+                    } catch (retryError) {
+                      console.error(`[Chain Retry] Failed:`, retryError);
+                    }
                   }
 
                   if (toolErrorNotices.length > 0) {
@@ -3511,16 +3605,59 @@ export async function POST(request: Request) {
                 }
               }
 
-              // CRITICAL: Ensure we never return an empty response (truly last resort)
-              // If agent produced no text AND no late tool call was executed, provide a fallback
+              // CRITICAL: If the model produced no text, retry once without cache
+              // This handles cases where a stale/invalid cache caused Gemini to
+              // return an empty or thinking-only response
               if (!accumulatedFullText.trim()) {
-                console.warn(`[Empty Response Debug] Triggering fallback. chunksProcessed=${chunksProcessed}, bytesSent=${bytesSent}, lateFunctionCall=${lateFunctionCall ? (lateFunctionCall as {name: string}).name : 'none'}, bufferedChunks=${bufferedChunks.length}`);
-                const fallbackMessage = "I'm ready to help. Could you please clarify what you'd like to know?";
-                console.warn(`[Empty Response] Agent returned no text - using fallback message`);
-                const encoded = encoder.encode(fallbackMessage);
-                bytesSent += encoded.length;
-                controller.enqueue(encoded);
-                accumulatedFullText = fallbackMessage;
+                console.warn(`[Empty Response] No text produced. chunksProcessed=${chunksProcessed}, bytesSent=${bytesSent}, lateFunctionCall=${lateFunctionCall ? (lateFunctionCall as {name: string}).name : 'none'}, bufferedChunks=${bufferedChunks.length}`);
+                console.warn(`[Empty Response] Retrying Gemini API call without cache...`);
+
+                try {
+                  // Force non-cached retry with explicit system prompt and tools
+                  const retryConfig: GeminiConfig = {
+                    tools: [{ functionDeclarations: providerSchemas }],
+                    systemInstruction: FRAM_SYSTEM_PROMPT
+                  };
+
+                  const retryStream = await ai.models.generateContentStream({
+                    model: "gemini-2.5-flash",
+                    contents: contentsToSend,
+                    config: retryConfig
+                  });
+
+                  for await (const chunk of retryStream) {
+                    const typed = chunk as StreamChunk;
+                    const parts = typed?.candidates?.[0]?.content?.parts || [];
+                    for (const part of parts) {
+                      if (part.text) {
+                        accumulatedFullText += part.text;
+                        const encoded = encoder.encode(part.text);
+                        bytesSent += encoded.length;
+                        controller.enqueue(encoded);
+                      }
+                    }
+                  }
+
+                  if (accumulatedFullText.trim()) {
+                    console.log(`[Empty Response] Retry succeeded: ${accumulatedFullText.length} chars`);
+                    // Invalidate stale system prompt cache so next request creates a fresh one
+                    systemPromptCache = null;
+                    systemPromptCachePromise = null;
+                    systemPromptCacheCreatedAt = 0;
+                  }
+                } catch (retryError) {
+                  console.error(`[Empty Response] Retry failed:`, retryError);
+                }
+
+                // Truly last resort: if retry also produced nothing
+                if (!accumulatedFullText.trim()) {
+                  const fallbackMessage = "I'm sorry, I wasn't able to process that. Could you try again?";
+                  console.warn(`[Empty Response] Retry also returned no text - using fallback`);
+                  const encoded = encoder.encode(fallbackMessage);
+                  bytesSent += encoded.length;
+                  controller.enqueue(encoded);
+                  accumulatedFullText = fallbackMessage;
+                }
               }
 
               // T6: Final response sent (plain text path)
