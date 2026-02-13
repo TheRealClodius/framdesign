@@ -1,3 +1,25 @@
+# CLAUDE.md Redesign Implementation Plan
+
+> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+
+**Goal:** Transform CLAUDE.md from a 445-line reference encyclopedia into a ~250-line action-first field manual, moving reference material to ARCHITECTURE.md.
+
+**Architecture:** Two-file split. CLAUDE.md becomes a playbook (what do I do?) with critical rules, decision trees, code patterns, and dependency chains. ARCHITECTURE.md becomes the reference (what exists?) with detailed descriptions, diagrams, history, and troubleshooting. Existing AGENTS.md content is consolidated into ARCHITECTURE.md to eliminate duplication.
+
+**Tech Stack:** Markdown files only. No code changes.
+
+---
+
+### Task 1: Write the new CLAUDE.md
+
+**Files:**
+- Modify: `CLAUDE.md` (complete rewrite)
+
+**Step 1: Write the new CLAUDE.md with action-first content**
+
+Replace the entire file with this structure (~250 lines):
+
+```markdown
 # CLAUDE.md
 
 FRAM: dual-agent conversational AI (text + voice) for a design knowledge base.
@@ -142,3 +164,111 @@ Voice server also needs its own `.env` in `voice-server/` with: `GEMINI_API_KEY`
 ## Reference
 
 For detailed architecture, diagrams, tool memory internals, deployment configs, and project history, see `ARCHITECTURE.md`.
+```
+
+**Step 2: Verify the file reads correctly**
+
+Run: `wc -l CLAUDE.md`
+Expected: approximately 120-140 lines (the markdown above, with blank lines)
+
+**Step 3: Commit**
+
+```bash
+git add CLAUDE.md
+git commit -m "refactor: rewrite CLAUDE.md as action-first field manual
+
+Move from 445-line reference encyclopedia to ~130-line
+action-oriented playbook with critical rules, decision trees,
+code patterns, dependency chains, and opinionated defaults."
+```
+
+---
+
+### Task 2: Write ARCHITECTURE.md with reference material
+
+**Files:**
+- Create: `ARCHITECTURE.md` (root of repo)
+
+**Step 1: Write ARCHITECTURE.md**
+
+Consolidate reference material from the old CLAUDE.md and existing AGENTS.md into a single comprehensive reference document. Include:
+
+1. **Project overview** (from old CLAUDE.md lines 1-27)
+2. **Technology stack** (from old CLAUDE.md lines 14-26)
+3. **Directory structure** (from old CLAUDE.md lines 28-109)
+4. **Architecture diagram** (from AGENTS.md lines 124-168)
+5. **Service communication flows** (from AGENTS.md lines 172-256)
+6. **Tool system details** (from old CLAUDE.md lines 148-198 + AGENTS.md lines 72-91)
+7. **Tool memory architecture** (from old CLAUDE.md lines 211-240)
+8. **Message context management** (from old CLAUDE.md lines 169-176)
+9. **Deployment configuration** (from AGENTS.md lines 380-424)
+10. **Critical constraints & budgets** (from AGENTS.md lines 469-490)
+11. **Troubleshooting** (from old CLAUDE.md lines 345-363)
+12. **Production readiness & quality metrics** (from old CLAUDE.md lines 414-444)
+13. **Recent improvements & changelog** (from old CLAUDE.md lines 365-412)
+14. **Documentation index** (from old CLAUDE.md lines 322-329)
+
+**Step 2: Verify completeness**
+
+Manually diff: confirm every section from old CLAUDE.md and AGENTS.md is represented in either new CLAUDE.md or ARCHITECTURE.md. No information should be lost.
+
+**Step 3: Commit**
+
+```bash
+git add ARCHITECTURE.md
+git commit -m "docs: add ARCHITECTURE.md with consolidated reference material
+
+Consolidates detailed architecture, diagrams, deployment configs,
+tool memory internals, production metrics, and project history
+from old CLAUDE.md and AGENTS.md into a single reference doc."
+```
+
+---
+
+### Task 3: Update AGENTS.md to avoid duplication
+
+**Files:**
+- Modify: `AGENTS.md`
+
+**Step 1: Slim down AGENTS.md**
+
+Since ARCHITECTURE.md now contains the comprehensive reference, update AGENTS.md to be a thin redirect or remove duplicate content. Keep only agent-specific content that isn't in ARCHITECTURE.md (e.g., the decision tree for common tasks which is agent-workflow-specific).
+
+Alternatively, if all content has been absorbed into ARCHITECTURE.md, replace AGENTS.md with a pointer:
+
+```markdown
+# AGENTS.md
+
+For architecture details, see [ARCHITECTURE.md](ARCHITECTURE.md).
+For action-oriented coding guidance, see [CLAUDE.md](CLAUDE.md).
+```
+
+**Step 2: Commit**
+
+```bash
+git add AGENTS.md
+git commit -m "docs: slim AGENTS.md, point to ARCHITECTURE.md and CLAUDE.md"
+```
+
+---
+
+### Task 4: Verify the full system works
+
+**Step 1: Run lint to make sure no markdown issues**
+
+Run: `npm run lint`
+Expected: PASS (lint doesn't check .md files, but good to verify nothing else broke)
+
+**Step 2: Run tests to confirm nothing is affected**
+
+Run: `npm test`
+Expected: All tests pass (no code changes, only docs)
+
+**Step 3: Verify build**
+
+Run: `npm run build`
+Expected: Build succeeds (docs don't affect build, but confirm)
+
+**Step 4: Commit verification note (if needed)**
+
+No commit needed if all passes. If something fails, investigate - it would be unrelated to doc changes.
