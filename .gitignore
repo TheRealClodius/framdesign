@@ -60,3 +60,6 @@ vector-search-api/node_modules/
 gcs-key.json
 gcs-service-account-key.json
 # GCS service account key - DO NOT COMMITtest-run.log
+
+# usage tracking
+.usage/
