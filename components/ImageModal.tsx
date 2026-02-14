@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import Image from "next/image";
 import ModalCloseButton from "./ModalCloseButton";
 
 interface ImageModalProps {
@@ -130,12 +131,12 @@ export default function ImageModal({ src, alt, onClose }: ImageModalProps) {
             <p className="text-xs text-gray-500 mt-4">The image could not be loaded. It may have expired or been removed.</p>
           </div>
         ) : (
-          <img
+          <Image
             src={src}
             alt={alt}
-            style={{ 
-              maxWidth: "100%",
-              maxHeight: "100%",
+            fill
+            unoptimized
+            style={{
               objectFit: "contain",
               touchAction: "pan-x pan-y pinch-zoom",
               borderRadius: "0.5rem"

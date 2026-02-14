@@ -558,6 +558,10 @@ export default function ChatInterface() {
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  // Keep a ref to latest messages to avoid stale closures in async handlers
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
+
   // Suggestion image hover state
   const [hoveredSuggestion, setHoveredSuggestion] = useState<{
     index: number;
@@ -1186,6 +1190,7 @@ export default function ChatInterface() {
         });
       }
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- Handlers use functional state updaters and refs, so [] deps is intentional and correct
   }, []);
 
   // Monitor timeout expiration
@@ -1506,12 +1511,12 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
             shouldStartNewTurn.current = true;
             console.log('🔴 FLAG SET: Agent starting voice mode (streaming) - shouldStartNewTurn = TRUE');
             
-            // Prepare conversation history for context injection
-            const conversationHistory = messages.map(m => ({
+            // Use messagesRef for latest state in async context
+            const conversationHistory = messagesRef.current.map(m => ({
               role: m.role,
               content: m.content
             }));
-            
+
             // Start voice session with pending request if specified
             const pendingRequest = response.pendingRequest || null;
             if (pendingRequest) {
@@ -1623,12 +1628,12 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
             shouldStartNewTurn.current = true;
             console.log('🔴 FLAG SET: Agent starting voice mode (JSON) - shouldStartNewTurn = TRUE');
             
-            // Prepare conversation history for context injection
-            const conversationHistory = messages.map(m => ({
+            // Use messagesRef for latest state in async context
+            const conversationHistory = messagesRef.current.map(m => ({
               role: m.role,
               content: m.content
             }));
-            
+
             // Start voice session with pending request if specified
             const pendingRequest = data.pendingRequest || null;
             if (pendingRequest) {
@@ -1659,7 +1664,10 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
     } catch (error) {
       console.error("Chat error:", error);
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      
+
+      // Restore user input so they don't lose their message on error
+      setInput(userMessage);
+
       setMessages((prev) => [
         ...prev,
         { id: generateMessageId(), role: "assistant", content: `ERROR: ${errorMessage}. PLEASE TRY AGAIN.` }
@@ -1860,6 +1868,39 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
                                     });
                                   }
                                 }}
+                                onFocus={async (e) => {
+                                  if (isLoading || isVoiceMode || isBlocked) return;
+                                  const buttonRect = e.currentTarget.getBoundingClientRect();
+                                  activeHoverKeyRef.current = suggestion;
+                                  let imageInfo = suggestionImageCache.current.get(suggestion);
+                                  if (!imageInfo) {
+                                    try {
+                                      imageInfo = await getSuggestionImage(suggestion);
+                                      suggestionImageCache.current.set(suggestion, imageInfo ?? null);
+                                      if (imageInfo) {
+                                        const img = new Image();
+                                        img.src = imageInfo.url;
+                                      }
+                                    } catch {
+                                      suggestionImageCache.current.set(suggestion, null);
+                                      return;
+                                    }
+                                  }
+                                  if (activeHoverKeyRef.current === suggestion && imageInfo) {
+                                    setHoveredSuggestion({
+                                      index: idx,
+                                      imagePath: imageInfo.url,
+                                      alt: imageInfo.alt,
+                                      buttonRect
+                                    });
+                                  }
+                                }}
+                                onBlur={() => {
+                                  if (activeHoverKeyRef.current === suggestion) {
+                                    activeHoverKeyRef.current = null;
+                                  }
+                                  setHoveredSuggestion(null);
+                                }}
                                 onMouseLeave={() => {
                                   if (activeHoverKeyRef.current === suggestion) {
                                     activeHoverKeyRef.current = null;
@@ -1886,7 +1927,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
             );
           })}
           {isLoading && (
-             <div className="flex justify-start">
+             <div className="flex justify-start" role="status" aria-live="polite">
                <div className="max-w-[85%] text-left">
                  <p className={`uppercase text-[0.75rem] mb-1 tracking-wider transition-colors duration-300 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>FRAM</p>
                  {loadingStatus ? (
@@ -1948,12 +1989,14 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
                   }
                 }}
                 disabled={isVoiceMode}
+                aria-label="Chat message input"
                 className={`w-full bg-transparent py-2 pr-12 focus:outline-none transition-colors rounded-none resize-none overflow-y-auto max-h-[120px] disabled:opacity-50 disabled:cursor-not-allowed ${isDark ? 'border-b border-gray-600 focus:border-gray-400 placeholder:text-gray-600 text-gray-100' : 'border-b border-gray-300 focus:border-black placeholder:text-gray-300 text-black'}`}
                 placeholder={isVoiceMode ? "Voice mode active..." : "Type your message..."}
               />
               <button
                 type="submit"
                 disabled={isLoading || isVoiceMode || !input.trim()}
+                aria-label="Send message"
                 className={`absolute right-0 top-2 text-[0.75rem] uppercase tracking-wider transition-colors ${isDark ? 'text-gray-100 disabled:text-gray-600 hover:text-gray-300' : 'text-black disabled:text-gray-300 hover:text-gray-600'}`}
               >
                 Send
@@ -2027,17 +2070,17 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
                   // Start voice mode
                   try {
                     setIsVoiceLoading(true);
-                    
+
                     // User manually starting voice - next transcript should be a new message
                     shouldStartNewTurn.current = true;
                     console.log('🔴 FLAG SET: User starting voice mode - shouldStartNewTurn = TRUE');
-                    
-                    // Prepare conversation history for context injection
-                    const conversationHistory = messages.map(m => ({
+
+                    // Use messagesRef for latest state in async context
+                    const conversationHistory = messagesRef.current.map(m => ({
                       role: m.role,
                       content: m.content
                     }));
-                    
+
                     // Start voice session
                     await voiceService.start(conversationHistory);
                     // Session started event will update state

@@ -196,6 +196,7 @@ function ChatImage({
           </span>
         </span>
       )}
+      {/* eslint-disable-next-line @next/next/no-img-element -- onError handler needs direct DOM access for signed URL refresh (img.src = freshUrl) */}
       <img
         src={normalizedSrc}
         alt={alt}
