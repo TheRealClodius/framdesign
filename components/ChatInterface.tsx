@@ -1717,8 +1717,8 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
   return (
     <section className={`w-full max-w-[28rem] md:max-w-[950px] mx-auto px-4 pt-12 md:pt-0 pb-0 md:pb-0 h-fit md:flex-1 md:flex md:flex-col md:min-h-0 overflow-x-hidden transition-colors duration-300 ${isDark ? 'bg-gray-900' : 'bg-white'}`}>
       {/* Messages wrapper - extends to top on desktop */}
-      <div className="flex flex-col h-[600px] md:flex-1 md:min-h-0 font-mono text-[0.875rem]">
-        <div ref={messagesContainerRef} className={`h-[600px] md:flex-1 md:min-h-0 overflow-y-auto overflow-x-hidden mb-2 scrollbar-boxy ${isDark ? 'scrollbar-dark' : ''}`}>
+      <div className="relative flex flex-col h-[600px] md:flex-1 md:min-h-0 font-mono text-[0.875rem]">
+        <div ref={messagesContainerRef} className={`h-[600px] md:flex-1 md:min-h-0 overflow-y-auto overflow-x-hidden scrollbar-boxy ${isDark ? 'scrollbar-dark' : ''}`}>
           {/* Header - sticky at top of scroll area */}
           <div className={`mb-10 md:mb-0 sticky top-0 z-10 backdrop-blur-sm md:py-6 md:-mx-4 md:px-4 text-center flex-shrink-0 flex items-center justify-center gap-4 transition-colors duration-300 ${isDark ? 'bg-gray-900/80' : 'bg-white/80'}`}>
             <p className={`text-[0.75rem] font-mono tracking-wider transition-colors duration-300 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>FRAM ASSISTANT</p>
@@ -1945,196 +1945,176 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
              </div>
           )}
           <div ref={messagesEndRef} />
+          <div className="h-32" aria-hidden="true" />
           </div>
         </div>
 
-        {isBlocked ? (
-          <div className={`py-4 flex-shrink-0 transition-colors duration-300 ${isDark ? 'border-t border-gray-700' : 'border-t border-gray-200'}`}>
-            <p className={`text-[0.8rem] leading-relaxed mb-4 transition-colors duration-300 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-              {budgetExhausted ? BUDGET_EXHAUSTED_MESSAGE : BLOCKED_MESSAGE}
-            </p>
-            {budgetExhausted && (
-              <div className="flex justify-start">
-                <a
-                  href="mailto:andrei@fram.design?subject=Partner%20Account%20Request&body=Hi%20Andrei%2C%0A%0AI've%20reached%20my%20conversation%20limit%20with%20Fram%20and%20would%20like%20to%20upgrade%20to%20a%20partner%20account.%0A%0AThanks!"
-                  className={`text-[0.75rem] font-mono uppercase tracking-wider transition-colors px-3 py-1.5 border rounded ${isDark ? 'text-gray-400 hover:text-gray-100 border-gray-600 hover:border-gray-400' : 'text-gray-400 hover:text-black border-gray-300 hover:border-black'}`}
-                >
-                  Send Email
-                </a>
-              </div>
-            )}
-            {process.env.NODE_ENV === 'development' && !budgetExhausted && (
-              <div className="text-center">
-                <button
-                  onClick={resetTimeout}
-                  className={`text-[0.7rem] uppercase tracking-wider underline transition-colors duration-300 ${isDark ? 'text-gray-500 hover:text-gray-300' : 'text-gray-400 hover:text-gray-600'}`}
-                >
-                  Reset timeout (dev)
-                </button>
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="flex-shrink-0">
-            <form onSubmit={handleSubmit} className="relative max-w-[500px] mx-auto w-full">
-              <textarea
-                ref={textareaRef}
-                rows={1}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSubmit();
-                  }
-                }}
-                disabled={isVoiceMode}
-                aria-label="Chat message input"
-                className={`w-full bg-transparent py-2 pr-12 focus:outline-none transition-colors rounded-none resize-none overflow-y-auto max-h-[120px] disabled:opacity-50 disabled:cursor-not-allowed ${isDark ? 'border-b border-gray-600 focus:border-gray-400 placeholder:text-gray-600 text-gray-100' : 'border-b border-gray-300 focus:border-black placeholder:text-gray-300 text-black'}`}
-                placeholder={isVoiceMode ? "Voice mode active..." : "Type your message..."}
-              />
-              <button
-                type="submit"
-                disabled={isLoading || isVoiceMode || !input.trim()}
-                aria-label="Send message"
-                className={`absolute right-0 top-2 text-[0.75rem] uppercase tracking-wider transition-colors ${isDark ? 'text-gray-100 disabled:text-gray-600 hover:text-gray-300' : 'text-black disabled:text-gray-300 hover:text-gray-600'}`}
-              >
-                Send
-              </button>
-            </form>
-            
-            {/* Voice Mode Controls */}
-            <div className="flex flex-col mt-4 space-y-2">
-            {/* Voice Error Display */}
-            {voiceError && (
-              <div className={`w-full max-w-[500px] mx-auto px-4 py-2 rounded text-[0.75rem] font-mono ${
-                isReconnecting
-                  ? isDark
-                    ? 'bg-yellow-900/30 border border-yellow-700/50 text-yellow-300'
-                    : 'bg-yellow-50 border border-yellow-200 text-yellow-700'
-                  : isDark
-                    ? 'bg-red-900/30 border border-red-700/50 text-red-300'
-                    : 'bg-red-50 border border-red-200 text-red-700'
-              }`}>
-                <p className="uppercase text-[0.7rem] mb-1 tracking-wider">
-                  {isReconnecting ? 'Reconnecting' : 'Error'}
-                </p>
-                <div>{voiceError}</div>
-              </div>
-            )}
-
-            {/* Audio Playback Disabled Notice */}
-            {audioPlaybackDisabled && isVoiceMode && (
-              <div className={`w-full max-w-[500px] mx-auto px-4 py-2 rounded text-[0.75rem] font-mono ${isDark ? 'bg-yellow-900/30 border border-yellow-700/50 text-yellow-300' : 'bg-yellow-50 border border-yellow-200 text-yellow-700'}`}>
-                <p className="uppercase text-[0.7rem] mb-1 tracking-wider">Audio Disabled</p>
-                <div>Audio playback unavailable. Transcripts will still be displayed.</div>
-              </div>
-            )}
-            
-            {/* Voice Button Container */}
-            <div className="max-w-[500px] mx-auto w-full flex justify-end">
-              <button
-              onClick={async () => {
-                // Unlock audio context during user interaction (required for mobile)
-                await unlockAudio();
-                
-                if (isVoiceMode) {
-                  // End voice mode
-                  try {
-                    if (!hasShownEndCallSummary.current) {
-                      hasShownEndCallSummary.current = true;
-                      const endCallMessage = buildEndCallMessage(voiceSessionStartTime.current);
-                      setMessages((prev) => [
-                        ...prev,
-                        { id: generateMessageId(), role: "assistant", content: endCallMessage }
-                      ]);
-                    }
-                    
-                    // Play end sound effect
-                    playSoundEffect('/sounds/end.mp3');
-                    
-                    // Reset session start time
-                    voiceSessionStartTime.current = null;
-                    
-                    await voiceService.stop();
-                    // Transcripts will be integrated via the 'complete' event handler
-                  } catch (error) {
-                    console.error('Error stopping voice session:', error);
-                    setIsVoiceMode(false);
-                    setIsVoiceLoading(false);
-                  } finally {
-                    // Reset session start time
-                    voiceSessionStartTime.current = null;
-                  }
-                } else {
-                  // Start voice mode
-                  try {
-                    setIsVoiceLoading(true);
-
-                    // User manually starting voice - next transcript should be a new message
-                    shouldStartNewTurn.current = true;
-                    console.log('🔴 FLAG SET: User starting voice mode - shouldStartNewTurn = TRUE');
-
-                    // Use messagesRef for latest state in async context
-                    const conversationHistory = messagesRef.current.map(m => ({
-                      role: m.role,
-                      content: m.content
-                    }));
-
-                    // Start voice session
-                    await voiceService.start(conversationHistory);
-                    // Session started event will update state
-                  } catch (error) {
-                    console.error('Error starting voice session:', error);
-                    setIsVoiceLoading(false);
-                    setIsVoiceMode(false);
-                    
-                    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-                    let userFriendlyMessage = errorMessage;
-                    
-                    // Provide specific guidance based on error type
-                    if (errorMessage.includes('permission') || errorMessage.includes('denied')) {
-                      userFriendlyMessage = 'Microphone permission denied. Please grant microphone access in your browser settings and try again.';
-                    } else if (errorMessage.includes('WebSocket') || errorMessage.includes('connection')) {
-                      userFriendlyMessage = 'Could not connect to voice server. Please check your internet connection and try again.';
-                    } else if (errorMessage.includes('Invalid WebSocket URL')) {
-                      userFriendlyMessage = 'Voice server not configured. Please contact support.';
-                    }
-                    
-                    setMessages((prev) => [
-                      ...prev,
-                      { 
-                        id: generateMessageId(), 
-                        role: "assistant", 
-                        content: `VOICE ERROR: ${userFriendlyMessage}. YOU CAN CONTINUE USING TEXT CHAT.` 
-                      }
-                    ]);
-                  }
-                }
-              }}
-              disabled={isVoiceLoading || isLoading}
-              className={`text-[0.75rem] uppercase tracking-wider transition-colors ${
-                isVoiceMode
-                  ? isDark
-                    ? "text-red-400 hover:text-red-300"
-                    : "text-red-600 hover:text-red-700"
-                  : isDark
-                    ? "text-gray-100 hover:text-gray-300"
-                    : "text-black hover:text-gray-600"
-              } ${isVoiceLoading || isLoading ? "opacity-50 cursor-not-allowed" : ""}`}
-            >
-              {isVoiceLoading ? (
-                "Starting..."
-              ) : isVoiceMode ? (
-                "END"
-              ) : (
-                "VOICE"
+        {/* Floating prompt input */}
+        <div className={`absolute bottom-0 left-0 right-0 z-20 px-4 pb-4 pt-2 backdrop-blur-md transition-colors duration-300 ${isDark ? 'bg-gray-900/80' : 'bg-white/80'}`}>
+          {isBlocked ? (
+            <div className="max-w-[500px] mx-auto">
+              <p className={`text-[0.8rem] leading-relaxed mb-4 transition-colors duration-300 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                {budgetExhausted ? BUDGET_EXHAUSTED_MESSAGE : BLOCKED_MESSAGE}
+              </p>
+              {budgetExhausted && (
+                <div className="flex justify-start">
+                  <a
+                    href="mailto:andrei@fram.design?subject=Partner%20Account%20Request&body=Hi%20Andrei%2C%0A%0AI've%20reached%20my%20conversation%20limit%20with%20Fram%20and%20would%20like%20to%20upgrade%20to%20a%20partner%20account.%0A%0AThanks!"
+                    className={`text-[0.75rem] font-mono uppercase tracking-wider transition-colors px-3 py-1.5 border rounded ${isDark ? 'text-gray-400 hover:text-gray-100 border-gray-600 hover:border-gray-400' : 'text-gray-400 hover:text-black border-gray-300 hover:border-black'}`}
+                  >
+                    Send Email
+                  </a>
+                </div>
               )}
-              </button>
+              {process.env.NODE_ENV === 'development' && !budgetExhausted && (
+                <div className="text-center">
+                  <button
+                    onClick={resetTimeout}
+                    className={`text-[0.7rem] uppercase tracking-wider underline transition-colors duration-300 ${isDark ? 'text-gray-500 hover:text-gray-300' : 'text-gray-400 hover:text-gray-600'}`}
+                  >
+                    Reset timeout (dev)
+                  </button>
+                </div>
+              )}
             </div>
+          ) : (
+            <div className="max-w-[500px] mx-auto w-full">
+              {/* Voice error/status banners */}
+              {voiceError && (
+                <div className={`mb-2 px-4 py-2 rounded text-[0.75rem] font-mono ${
+                  isReconnecting
+                    ? isDark
+                      ? 'bg-yellow-900/30 border border-yellow-700/50 text-yellow-300'
+                      : 'bg-yellow-50 border border-yellow-200 text-yellow-700'
+                    : isDark
+                      ? 'bg-red-900/30 border border-red-700/50 text-red-300'
+                      : 'bg-red-50 border border-red-200 text-red-700'
+                }`}>
+                  <p className="uppercase text-[0.7rem] mb-1 tracking-wider">
+                    {isReconnecting ? 'Reconnecting' : 'Error'}
+                  </p>
+                  <div>{voiceError}</div>
+                </div>
+              )}
+
+              {audioPlaybackDisabled && isVoiceMode && (
+                <div className={`mb-2 px-4 py-2 rounded text-[0.75rem] font-mono ${isDark ? 'bg-yellow-900/30 border border-yellow-700/50 text-yellow-300' : 'bg-yellow-50 border border-yellow-200 text-yellow-700'}`}>
+                  <p className="uppercase text-[0.7rem] mb-1 tracking-wider">Audio Disabled</p>
+                  <div>Audio playback unavailable. Transcripts will still be displayed.</div>
+                </div>
+              )}
+
+              {/* Input row: textarea + action buttons */}
+              <form onSubmit={handleSubmit} className="flex items-end gap-3">
+                <textarea
+                  ref={textareaRef}
+                  rows={1}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSubmit();
+                    }
+                  }}
+                  disabled={isVoiceMode}
+                  aria-label="Chat message input"
+                  className={`flex-1 bg-transparent py-2 focus:outline-none transition-colors rounded-none resize-none overflow-y-auto max-h-[120px] disabled:opacity-50 disabled:cursor-not-allowed ${isDark ? 'border-b border-gray-600 focus:border-gray-400 placeholder:text-gray-600 text-gray-100' : 'border-b border-gray-300 focus:border-black placeholder:text-gray-300 text-black'}`}
+                  placeholder={isVoiceMode ? "Voice mode active..." : "Type your message..."}
+                />
+                <div className="flex items-center gap-3 pb-2 flex-shrink-0">
+                  <button
+                    type="submit"
+                    disabled={isLoading || isVoiceMode || !input.trim()}
+                    aria-label="Send message"
+                    className={`text-[0.75rem] uppercase tracking-wider transition-colors ${isDark ? 'text-gray-100 disabled:text-gray-600 hover:text-gray-300' : 'text-black disabled:text-gray-300 hover:text-gray-600'}`}
+                  >
+                    Send
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await unlockAudio();
+
+                      if (isVoiceMode) {
+                        try {
+                          if (!hasShownEndCallSummary.current) {
+                            hasShownEndCallSummary.current = true;
+                            const endCallMessage = buildEndCallMessage(voiceSessionStartTime.current);
+                            setMessages((prev) => [
+                              ...prev,
+                              { id: generateMessageId(), role: "assistant", content: endCallMessage }
+                            ]);
+                          }
+
+                          playSoundEffect('/sounds/end.mp3');
+                          voiceSessionStartTime.current = null;
+
+                          await voiceService.stop();
+                        } catch (error) {
+                          console.error('Error stopping voice session:', error);
+                          setIsVoiceMode(false);
+                          setIsVoiceLoading(false);
+                        } finally {
+                          voiceSessionStartTime.current = null;
+                        }
+                      } else {
+                        try {
+                          setIsVoiceLoading(true);
+                          shouldStartNewTurn.current = true;
+                          console.log('🔴 FLAG SET: User starting voice mode - shouldStartNewTurn = TRUE');
+
+                          const conversationHistory = messagesRef.current.map(m => ({
+                            role: m.role,
+                            content: m.content
+                          }));
+
+                          await voiceService.start(conversationHistory);
+                        } catch (error) {
+                          console.error('Error starting voice session:', error);
+                          setIsVoiceLoading(false);
+                          setIsVoiceMode(false);
+
+                          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+                          let userFriendlyMessage = errorMessage;
+
+                          if (errorMessage.includes('permission') || errorMessage.includes('denied')) {
+                            userFriendlyMessage = 'Microphone permission denied. Please grant microphone access in your browser settings and try again.';
+                          } else if (errorMessage.includes('WebSocket') || errorMessage.includes('connection')) {
+                            userFriendlyMessage = 'Could not connect to voice server. Please check your internet connection and try again.';
+                          } else if (errorMessage.includes('Invalid WebSocket URL')) {
+                            userFriendlyMessage = 'Voice server not configured. Please contact support.';
+                          }
+
+                          setMessages((prev) => [
+                            ...prev,
+                            {
+                              id: generateMessageId(),
+                              role: "assistant",
+                              content: `VOICE ERROR: ${userFriendlyMessage}. YOU CAN CONTINUE USING TEXT CHAT.`
+                            }
+                          ]);
+                        }
+                      }
+                    }}
+                    disabled={isVoiceLoading || isLoading}
+                    className={`text-[0.75rem] uppercase tracking-wider transition-colors ${
+                      isVoiceMode
+                        ? isDark
+                          ? "text-red-400 hover:text-red-300"
+                          : "text-red-600 hover:text-red-700"
+                        : isDark
+                          ? "text-gray-100 hover:text-gray-300"
+                          : "text-black hover:text-gray-600"
+                    } ${isVoiceLoading || isLoading ? "opacity-50 cursor-not-allowed" : ""}`}
+                  >
+                    {isVoiceLoading ? "Starting..." : isVoiceMode ? "END" : "VOICE"}
+                  </button>
+                </div>
+              </form>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* Suggestion image hover popup */}
