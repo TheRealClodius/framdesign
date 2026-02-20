@@ -122,6 +122,8 @@ Node 24.1 (.nvmrc). ES modules. Deployed: Vercel (text) + Railway (voice).
 | Embed KB | `npx tsx scripts/Embed/embed-kb.ts` |
 | Verify KB | `npx tsx scripts/Embed/verify-kb-embedding.ts` |
 | Test KB search | `npx tsx scripts/Testing/kb/test-search.ts` |
+| KB health audit | `npm run kb:audit` |
+| KB audit (fast) | `npm run kb:audit:fast` |
 
 ## Environment
 
