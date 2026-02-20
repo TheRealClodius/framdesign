@@ -66,7 +66,7 @@ const REQUIRED_FIELDS: Record<string, string[]> = {
   lab: ['id', 'type', 'title'],
   project: ['id', 'type', 'title', 'status'],
 };
-const VALID_PROJECT_STATUS = ['shipped', 'ongoing', 'archived'];
+const VALID_PROJECT_STATUS = ['shipped', 'ongoing', 'archived', 'published', 'prototype', 'exploration', 'concept'];
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 
@@ -156,9 +156,13 @@ async function checkFrontmatter(files: string[]): Promise<{
       }
 
       // Check filename matches ID suffix
+      // Convention: project files use {name}_project.md with ID project:{name}
       const fileBasename = path.basename(filePath, '.md');
       const idSuffix = frontmatter.id.split(':')[1];
-      if (idSuffix && idSuffix !== fileBasename) {
+      const normalizedBasename = entityType && fileBasename.endsWith(`_${entityType}`)
+        ? fileBasename.slice(0, -(entityType.length + 1))
+        : fileBasename;
+      if (idSuffix && idSuffix !== fileBasename && idSuffix !== normalizedBasename) {
         issues.push(issue('warning', 'frontmatter', `ID suffix "${idSuffix}" doesn't match filename "${fileBasename}"`, relativePath, 'id'));
       }
 
