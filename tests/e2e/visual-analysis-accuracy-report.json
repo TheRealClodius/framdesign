@@ -1,29 +1,5 @@
 {
   "testName": "Visual Analysis Accuracy Integration Test",
-  "totalToolCalls": 1,
-  "toolCalls": [
-    {
-      "toolId": "kb_search",
-      "args": {
-        "top_k": 1,
-        "query": "Vector Watch project",
-        "filters": {
-          "type": "photo"
-        }
-      },
-      "ok": false,
-      "durationMs": 438,
-      "hasImageData": false,
-      "imageDataSizeKB": 0,
-      "error": {
-        "type": "TRANSIENT",
-        "message": "Vector search failed: Not Found",
-        "retryable": true,
-        "idempotencyRequired": false,
-        "partialSideEffects": false,
-        "details": null,
-        "confirmation_request": null
-      }
-    }
-  ]
+  "totalToolCalls": 0,
+  "toolCalls": []
 }
