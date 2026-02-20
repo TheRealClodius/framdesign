@@ -23,8 +23,15 @@ export function parseAssetUrl(input: string): AssetInfo | null {
   if (input.includes(GCS_HOST)) {
     try {
       const url = new URL(input);
-      const pathParts = url.pathname.split('/');
-      filename = decodeURIComponent(pathParts[pathParts.length - 1] || '');
+      // Extract full path after /assets/ to preserve subdirectory blob_ids
+      // e.g., /bucket/assets/vector/photo.png → vector/photo.png
+      const assetsIndex = url.pathname.indexOf('/assets/');
+      if (assetsIndex !== -1) {
+        filename = decodeURIComponent(url.pathname.slice(assetsIndex + '/assets/'.length));
+      } else {
+        const pathParts = url.pathname.split('/');
+        filename = decodeURIComponent(pathParts[pathParts.length - 1] || '');
+      }
     } catch {
       return null;
     }

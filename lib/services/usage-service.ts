@@ -15,7 +15,12 @@ export class UsageService {
     try {
       await fs.access(USAGE_DIR);
     } catch {
-      await fs.mkdir(USAGE_DIR, { recursive: true });
+      try {
+        await fs.mkdir(USAGE_DIR, { recursive: true });
+      } catch {
+        // Read-only filesystem (e.g., Vercel) — skip silently.
+        // Reads will return defaults, writes will be no-ops.
+      }
     }
   }
 
@@ -30,8 +35,12 @@ export class UsageService {
   }
 
   private static async writeUsage(usage: Record<string, UserUsage>) {
-    await this.ensureDir();
-    await fs.writeFile(USAGE_FILE, JSON.stringify(usage, null, 2), 'utf-8');
+    try {
+      await this.ensureDir();
+      await fs.writeFile(USAGE_FILE, JSON.stringify(usage, null, 2), 'utf-8');
+    } catch {
+      // Read-only filesystem (e.g., Vercel) — usage won't persist between invocations
+    }
   }
 
   /**
