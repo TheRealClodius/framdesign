@@ -2004,8 +2004,8 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
                 </div>
               )}
 
-              {/* Input row: textarea + action buttons */}
-              <form onSubmit={handleSubmit} className="flex items-end gap-3">
+              {/* Floating prompt input: textarea + chin */}
+              <form onSubmit={handleSubmit} className={`flex flex-col rounded-lg border transition-colors duration-300 ${isDark ? 'border-gray-600 focus-within:border-gray-400' : 'border-gray-300 focus-within:border-black'}`}>
                 <textarea
                   ref={textareaRef}
                   rows={1}
@@ -2019,10 +2019,11 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
                   }}
                   disabled={isVoiceMode}
                   aria-label="Chat message input"
-                  className={`flex-1 bg-transparent py-2 focus:outline-none transition-colors rounded-none resize-none overflow-y-auto max-h-[120px] disabled:opacity-50 disabled:cursor-not-allowed ${isDark ? 'border-b border-gray-600 focus:border-gray-400 placeholder:text-gray-600 text-gray-100' : 'border-b border-gray-300 focus:border-black placeholder:text-gray-300 text-black'}`}
+                  className={`w-full bg-transparent px-3 pt-3 pb-2 focus:outline-none transition-colors resize-none overflow-y-auto max-h-[120px] disabled:opacity-50 disabled:cursor-not-allowed rounded-t-lg ${isDark ? 'placeholder:text-gray-600 text-gray-100' : 'placeholder:text-gray-300 text-black'}`}
                   placeholder={isVoiceMode ? "Voice mode active..." : "Type your message..."}
                 />
-                <div className="flex items-center gap-3 pb-2 flex-shrink-0">
+                {/* Chin: action buttons */}
+                <div className="flex items-center gap-3 px-3 pb-2 flex-shrink-0">
                   <button
                     type="submit"
                     disabled={isLoading || isVoiceMode || !input.trim()}
