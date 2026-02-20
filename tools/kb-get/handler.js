@@ -10,6 +10,7 @@ import {
   extractHttpStatus,
   isServiceUnavailable
 } from '../_core/helpers.js';
+import { emitToolEvent } from '../_core/tool-events.js';
 
 function normalizeEntityId(rawId) {
   if (typeof rawId !== 'string') return rawId;
@@ -143,26 +144,50 @@ export async function execute(context) {
       if (blobId && extension) {
         try {
           // Import blob storage service using same pattern as embedding/vector services
-          let resolveBlobUrl, fetchAssetBuffer;
+          let resolveBlobUrlSafe, resolveBlobUrl, fetchAssetBuffer;
           try {
             const blobModule = await import('@/lib/services/blob-storage-service');
+            resolveBlobUrlSafe = blobModule.resolveBlobUrlSafe || blobModule.default?.resolveBlobUrlSafe;
             resolveBlobUrl = blobModule.resolveBlobUrl || blobModule.default?.resolveBlobUrl;
             fetchAssetBuffer = blobModule.fetchAssetBuffer || blobModule.default?.fetchAssetBuffer;
           } catch {
             const getPath = (name) => `../../lib/services/${name}`;
             const blobModule = await import(/* webpackIgnore: true */ getPath('blob-storage-service'));
+            resolveBlobUrlSafe = blobModule.resolveBlobUrlSafe || blobModule.default?.resolveBlobUrlSafe;
             resolveBlobUrl = blobModule.resolveBlobUrl || blobModule.default?.resolveBlobUrl;
             fetchAssetBuffer = blobModule.fetchAssetBuffer || blobModule.default?.fetchAssetBuffer;
           }
 
-          if (!resolveBlobUrl) {
+          if (!resolveBlobUrlSafe && !resolveBlobUrl) {
             throw new Error('Blob storage service not available');
           }
-          assetUrl = await resolveBlobUrl(blobId, extension);
+
+          // Use safe resolver to detect dead assets
+          let assetMissing = false;
+          if (resolveBlobUrlSafe) {
+            const resolved = await resolveBlobUrlSafe(blobId, extension);
+            assetUrl = resolved.url;
+            assetMissing = !resolved.exists;
+          } else {
+            assetUrl = await resolveBlobUrl(blobId, extension);
+          }
+
+          if (assetMissing) {
+            emitToolEvent('dead_asset', {
+              toolId: 'kb_get',
+              message: `Asset missing from GCS: ${entityId}`,
+              details: { entityId, blobId, extension }
+            });
+            console.warn(`[kb_get] Dead asset detected: ${entityId} (blob: ${blobId}.${extension})`);
+            imageDataFetchError = `Asset file missing from storage: assets/${blobId}.${extension}`;
+          }
           const caption = metadata.caption || metadata.title || '';
 
-          // Handle videos with HTML video tag, images/GIFs with markdown
-          if (entityType === 'video' || extension === 'mov' || extension === 'mp4' || extension === 'webm') {
+          // Skip markdown/URL generation for dead assets — agent must not share broken links
+          if (assetMissing) {
+            markdown = '';
+            assetUrl = '';
+          } else if (entityType === 'video' || extension === 'mov' || extension === 'mp4' || extension === 'webm') {
             markdown = `<video controls><source src="${assetUrl}" type="video/${extension === 'mov' ? 'quicktime' : extension}">Your browser does not support the video tag.</video>\n\n${caption ? `*${caption}*` : ''}`;
           } else {
             // Images and GIFs use markdown image syntax
@@ -237,6 +262,9 @@ export async function execute(context) {
         }
       }
 
+      // Detect if asset is dead (missing from storage)
+      const isDead = !assetUrl && blobId && extension;
+
       return {
         ok: true,
         data: {
@@ -253,9 +281,10 @@ export async function execute(context) {
           related_entities: tryParseJSON(metadata.related_entities) || [],
           tags: tryParseJSON(metadata.tags) || [],
           metadata: extractRelevantMetadata(metadata),
-          _instructions: buildImageInstructions(entityId, entityType, imageData, includeImageData, imageDataFetchError, blobId, extension, markdown),
+          _instructions: buildImageInstructions(entityId, entityType, imageData, includeImageData, imageDataFetchError, blobId, extension, markdown, isDead),
           _timing: finalTiming,
-          _imageData: imageData // Image data for multimodal analysis (internal, excluded from display)
+          _imageData: imageData, // Image data for multimodal analysis (internal, excluded from display)
+          _diagnostics: isDead ? { dead_asset: true, blob_id: blobId, extension } : undefined
         },
         meta: {
           _timing: finalTiming
@@ -352,7 +381,12 @@ function tryParseJSON(jsonString) {
  * Build detailed instructions for asset retrieval results
  * Includes specific failure reasons when image data couldn't be fetched
  */
-function buildImageInstructions(entityId, entityType, imageData, includeImageData, imageDataFetchError, blobId, extension, markdown) {
+function buildImageInstructions(entityId, entityType, imageData, includeImageData, imageDataFetchError, blobId, extension, markdown, isDead = false) {
+  // Dead asset: warn the agent immediately
+  if (isDead) {
+    return `⚠️ DEAD ASSET: "${entityId}" exists in the knowledge base index but the actual file is missing from storage (blob: assets/${blobId}.${extension}). DO NOT share an image link for this asset — it will appear broken. You may still reference the asset's title and description from the metadata.`;
+  }
+
   let imageDataStatus = '';
 
   if (imageData) {

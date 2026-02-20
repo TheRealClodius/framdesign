@@ -23,7 +23,9 @@
     "test:coverage": "NODE_OPTIONS='--experimental-vm-modules' jest --coverage",
     "test:agent": "node scripts/text-agent-test.js",
     "test:voice": "tsx scripts/voice-agent-test.js",
-    "generate:audio": "node scripts/generate-test-audio.js"
+    "generate:audio": "node scripts/generate-test-audio.js",
+    "kb:audit": "npx tsx scripts/kb-audit.ts",
+    "kb:audit:fast": "npx tsx scripts/kb-audit.ts --skip-gcs --skip-qdrant"
   },
   "dependencies": {
     "@fontsource/google-sans-code": "^5.2.3",

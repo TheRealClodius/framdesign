@@ -9,6 +9,7 @@ import {
   extractHttpStatus,
   isServiceUnavailable
 } from '../_core/helpers.js';
+import { emitToolEvent } from '../_core/tool-events.js';
 
 /**
  * Execute kb_search tool
@@ -177,17 +178,22 @@ export async function execute(context) {
     }
 
     // Load blob service for asset URL resolution using direct imports
-    let resolveBlobUrl, fetchAssetBuffer;
+    let resolveBlobUrlSafe, resolveBlobUrl, fetchAssetBuffer;
     try {
       const blobModule = await import('@/lib/services/blob-storage-service');
+      resolveBlobUrlSafe = blobModule.resolveBlobUrlSafe || blobModule.default?.resolveBlobUrlSafe;
       resolveBlobUrl = blobModule.resolveBlobUrl || blobModule.default?.resolveBlobUrl;
       fetchAssetBuffer = blobModule.fetchAssetBuffer || blobModule.default?.fetchAssetBuffer;
     } catch {
       const getPath = (name) => `../../lib/services/${name}`;
       const blobModule = await import(/* webpackIgnore: true */ getPath('blob-storage-service'));
+      resolveBlobUrlSafe = blobModule.resolveBlobUrlSafe || blobModule.default?.resolveBlobUrlSafe;
       resolveBlobUrl = blobModule.resolveBlobUrl || blobModule.default?.resolveBlobUrl;
       fetchAssetBuffer = blobModule.fetchAssetBuffer || blobModule.default?.fetchAssetBuffer;
     }
+
+    // Track dead assets for diagnostics
+    const deadAssets = [];
     
     // Transform results to standard format
     const transformedResults = await Promise.all(rawResults.map(async (result) => {
@@ -214,47 +220,59 @@ export async function execute(context) {
         const blobId = result.metadata?.blob_id;
         const extension = result.metadata?.file_extension;
         const caption = result.metadata?.caption || result.metadata?.title || '';
-        
-        if (blobId && extension && resolveBlobUrl) {
+
+        if (blobId && extension && (resolveBlobUrlSafe || resolveBlobUrl)) {
           try {
-            const assetUrl = await resolveBlobUrl(blobId, extension);
-            const entityType = result.metadata?.entity_type || '';
-            
-            // Handle videos with HTML video tag, images/GIFs with markdown
-            let markdown;
-            if (entityType === 'video' || extension === 'mov' || extension === 'mp4' || extension === 'webm') {
-              markdown = `<video controls><source src="${assetUrl}" type="video/${extension === 'mov' ? 'quicktime' : extension}">Your browser does not support the video tag.</video>\n\n${caption ? `*${caption}*` : ''}`;
+            // Use safe resolver to detect dead assets before generating URLs
+            let assetUrl;
+            let assetMissing = false;
+
+            if (resolveBlobUrlSafe) {
+              const resolved = await resolveBlobUrlSafe(blobId, extension);
+              assetUrl = resolved.url;
+              assetMissing = !resolved.exists;
             } else {
-              // Images and GIFs use markdown image syntax
-              markdown = `![${caption}](${assetUrl})`;
+              assetUrl = await resolveBlobUrl(blobId, extension);
             }
-            
-            // Add markdown to metadata
-            baseResult.metadata.markdown = markdown;
-            baseResult.metadata.url = assetUrl;
-            baseResult.metadata.blob_id = blobId;
+
+            if (assetMissing) {
+              // Track dead asset for diagnostics
+              deadAssets.push({ id: baseResult.id, blob_id: blobId, extension });
+              baseResult.metadata._dead = true;
+              emitToolEvent('dead_asset', {
+                toolId: 'kb_search',
+                message: `Asset missing from GCS: ${baseResult.id}`,
+                details: { entityId: baseResult.id, blobId, extension }
+              });
+              console.warn(`[kb_search] Dead asset detected: ${baseResult.id} (blob: ${blobId}.${extension})`);
+            } else {
+              const entityType = result.metadata?.entity_type || '';
+
+              // Handle videos with HTML video tag, images/GIFs with markdown
+              let markdown;
+              if (entityType === 'video' || extension === 'mov' || extension === 'mp4' || extension === 'webm') {
+                markdown = `<video controls><source src="${assetUrl}" type="video/${extension === 'mov' ? 'quicktime' : extension}">Your browser does not support the video tag.</video>\n\n${caption ? `*${caption}*` : ''}`;
+              } else {
+                // Images and GIFs use markdown image syntax
+                markdown = `![${caption}](${assetUrl})`;
+              }
+
+              // Add markdown to metadata
+              baseResult.metadata.markdown = markdown;
+              baseResult.metadata.url = assetUrl;
+              baseResult.metadata.blob_id = blobId;
+            }
           } catch (blobError) {
             console.warn(`[kb_search] Failed to resolve blob URL for ${baseResult.id}:`, blobError.message);
-            // Fallback to old path if available
-            if (result.metadata?.path) {
-              const entityType = result.metadata?.entity_type || '';
-              const path = result.metadata.path;
-              let markdown;
-              if (entityType === 'video' || path.match(/\.(mov|mp4|webm)$/i)) {
-                const ext = path.match(/\.(\w+)$/)?.[1] || 'mp4';
-                markdown = `<video controls><source src="${path}" type="video/${ext === 'mov' ? 'quicktime' : ext}">Your browser does not support the video tag.</video>\n\n${caption ? `*${caption}*` : ''}`;
-              } else {
-                markdown = `![${caption}](${path})`;
-              }
-              baseResult.metadata.markdown = markdown;
-              baseResult.metadata.url = result.metadata.path;
-            }
+            deadAssets.push({ id: baseResult.id, blob_id: blobId, extension, error: blobError.message });
+            baseResult.metadata._dead = true;
           }
         } else if (result.metadata?.path) {
           // Fallback to old path if blob_id not available
           const markdown = `![${caption}](${result.metadata.path})`;
           baseResult.metadata.markdown = markdown;
           baseResult.metadata.url = result.metadata.path;
+          baseResult.metadata._legacy_path = true;
         }
       }
       
@@ -395,14 +413,26 @@ export async function execute(context) {
       }
     }
 
+    // Build diagnostics for observability
+    const diagnostics = {};
+    if (deadAssets.length > 0) {
+      diagnostics.dead_assets = deadAssets;
+      console.warn(`[kb_search] ${deadAssets.length} dead asset(s) detected in results`);
+    }
+    const legacyPathResults = deduplicatedResults.filter(r => r.metadata?._legacy_path);
+    if (legacyPathResults.length > 0) {
+      diagnostics.legacy_path_assets = legacyPathResults.map(r => r.id);
+    }
+
     const responseData = {
       results: deduplicatedResults,
       total_found: uniqueEntities,
       query: args.query,
       filters_applied: args.filters || null,
       clamped: topK !== originalTopK,
-      _instructions: buildInstructions(uniqueEntities, imageData, imageDataFor, deduplicatedResults),
-      _timing: finalTiming
+      _instructions: buildInstructions(uniqueEntities, imageData, imageDataFor, deduplicatedResults, deadAssets),
+      _timing: finalTiming,
+      _diagnostics: Object.keys(diagnostics).length > 0 ? diagnostics : undefined
     };
 
     if (imageData) {
@@ -429,14 +459,20 @@ export async function execute(context) {
 }
 
 /**
- * Build the _instructions string, including asset hint guidance
+ * Build the _instructions string, including asset hint guidance and dead asset warnings
  */
-function buildInstructions(uniqueEntities, imageData, imageDataFor, results) {
+function buildInstructions(uniqueEntities, imageData, imageDataFor, results, deadAssets = []) {
   let base = `KB search complete. Found ${uniqueEntities} unique entities. `;
   base += imageData
     ? `✅ Pixel data included for top result: '${imageDataFor?.title}'.`
     : "❌ No pixel data included. For visual analysis, call kb_get with include_image_data: true for the specific asset ID.";
   base += " To show assets, use the provided 'metadata.markdown' fields.";
+
+  // Warn agent about dead assets so it doesn't share broken images
+  if (deadAssets.length > 0) {
+    const deadIds = deadAssets.map(d => d.id).join(', ');
+    base += `\n\n⚠️ DEAD ASSETS (${deadAssets.length}): The following assets are missing from storage and MUST NOT be shared with the user: ${deadIds}. Their images would appear broken.`;
+  }
 
   // Add asset hint guidance for results that have them
   const hintsLines = [];
