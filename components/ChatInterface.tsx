@@ -1905,10 +1905,10 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
         </div>
 
         {/* Top fade gradient */}
-        <div className={`chat-fade-top ${isDark ? '' : 'chat-fade-top-light'}`} />
+        <div className="pointer-events-none absolute top-0 left-0 right-0 z-10 h-12" style={{ background: `linear-gradient(to bottom, ${isDark ? '#1f2937' : '#ffffff'}, transparent)` }} />
 
         {/* Bottom fade gradient */}
-        <div className={`chat-fade-bottom ${isDark ? '' : 'chat-fade-bottom-light'}`} />
+        <div className="pointer-events-none absolute bottom-0 left-0 right-0 z-10 h-12" style={{ background: `linear-gradient(to top, ${isDark ? '#1f2937' : '#ffffff'}, transparent)` }} />
 
         {/* Floating header — right-aligned, no bg */}
         <div className="absolute top-3 right-0 z-20 pointer-events-none">

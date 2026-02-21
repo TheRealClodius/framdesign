@@ -316,33 +316,3 @@ div[data-mermaid-diagram="true"] {
   scrollbar-width: thin;
   scrollbar-color: #9ca3af #1f2937;
 }
-
-/* Chat scroll fade gradients — fade messages into background at edges */
-.chat-fade-top,
-.chat-fade-bottom {
-  pointer-events: none;
-  position: absolute;
-  left: 0;
-  right: 0;
-  z-index: 10;
-  height: 48px;
-}
-
-.chat-fade-top {
-  top: 0;
-  background: linear-gradient(to bottom, #1f2937 0%, transparent 100%);
-}
-
-.chat-fade-bottom {
-  bottom: 0;
-  background: linear-gradient(to top, #1f2937 0%, transparent 100%);
-}
-
-/* Light mode fade gradients */
-.chat-fade-top-light {
-  background: linear-gradient(to bottom, #ffffff 0%, transparent 100%);
-}
-
-.chat-fade-bottom-light {
-  background: linear-gradient(to top, #ffffff 0%, transparent 100%);
-}
