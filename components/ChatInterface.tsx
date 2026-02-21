@@ -1962,7 +1962,11 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
         {/* Floating prompt area */}
         {isBlocked ? (
           <div className="absolute bottom-14 left-0 right-0 z-20 px-4">
-            <div className={`py-4 transition-colors duration-300 ${isDark ? 'border-t border-gray-700' : 'border-t border-gray-200'}`}>
+            <div className={`max-w-[500px] mx-auto w-full rounded-lg border p-4 transition-colors duration-300 ${
+              isDark
+                ? 'bg-gray-950 border-gray-700'
+                : 'bg-gray-50 border-gray-300'
+            }`}>
               <p className={`text-[0.8rem] leading-relaxed mb-4 transition-colors duration-300 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                 {budgetExhausted ? BUDGET_EXHAUSTED_MESSAGE : BLOCKED_MESSAGE}
               </p>
