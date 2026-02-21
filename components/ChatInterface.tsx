@@ -2091,7 +2091,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
                     }
                   }}
                   disabled={isVoiceLoading}
-                  className={`text-[0.75rem] font-mono uppercase tracking-wider transition-colors ${
+                  className={`text-[0.75rem] font-mono uppercase tracking-wider transition-colors h-5 flex items-center ${
                     isLoading
                       ? isDark ? 'text-red-400 hover:text-red-300' : 'text-red-600 hover:text-red-700'
                       : input.trim()
