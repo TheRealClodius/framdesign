@@ -1682,13 +1682,13 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
   };
 
   return (
-    <section className={`w-full max-w-[28rem] md:max-w-[950px] mx-auto px-4 pt-12 md:pt-0 pb-0 md:pb-0 h-fit md:flex-1 md:flex md:flex-col md:min-h-0 overflow-x-hidden transition-colors duration-300 ${isDark ? 'bg-gray-900' : 'bg-white'}`}>
+    <section className={`w-full max-w-[28rem] md:max-w-[950px] mx-auto pt-12 md:pt-0 pb-0 md:pb-0 h-fit md:flex-1 md:flex md:flex-col md:min-h-0 overflow-x-hidden transition-colors duration-300 ${isDark ? 'bg-gray-900' : 'bg-white'}`}>
       {/* Relative container for absolute-positioned overlays */}
       <div className="relative flex-1 min-h-0 h-[600px] md:h-auto font-mono text-[0.875rem]">
         {/* Scroll area */}
         <div ref={messagesContainerRef} className={`absolute inset-0 overflow-y-auto overflow-x-hidden scrollbar-boxy ${isDark ? 'scrollbar-dark' : ''}`} style={{ paddingTop: '3.5rem', paddingBottom: '10rem' }}>
           {/* Messages content */}
-          <div className="space-y-6">
+          <div className="space-y-6 px-4">
           {messages.map((message, index) => {
             // Skip rendering empty streaming assistant messages - they'll be shown via loading indicator
             if (message.role === "assistant" && message.streaming && !message.content.trim()) {
@@ -1905,13 +1905,13 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
         </div>
 
         {/* Top fade gradient */}
-        <div className="pointer-events-none absolute top-0 left-0 right-0 z-10 h-12" style={{ background: `linear-gradient(to bottom, ${isDark ? '#1f2937' : '#ffffff'}, transparent)` }} />
+        <div className="pointer-events-none absolute top-0 left-0 right-0 z-10 h-12" style={{ background: `linear-gradient(to bottom, ${isDark ? 'rgb(17 24 39)' : 'rgb(255 255 255)'}, ${isDark ? 'rgb(17 24 39 / 0)' : 'rgb(255 255 255 / 0)'})` }} />
 
         {/* Bottom fade gradient */}
-        <div className="pointer-events-none absolute bottom-0 left-0 right-0 z-10 h-12" style={{ background: `linear-gradient(to top, ${isDark ? '#1f2937' : '#ffffff'}, transparent)` }} />
+        <div className="pointer-events-none absolute bottom-0 left-0 right-0 z-10 h-12" style={{ background: `linear-gradient(to top, ${isDark ? 'rgb(17 24 39)' : 'rgb(255 255 255)'}, ${isDark ? 'rgb(17 24 39 / 0)' : 'rgb(255 255 255 / 0)'})` }} />
 
         {/* Floating header — right-aligned, no bg */}
-        <div className="absolute top-3 right-0 z-20 pointer-events-none">
+        <div className="absolute top-3 right-4 z-20 pointer-events-none">
           <button
             onClick={handleClearChat}
             className={`pointer-events-auto text-[0.7rem] font-mono uppercase tracking-wider transition-colors ${isDark ? 'text-gray-500 hover:text-gray-300' : 'text-gray-400 hover:text-gray-600'}`}
