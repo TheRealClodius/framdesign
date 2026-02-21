@@ -62,7 +62,7 @@ try {
     console.log('[STARTUP] Enabling tool registry hot-reload watch...');
     toolRegistry.watch(() => {
       // Update the local reference to schemas when registry reloads
-      geminiToolSchemas = toolRegistry.getProviderSchemas('geminiNative');
+      geminiToolSchemas = toolRegistry.getProviderSchemas('geminiNative', 'voice');
       console.log(`[TOOLS] ✓ Hot-reloaded ${geminiToolSchemas.length} tool schemas for future sessions`);
     });
   } else {
@@ -70,7 +70,7 @@ try {
   }
   
   // Get Gemini Native provider schemas for session config (loaded from registry)
-  geminiToolSchemas = toolRegistry.getProviderSchemas('geminiNative');
+  geminiToolSchemas = toolRegistry.getProviderSchemas('geminiNative', 'voice');
   console.log(`[STARTUP] ✓ Tool registry loaded successfully`);
 } catch (error) {
   console.error('[STARTUP] ✗ Failed to load tool registry:', error);
@@ -1347,7 +1347,7 @@ wss.on('connection', async (ws, req) => {
 
           try {
             // Build system instruction with tool documentation from registry
-            const systemInstruction = buildSystemInstruction(toolRegistry);
+            const systemInstruction = buildSystemInstruction(toolRegistry, 'voice');
 
             // Prepare session config with audio input/output enabled
             const config = {
