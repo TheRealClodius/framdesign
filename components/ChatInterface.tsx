@@ -1910,11 +1910,11 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
         {/* Bottom fade gradient */}
         <div className="pointer-events-none absolute bottom-0 left-0 right-0 z-10 h-12" style={{ background: `linear-gradient(to top, ${isDark ? 'rgb(17 24 39)' : 'rgb(255 255 255)'}, ${isDark ? 'rgb(17 24 39 / 0)' : 'rgb(255 255 255 / 0)'})` }} />
 
-        {/* Floating header — right-aligned, no bg */}
+        {/* Floating header — right-aligned, suggestion-style box */}
         <div className="absolute top-3 right-4 z-20 pointer-events-none">
           <button
             onClick={handleClearChat}
-            className={`pointer-events-auto text-[0.7rem] font-mono uppercase tracking-wider transition-colors ${isDark ? 'text-gray-500 hover:text-gray-300' : 'text-gray-400 hover:text-gray-600'}`}
+            className={`pointer-events-auto text-[0.75rem] font-mono uppercase tracking-wider transition-colors px-3 py-1.5 border rounded ${isDark ? 'text-gray-400 hover:text-gray-100 border-gray-600 hover:border-gray-400 bg-gray-900' : 'text-gray-400 hover:text-black border-gray-300 hover:border-black bg-white'}`}
           >
             + Fresh Conversation
           </button>
