@@ -1,8 +1,22 @@
 # TASKS
 
-Completed work log for the FRAM codebase.
+## Pending
+
+### 1. Inject user local time + timezone into agent context
+
+The agent currently receives UTC time. Detect the user's actual timezone and local time on the client, then inject it into the agent context so time-aware responses use the correct local time. No other current-time specifics needed beyond time + timezone.
+
+### 2. Floating prompt input and header redesign
+
+Redesign the prompt input and header to both be floating (not fixed to page flow). Details TBD.
+
+### 3. Conversation compaction after 20+ Q&A pairs
+
+After more than 20 question-answer pairs in a conversation, compact the history to manage context length. Summarize or prune older exchanges while preserving key context.
 
 ---
+
+## Completed
 
 ## Improve Agent Observability
 

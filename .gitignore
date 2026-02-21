@@ -29,6 +29,8 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+debug.log
+chunks_debug.json
 
 # env files
 .env
@@ -48,6 +50,8 @@ tools/tool_registry.json
 
 # test reports
 tests/e2e/kb-tools-agent-report.json
+tests/e2e/image-refetch-analysis-report.json
+tests/e2e/visual-analysis-accuracy-report.json
 
 # voice agent test artifacts (generated files)
 scripts/test-audio/
