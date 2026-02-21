@@ -1722,21 +1722,10 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
 
   return (
     <section className={`w-full max-w-[28rem] md:max-w-[950px] mx-auto px-4 pt-12 md:pt-0 pb-0 md:pb-0 h-fit md:flex-1 md:flex md:flex-col md:min-h-0 overflow-x-hidden transition-colors duration-300 ${isDark ? 'bg-gray-900' : 'bg-white'}`}>
-      {/* Messages wrapper - extends to top on desktop */}
-      <div className="flex flex-col h-[600px] md:flex-1 md:min-h-0 font-mono text-[0.875rem]">
-        <div ref={messagesContainerRef} className={`h-[600px] md:flex-1 md:min-h-0 overflow-y-auto overflow-x-hidden mb-2 scrollbar-boxy ${isDark ? 'scrollbar-dark' : ''}`}>
-          {/* Header - sticky at top of scroll area */}
-          <div className={`mb-10 md:mb-0 sticky top-0 z-10 backdrop-blur-sm md:py-6 md:-mx-4 md:px-4 text-center flex-shrink-0 flex items-center justify-center gap-4 transition-colors duration-300 ${isDark ? 'bg-gray-900/80' : 'bg-white/80'}`}>
-            <p className={`text-[0.75rem] font-mono tracking-wider transition-colors duration-300 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>FRAM ASSISTANT</p>
-            <button
-              onClick={handleClearChat}
-              className={`text-[0.7rem] font-mono uppercase tracking-wider transition-colors underline ${isDark ? 'text-gray-500 hover:text-gray-300' : 'text-gray-400 hover:text-gray-600'}`}
-              title="Clear chat history"
-            >
-              Clear
-            </button>
-          </div>
-          
+      {/* Relative container for absolute-positioned overlays */}
+      <div className="relative flex-1 min-h-0 h-[600px] md:h-auto font-mono text-[0.875rem]">
+        {/* Scroll area */}
+        <div ref={messagesContainerRef} className={`absolute inset-0 overflow-y-auto overflow-x-hidden scrollbar-boxy ${isDark ? 'scrollbar-dark' : ''}`} style={{ paddingTop: '3.5rem', paddingBottom: '10rem' }}>
           {/* Messages content */}
           <div className="space-y-6">
           {messages.map((message, index) => {
@@ -1744,7 +1733,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
             if (message.role === "assistant" && message.streaming && !message.content.trim()) {
               return null;
             }
-            
+
             return (
               <div
                 key={message.id || index}
@@ -1954,34 +1943,53 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
           </div>
         </div>
 
+        {/* Top fade gradient */}
+        <div className={`chat-fade-top ${isDark ? '' : 'chat-fade-top-light'}`} />
+
+        {/* Bottom fade gradient */}
+        <div className={`chat-fade-bottom ${isDark ? '' : 'chat-fade-bottom-light'}`} />
+
+        {/* Floating header — right-aligned, no bg */}
+        <div className="absolute top-3 right-0 z-20 pointer-events-none">
+          <button
+            onClick={handleClearChat}
+            className={`pointer-events-auto text-[0.7rem] font-mono uppercase tracking-wider transition-colors ${isDark ? 'text-gray-500 hover:text-gray-300' : 'text-gray-400 hover:text-gray-600'}`}
+          >
+            + Fresh Conversation
+          </button>
+        </div>
+
+        {/* Floating prompt area */}
         {isBlocked ? (
-          <div className={`py-4 flex-shrink-0 transition-colors duration-300 ${isDark ? 'border-t border-gray-700' : 'border-t border-gray-200'}`}>
-            <p className={`text-[0.8rem] leading-relaxed mb-4 transition-colors duration-300 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-              {budgetExhausted ? BUDGET_EXHAUSTED_MESSAGE : BLOCKED_MESSAGE}
-            </p>
-            {budgetExhausted && (
-              <div className="flex justify-start">
-                <a
-                  href="mailto:andrei@fram.design?subject=Partner%20Account%20Request&body=Hi%20Andrei%2C%0A%0AI've%20reached%20my%20conversation%20limit%20with%20Fram%20and%20would%20like%20to%20upgrade%20to%20a%20partner%20account.%0A%0AThanks!"
-                  className={`text-[0.75rem] font-mono uppercase tracking-wider transition-colors px-3 py-1.5 border rounded ${isDark ? 'text-gray-400 hover:text-gray-100 border-gray-600 hover:border-gray-400' : 'text-gray-400 hover:text-black border-gray-300 hover:border-black'}`}
-                >
-                  Send Email
-                </a>
-              </div>
-            )}
-            {process.env.NODE_ENV === 'development' && !budgetExhausted && (
-              <div className="text-center">
-                <button
-                  onClick={resetTimeout}
-                  className={`text-[0.7rem] uppercase tracking-wider underline transition-colors duration-300 ${isDark ? 'text-gray-500 hover:text-gray-300' : 'text-gray-400 hover:text-gray-600'}`}
-                >
-                  Reset timeout (dev)
-                </button>
-              </div>
-            )}
+          <div className="absolute bottom-14 left-0 right-0 z-20 px-4">
+            <div className={`py-4 transition-colors duration-300 ${isDark ? 'border-t border-gray-700' : 'border-t border-gray-200'}`}>
+              <p className={`text-[0.8rem] leading-relaxed mb-4 transition-colors duration-300 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                {budgetExhausted ? BUDGET_EXHAUSTED_MESSAGE : BLOCKED_MESSAGE}
+              </p>
+              {budgetExhausted && (
+                <div className="flex justify-start">
+                  <a
+                    href="mailto:andrei@fram.design?subject=Partner%20Account%20Request&body=Hi%20Andrei%2C%0A%0AI've%20reached%20my%20conversation%20limit%20with%20Fram%20and%20would%20like%20to%20upgrade%20to%20a%20partner%20account.%0A%0AThanks!"
+                    className={`text-[0.75rem] font-mono uppercase tracking-wider transition-colors px-3 py-1.5 border rounded ${isDark ? 'text-gray-400 hover:text-gray-100 border-gray-600 hover:border-gray-400' : 'text-gray-400 hover:text-black border-gray-300 hover:border-black'}`}
+                  >
+                    Send Email
+                  </a>
+                </div>
+              )}
+              {process.env.NODE_ENV === 'development' && !budgetExhausted && (
+                <div className="text-center">
+                  <button
+                    onClick={resetTimeout}
+                    className={`text-[0.7rem] uppercase tracking-wider underline transition-colors duration-300 ${isDark ? 'text-gray-500 hover:text-gray-300' : 'text-gray-400 hover:text-gray-600'}`}
+                  >
+                    Reset timeout (dev)
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         ) : (
-          <div className="flex-shrink-0">
+          <div className="absolute bottom-14 left-0 right-0 z-20 px-4">
             <form onSubmit={handleSubmit} className="relative max-w-[500px] mx-auto w-full">
               <textarea
                 ref={textareaRef}
@@ -2008,7 +2016,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
                 Send
               </button>
             </form>
-            
+
             {/* Voice Mode Controls */}
             <div className="flex flex-col mt-4 space-y-2">
             {/* Voice Error Display */}
@@ -2036,14 +2044,14 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
                 <div>Audio playback unavailable. Transcripts will still be displayed.</div>
               </div>
             )}
-            
+
             {/* Voice Button Container */}
             <div className="max-w-[500px] mx-auto w-full flex justify-end">
               <button
               onClick={async () => {
                 // Unlock audio context during user interaction (required for mobile)
                 await unlockAudio();
-                
+
                 if (isVoiceMode) {
                   // End voice mode
                   try {
@@ -2055,13 +2063,13 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
                         { id: generateMessageId(), role: "assistant", content: endCallMessage }
                       ]);
                     }
-                    
+
                     // Play end sound effect
                     playSoundEffect('/sounds/end.mp3');
-                    
+
                     // Reset session start time
                     voiceSessionStartTime.current = null;
-                    
+
                     await voiceService.stop();
                     // Transcripts will be integrated via the 'complete' event handler
                   } catch (error) {
@@ -2094,10 +2102,10 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
                     console.error('Error starting voice session:', error);
                     setIsVoiceLoading(false);
                     setIsVoiceMode(false);
-                    
+
                     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
                     let userFriendlyMessage = errorMessage;
-                    
+
                     // Provide specific guidance based on error type
                     if (errorMessage.includes('permission') || errorMessage.includes('denied')) {
                       userFriendlyMessage = 'Microphone permission denied. Please grant microphone access in your browser settings and try again.';
@@ -2106,13 +2114,13 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
                     } else if (errorMessage.includes('Invalid WebSocket URL')) {
                       userFriendlyMessage = 'Voice server not configured. Please contact support.';
                     }
-                    
+
                     setMessages((prev) => [
                       ...prev,
-                      { 
-                        id: generateMessageId(), 
-                        role: "assistant", 
-                        content: `VOICE ERROR: ${userFriendlyMessage}. YOU CAN CONTINUE USING TEXT CHAT.` 
+                      {
+                        id: generateMessageId(),
+                        role: "assistant",
+                        content: `VOICE ERROR: ${userFriendlyMessage}. YOU CAN CONTINUE USING TEXT CHAT.`
                       }
                     ]);
                   }
