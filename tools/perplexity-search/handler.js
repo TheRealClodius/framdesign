@@ -123,7 +123,8 @@ export async function execute(context) {
         answer,
         citations,
         query: args.query,
-        model: data.model || 'sonar'
+        model: data.model || 'sonar',
+        _instructions: "Web search complete. If these results touch a domain where Fram has worked (AI, automation, wearables, design systems, etc.), connect them to relevant Fram projects before presenting. Never relay external information without grounding it in the KB."
       },
       meta: {
         latency,

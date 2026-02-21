@@ -405,7 +405,7 @@ function buildImageInstructions(entityId, entityType, imageData, includeImageDat
     imageDataStatus = `❌ Pixel data requested but NOT included. Reason: ${reasonText}. To retry, call kb_get with include_image_data: true for ID: '${entityId}'.`;
   } else {
     // User didn't request image data
-    imageDataStatus = `❌ Pixel data not requested. For visual analysis (colors, labels, details), call kb_get with include_image_data: true for ID: '${entityId}'.`;
+    imageDataStatus = `❌ Pixel data not requested. You CANNOT see this image. Do NOT describe colors, layout, or visual details — only describe what the metadata text tells you. To actually see the image, call kb_get with include_image_data: true for ID: '${entityId}'.`;
   }
 
   return `Asset metadata retrieved. ${imageDataStatus} To display the asset, include this markdown: ${markdown}`;
