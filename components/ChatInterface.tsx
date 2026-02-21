@@ -1911,7 +1911,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
         <div className="pointer-events-none absolute bottom-0 left-0 right-0 z-10 h-12" style={{ background: `linear-gradient(to top, ${isDark ? 'rgb(17 24 39)' : 'rgb(255 255 255)'}, ${isDark ? 'rgb(17 24 39 / 0)' : 'rgb(255 255 255 / 0)'})` }} />
 
         {/* Floating header — right-aligned, suggestion-style box */}
-        <div className="absolute top-3 right-4 z-20 pointer-events-none">
+        <div className="absolute top-3 right-2 z-20 pointer-events-none">
           <button
             onClick={handleClearChat}
             className={`pointer-events-auto text-[0.75rem] font-mono uppercase tracking-wider transition-colors px-3 py-1.5 border rounded ${isDark ? 'text-gray-400 hover:text-gray-100 border-gray-600 hover:border-gray-400 bg-gray-900' : 'text-gray-400 hover:text-black border-gray-300 hover:border-black bg-white'}`}
@@ -1922,7 +1922,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
 
         {/* Floating prompt area */}
         {isBlocked ? (
-          <div ref={promptContainerRef} className="absolute bottom-14 left-0 right-0 z-20 px-4">
+          <div ref={promptContainerRef} className="absolute bottom-14 left-0 right-0 z-20 px-2">
             <div className={`max-w-[500px] mx-auto w-full rounded-lg border p-4 transition-colors duration-300 ${
               isDark
                 ? 'bg-gray-950 border-gray-700'
@@ -1954,7 +1954,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
             </div>
           </div>
         ) : (
-          <div ref={promptContainerRef} className="absolute bottom-14 left-0 right-0 z-20 px-4">
+          <div ref={promptContainerRef} className="absolute bottom-14 left-0 right-0 z-20 px-2">
             {/* Voice Error Display — above prompt container */}
             {voiceError && (
               <div className={`max-w-[500px] mx-auto mb-2 px-4 py-2 rounded text-[0.75rem] font-mono ${
