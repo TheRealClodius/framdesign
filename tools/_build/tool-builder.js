@@ -180,6 +180,12 @@ function buildTool(toolDirName) {
   const schema = JSON.parse(schemaJson);
   const guideContent = readFileSync(guidePath, 'utf-8').trim();
 
+  // Load voice-specific guide if present
+  const voiceGuidePath = join(toolDir, 'voice-guide.md');
+  const voiceGuideContent = existsSync(voiceGuidePath)
+    ? readFileSync(voiceGuidePath, 'utf-8').trim()
+    : null;
+
   // Validate schema
   lintSchema(schema, toolDirName);
 
@@ -222,6 +228,7 @@ function buildTool(toolDirName) {
     jsonSchema: schema.parameters,
     summary: summary,
     documentation: guideContent,
+    voiceDocumentation: voiceGuideContent,
     handlerPath: pathToFileURL(handlerPath).href
   };
 

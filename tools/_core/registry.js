@@ -258,15 +258,17 @@ class ToolRegistry {
    * Returns pre-computed schemas from build step (NO runtime conversion)
    *
    * @param {string} provider - 'openai' or 'geminiNative'
+   * @param {string|null} mode - Filter by allowedModes ('text', 'voice', or null for all)
    * @returns {Array} - Array of provider-specific tool schemas
    */
-  getProviderSchemas(provider = 'openai') {
+  getProviderSchemas(provider = 'openai', mode = null) {
     if (provider !== 'openai' && provider !== 'geminiNative') {
       throw new Error(`Unsupported provider: ${provider}`);
     }
 
     const schemas = [];
     for (const tool of this.tools.values()) {
+      if (mode && !tool.allowedModes.includes(mode)) continue;
       if (tool.providerSchemas && tool.providerSchemas[provider]) {
         schemas.push(tool.providerSchemas[provider]);
       }

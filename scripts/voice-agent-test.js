@@ -40,7 +40,7 @@ config({ path: '.env' });
 try {
   console.log('Loading tool registry...');
   await toolRegistry.load();
-  geminiToolSchemas = toolRegistry.getProviderSchemas('geminiNative');
+  geminiToolSchemas = toolRegistry.getProviderSchemas('geminiNative', 'voice');
   console.log(`✓ Loaded ${geminiToolSchemas.length} tools: ${geminiToolSchemas.map(t => t.name).join(', ')}\n`);
 } catch (error) {
   console.error('Failed to load tool registry:', error.message);
@@ -156,7 +156,7 @@ async function createLiveSession(ai) {
 
     // Build system instruction with tool documentation (same as production)
     const systemInstruction = geminiToolSchemas.length > 0
-      ? buildSystemInstruction(toolRegistry)
+      ? buildSystemInstruction(toolRegistry, 'voice')
       : `You are FRAM's AI assistant. You have access to a knowledge base about FRAM Design, Andrei Clodius, and their projects. Be helpful, accurate, and concise. Answer questions naturally and conversationally. Keep responses brief since this is voice output.`;
 
     // Build session config
