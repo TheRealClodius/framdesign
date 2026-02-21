@@ -159,6 +159,13 @@ function ChatImage({
     normalizedSrc = "";
   }
 
+  // Track the current working URL — DOM mutation (img.src = freshUrl) handles
+  // the inline image, but click handlers need React state to pass the fresh URL
+  const [currentSrc, setCurrentSrc] = useState(normalizedSrc);
+  useEffect(() => {
+    setCurrentSrc(normalizedSrc);
+  }, [normalizedSrc]);
+
   const imageHasFailed = failedImages.has(normalizedSrc);
 
   if (imageHasFailed) {
@@ -203,19 +210,20 @@ function ChatImage({
         className={`max-w-[600px] max-h-96 rounded-lg border border-gray-200 object-contain cursor-pointer hover:opacity-90 transition-opacity ${isLoading ? 'opacity-0' : 'opacity-100'}`}
         loading="lazy"
         onLoad={() => setIsLoading(false)}
-        onClick={() => normalizedSrc && setModalImage({ src: normalizedSrc, alt: alt || "" })}
+        onClick={() => currentSrc && setModalImage({ src: currentSrc, alt: alt || "" })}
         onError={async (e) => {
           const img = e.target as HTMLImageElement;
-          const currentSrc = img.src;
+          const imgCurrentSrc = img.src;
           const hasTriedRefresh = img.getAttribute("data-refresh-attempted") === "true";
 
           if (!hasTriedRefresh) {
-            const blobInfo = parseAssetUrl(currentSrc);
+            const blobInfo = parseAssetUrl(imgCurrentSrc);
             if (blobInfo) {
               img.setAttribute("data-refresh-attempted", "true");
               const freshUrl = await refreshAssetUrl(blobInfo.blobId, blobInfo.extension);
               if (freshUrl) {
                 img.src = freshUrl;
+                setCurrentSrc(freshUrl);
                 return;
               }
             }
@@ -232,7 +240,7 @@ function ChatImage({
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
-            normalizedSrc && setModalImage({ src: normalizedSrc, alt: alt || "" });
+            currentSrc && setModalImage({ src: currentSrc, alt: alt || "" });
           }}
           className="absolute top-2 right-2 p-1.5 bg-black/50 hover:bg-black/70 rounded text-white opacity-0 group-hover:opacity-100 transition-opacity"
           aria-label="Expand image"

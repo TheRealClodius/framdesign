@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
 import Image from "next/image";
 import ModalCloseButton from "./ModalCloseButton";
+import { parseAssetUrl, refreshAssetUrl } from "@/lib/utils/asset-url";
 
 interface ImageModalProps {
   src: string;
@@ -14,15 +15,34 @@ interface ImageModalProps {
 export default function ImageModal({ src, alt, onClose }: ImageModalProps) {
   const [isClient, setIsClient] = useState(false);
   const [imageError, setImageError] = useState(false);
+  const [currentSrc, setCurrentSrc] = useState(src);
+  const [hasTriedRefresh, setHasTriedRefresh] = useState(false);
 
   useEffect(() => {
     setIsClient(true);
   }, []);
-  
-  // Reset error state when src changes
+
+  // Reset state when src changes
   useEffect(() => {
+    setCurrentSrc(src);
     setImageError(false);
+    setHasTriedRefresh(false);
   }, [src]);
+
+  const handleImageError = useCallback(async () => {
+    if (!hasTriedRefresh) {
+      setHasTriedRefresh(true);
+      const blobInfo = parseAssetUrl(currentSrc);
+      if (blobInfo) {
+        const freshUrl = await refreshAssetUrl(blobInfo.blobId, blobInfo.extension);
+        if (freshUrl) {
+          setCurrentSrc(freshUrl);
+          return;
+        }
+      }
+    }
+    setImageError(true);
+  }, [currentSrc, hasTriedRefresh]);
 
   // Close on ESC
   useEffect(() => {
@@ -132,7 +152,7 @@ export default function ImageModal({ src, alt, onClose }: ImageModalProps) {
           </div>
         ) : (
           <Image
-            src={src}
+            src={currentSrc}
             alt={alt}
             fill
             unoptimized
@@ -143,9 +163,7 @@ export default function ImageModal({ src, alt, onClose }: ImageModalProps) {
             }}
             onClick={(e) => e.stopPropagation()}
             onTouchEnd={(e) => e.stopPropagation()}
-            onError={() => {
-              setImageError(true);
-            }}
+            onError={handleImageError}
           />
         )}
       </div>
