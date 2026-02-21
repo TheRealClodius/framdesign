@@ -33,6 +33,8 @@ Semantic search over the Fram knowledge base (people, labs, projects, and visual
 
 - A ranked list of results with `id`, `type`, `title`, `score`, and optional snippets.
 - For **assets**, results include `metadata.markdown` (ready to paste into the response).
+- **`_allAssets`** (present when `filters.related_to` is used): A complete list of ALL matching assets with lightweight metadata (`id`, `type`, `title`). Use this for accurate counts and full awareness. To display any asset from `_allAssets`, call `kb_get` with that asset's ID.
+- **`_assetHints`** on non-asset results: Shows the true total count of related assets (not capped by `top_k`).
 
 ## Usage Patterns
 
@@ -86,6 +88,16 @@ Semantic search over the Fram knowledge base (people, labs, projects, and visual
 }
 ```
 
+**Full asset awareness for a project**
+```json
+{
+  "query": "all visuals",
+  "filters": { "related_to": "project:desktop_agent_uipath" },
+  "top_k": 5
+}
+```
+Response includes `results` (top 5 with URLs/markdown) + `_allAssets` (complete list of all 19 assets with id/type/title). Use `kb_get` to fetch any specific asset from `_allAssets`.
+
 ## Using Asset Results
 
 - **Always use `metadata.markdown`** for images/videos/diagrams/gifs.
@@ -105,9 +117,14 @@ Semantic search over the Fram knowledge base (people, labs, projects, and visual
 3. If asset hints are available, fetch one representative visual
 
 **Progressive disclosure** (user wants to see more):
-1. `kb_search` with `related_to` filter for the current project
-2. Choose an asset showing a different aspect than what was already shown
-3. If no more assets exist, suggest exploring a related project
+1. `kb_search` with `related_to` filter for the current project → `_allAssets` gives you the full list
+2. Refer to `_allAssets` for the complete inventory; use `kb_get` to fetch any asset not in `results`
+3. Choose an asset showing a different aspect than what was already shown
+4. If no more assets exist in `_allAssets`, suggest exploring a related project
+
+**Accurate project asset counts** (user asks "how many images does X have?"):
+1. `kb_search` with `related_to` filter → `_allAssets.length` is the true count
+2. Report the count from `_allAssets`, not from `results.length` (which is capped by `top_k`)
 
 ## Pitfalls / Watch Out
 

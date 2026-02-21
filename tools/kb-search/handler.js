@@ -41,8 +41,8 @@ export async function execute(context) {
   try {
     // Dynamically import services (avoid bundling issues)
     // Use path alias for Next.js compatibility, fallback to relative for Node.js
-    let generateQueryEmbedding, searchSimilar;
-    
+    let generateQueryEmbedding, searchSimilar, countByFilter, scrollByFilter;
+
     try {
       // Try Next.js path alias first (works in Next.js webpack)
       // Use string literals to help webpack static analysis
@@ -52,6 +52,10 @@ export async function execute(context) {
         || embeddingModule.default?.generateQueryEmbedding;
       searchSimilar = vectorModule.searchSimilar
         || vectorModule.default?.searchSimilar;
+      countByFilter = vectorModule.countByFilter
+        || vectorModule.default?.countByFilter;
+      scrollByFilter = vectorModule.scrollByFilter
+        || vectorModule.default?.scrollByFilter;
     } catch (importError) {
       // Fallback for Node.js runtime (voice server)
       // Use dynamic import with template literal to avoid webpack static analysis warnings
@@ -61,17 +65,21 @@ export async function execute(context) {
         const getImportPath = (base) => `../../lib/services/${base}`;
         const embeddingPath = getImportPath('embedding-service');
         const vectorPath = getImportPath('vector-store-service');
-        
+
         // Use Promise.all to load both modules in parallel
         const [embeddingModule, vectorModule] = await Promise.all([
           import(/* webpackIgnore: true */ embeddingPath),
           import(/* webpackIgnore: true */ vectorPath)
         ]);
-        
+
         generateQueryEmbedding = embeddingModule.generateQueryEmbedding
           || embeddingModule.default?.generateQueryEmbedding;
         searchSimilar = vectorModule.searchSimilar
           || vectorModule.default?.searchSimilar;
+        countByFilter = vectorModule.countByFilter
+          || vectorModule.default?.countByFilter;
+        scrollByFilter = vectorModule.scrollByFilter
+          || vectorModule.default?.scrollByFilter;
       } catch (fallbackError) {
         // If both imports fail, throw the original error
         throw importError;
@@ -298,6 +306,19 @@ export async function execute(context) {
       .sort((a, b) => b.score - a.score)
       .slice(0, topK); // Limit to requested topK entities
 
+    // When filtering by related_to, provide full asset awareness via scrollByFilter
+    // This gives the agent a complete list of matching assets (lightweight: id, type, title only)
+    let allAssets = null;
+    if (args.filters?.related_to && scrollByFilter && !isVoiceMode) {
+      try {
+        const allAssetsStart = Date.now();
+        allAssets = await scrollByFilter(qdrantFilters);
+        console.log(`[kb_search] Full asset scroll: ${allAssets.length} items in ${Date.now() - allAssetsStart}ms`);
+      } catch (scrollError) {
+        console.warn(`[kb_search] scrollByFilter failed, continuing without _allAssets:`, scrollError.message);
+      }
+    }
+
     // Enrich top 2 non-asset results with related asset hints
     // This lets the agent know what visuals are available without a separate search
     const ASSET_TYPES = new Set(['photo', 'video', 'gif', 'diagram']);
@@ -309,43 +330,49 @@ export async function execute(context) {
       await Promise.all(topNonAssets.map(async (result) => {
         try {
           const entityId = result.id;
-          // Search for assets related to this entity using the same embedding
-          const assetResults = await searchSimilar(
-            queryEmbedding,
-            10, // Fetch up to 10 to get a good count
-            { related_entities: { $contains: entityId } }
-          );
+          const relatedFilter = { related_entities: { $contains: entityId } };
 
-          // Filter to only visual asset types
-          const assetItems = (assetResults || []).filter(ar => {
+          // Get true count via countByFilter (no vector search, no cap)
+          // and a small sample via searchSimilar for preview
+          const [totalCount, sampleResults] = await Promise.all([
+            countByFilter
+              ? countByFilter(relatedFilter)
+              : Promise.resolve(null),
+            searchSimilar(queryEmbedding, 3, relatedFilter)
+          ]);
+
+          // Filter sample to only visual asset types
+          const sampleAssets = (sampleResults || []).filter(ar => {
             const aType = ar.metadata?.entity_type || '';
             return ASSET_TYPES.has(aType);
           });
 
-          if (assetItems.length > 0) {
-            // Deduplicate by entity_id
-            const seenIds = new Set();
-            const uniqueAssets = [];
-            for (const a of assetItems) {
-              const aId = a.metadata?.entity_id || a.id;
-              if (!seenIds.has(aId)) {
-                seenIds.add(aId);
-                uniqueAssets.push(a);
-              }
+          // Deduplicate sample by entity_id
+          const seenIds = new Set();
+          const uniqueSample = [];
+          for (const a of sampleAssets) {
+            const aId = a.metadata?.entity_id || a.id;
+            if (!seenIds.has(aId)) {
+              seenIds.add(aId);
+              uniqueSample.push(a);
             }
+          }
 
-            // Collect types present
-            const assetTypeSet = new Set(uniqueAssets.map(a => a.metadata?.entity_type));
+          // Use true count if available, otherwise fall back to sample length
+          const assetCount = totalCount != null ? totalCount : uniqueSample.length;
 
-            // Build sample (top 3 by relevance)
-            const sample = uniqueAssets.slice(0, 3).map(a => ({
+          if (assetCount > 0 || uniqueSample.length > 0) {
+            // Collect types from sample
+            const assetTypeSet = new Set(uniqueSample.map(a => a.metadata?.entity_type));
+
+            const sample = uniqueSample.slice(0, 3).map(a => ({
               id: a.metadata?.entity_id || a.id,
               type: a.metadata?.entity_type || 'unknown',
               title: a.metadata?.title || a.id
             }));
 
             result._assetHints = {
-              count: uniqueAssets.length,
+              count: assetCount,
               types: Array.from(assetTypeSet),
               sample
             };
@@ -430,7 +457,8 @@ export async function execute(context) {
       query: args.query,
       filters_applied: args.filters || null,
       clamped: topK !== originalTopK,
-      _instructions: buildInstructions(uniqueEntities, imageData, imageDataFor, deduplicatedResults, deadAssets),
+      _allAssets: allAssets,
+      _instructions: buildInstructions(uniqueEntities, imageData, imageDataFor, deduplicatedResults, deadAssets, allAssets),
       _timing: finalTiming,
       _diagnostics: Object.keys(diagnostics).length > 0 ? diagnostics : undefined
     };
@@ -461,7 +489,7 @@ export async function execute(context) {
 /**
  * Build the _instructions string, including asset hint guidance and dead asset warnings
  */
-function buildInstructions(uniqueEntities, imageData, imageDataFor, results, deadAssets = []) {
+function buildInstructions(uniqueEntities, imageData, imageDataFor, results, deadAssets = [], allAssets = null) {
   let base = `KB search complete. Found ${uniqueEntities} unique entities. `;
   base += imageData
     ? `✅ Pixel data included for top result: '${imageDataFor?.title}'.`
@@ -472,6 +500,13 @@ function buildInstructions(uniqueEntities, imageData, imageDataFor, results, dea
   if (deadAssets.length > 0) {
     const deadIds = deadAssets.map(d => d.id).join(', ');
     base += `\n\n⚠️ DEAD ASSETS (${deadAssets.length}): The following assets are missing from storage and MUST NOT be shared with the user: ${deadIds}. Their images would appear broken.`;
+  }
+
+  // Document _allAssets when present (related_to queries)
+  if (allAssets && allAssets.length > 0) {
+    base += `\n\n📋 FULL ASSET LIST: _allAssets contains ALL ${allAssets.length} matching assets (id, type, title). `;
+    base += `The 'results' array shows only the top ${uniqueEntities} by relevance with full metadata/URLs. `;
+    base += `To show any asset from _allAssets that isn't in results, use kb_get with that asset's ID.`;
   }
 
   // Add asset hint guidance for results that have them

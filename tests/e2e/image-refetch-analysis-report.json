@@ -1,5 +1,64 @@
 {
   "testName": "Image Re-fetch and Analysis Integration Test",
-  "totalToolCalls": 0,
-  "toolCalls": []
+  "totalToolCalls": 2,
+  "toolCalls": [
+    {
+      "toolId": "kb_search",
+      "args": {
+        "query": "Vector Watch",
+        "filters": {
+          "type": "photo"
+        }
+      },
+      "ok": true,
+      "durationMs": 1076,
+      "hasImageData": false,
+      "entityId": null,
+      "entityType": null,
+      "blobId": null,
+      "markdown": null,
+      "searchResults": [
+        {
+          "id": "asset:vector_ios_app_activity_dashboard_001",
+          "score": 0.7292532,
+          "blob_id": null
+        },
+        {
+          "id": "asset:vector_watch_luna_001",
+          "score": 0.7237431,
+          "blob_id": null
+        },
+        {
+          "id": "asset:vector_ios_app_settings_devices_001",
+          "score": 0.70255315,
+          "blob_id": null
+        },
+        {
+          "id": "asset:third_ear_necklace_gold_001",
+          "score": 0.5095244,
+          "blob_id": null
+        },
+        {
+          "id": "asset:urbanair_neobility_intro_001",
+          "score": 0.5009279,
+          "blob_id": null
+        }
+      ]
+    },
+    {
+      "toolId": "kb_get",
+      "args": {
+        "id": "photo:vector_watch_luna_and_app",
+        "include_image_data": true
+      },
+      "ok": false,
+      "durationMs": 294,
+      "hasImageData": false,
+      "entityId": null,
+      "entityType": null,
+      "blobId": null,
+      "markdown": null,
+      "searchResults": null
+    }
+  ]
 }

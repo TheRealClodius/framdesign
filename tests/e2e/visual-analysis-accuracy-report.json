@@ -1,5 +1,21 @@
 {
   "testName": "Visual Analysis Accuracy Integration Test",
-  "totalToolCalls": 0,
-  "toolCalls": []
+  "totalToolCalls": 1,
+  "toolCalls": [
+    {
+      "toolId": "kb_search",
+      "args": {
+        "include_snippets": true,
+        "filters": {
+          "type": "photo"
+        },
+        "query": "Vector Watch"
+      },
+      "ok": true,
+      "durationMs": 1057,
+      "hasImageData": false,
+      "imageDataSizeKB": 0,
+      "error": null
+    }
+  ]
 }

@@ -231,29 +231,7 @@ export async function searchSimilar(
     const client = getQdrantClient();
 
     // Build filter if provided
-    // Supports both exact match filters and array membership filters ($contains)
-    let queryFilter: any = undefined;
-    if (filters && Object.keys(filters).length > 0) {
-      const mustConditions = Object.entries(filters).map(([key, value]) => {
-        // Handle array contains filter (marked with $contains)
-        // This is used for filtering by related_entities array field
-        if (typeof value === 'object' && value !== null && '$contains' in value) {
-          return {
-            key: key,
-            match: { any: [value.$contains] },
-          };
-        }
-        // Standard exact match
-        return {
-          key: key,
-          match: { value: value },
-        };
-      });
-
-      queryFilter = {
-        must: mustConditions,
-      };
-    }
+    const queryFilter = buildQdrantFilter(filters);
 
     // Perform vector search
     const results = await client.search(COLLECTION_NAME, {
@@ -409,5 +387,108 @@ export async function hasDocuments(): Promise<boolean> {
     }
     console.warn('[vector-store] Error checking documents:', error);
     return false;
+  }
+}
+
+/**
+ * Build a Qdrant filter object from a key-value filters map.
+ * Shared by searchSimilar, countByFilter, and scrollByFilter.
+ */
+function buildQdrantFilter(filters?: Record<string, any>): any {
+  if (!filters || Object.keys(filters).length === 0) return undefined;
+
+  const mustConditions = Object.entries(filters).map(([key, value]) => {
+    if (typeof value === 'object' && value !== null && '$contains' in value) {
+      return { key, match: { any: [value.$contains] } };
+    }
+    return { key, match: { value } };
+  });
+
+  return { must: mustConditions };
+}
+
+/**
+ * Count points matching a filter without vector search.
+ * Uses Qdrant's count() API — no embedding needed.
+ * @param filters - Metadata filters (same format as searchSimilar)
+ * @returns Exact count of matching points
+ */
+export async function countByFilter(
+  filters: Record<string, any>
+): Promise<number> {
+  try {
+    const client = getQdrantClient();
+    const queryFilter = buildQdrantFilter(filters);
+
+    const result = await client.count(COLLECTION_NAME, {
+      filter: queryFilter,
+      exact: true,
+    });
+
+    return result.count;
+  } catch (error: any) {
+    const errorMsg = (error.message || '').toLowerCase();
+    if (errorMsg.includes("doesn't exist") || errorMsg.includes('not found')) {
+      return 0;
+    }
+    console.error('[vector-store] Error counting by filter:', error);
+    throw error;
+  }
+}
+
+/**
+ * Scroll through ALL points matching a filter, returning lightweight metadata.
+ * Uses Qdrant's scroll() API with pagination — no embedding needed.
+ * @param filters - Metadata filters (same format as searchSimilar)
+ * @param payloadFields - Which payload fields to include (default: id-related + type + title)
+ * @returns Array of lightweight point metadata
+ */
+export async function scrollByFilter(
+  filters: Record<string, any>,
+  payloadFields?: string[]
+): Promise<Array<{ id: string; type: string; title: string }>> {
+  try {
+    const client = getQdrantClient();
+    const queryFilter = buildQdrantFilter(filters);
+
+    const allPoints: Array<{ id: string; type: string; title: string }> = [];
+    let offset: string | number | Record<string, unknown> | undefined = undefined;
+
+    while (true) {
+      const result = await client.scroll(COLLECTION_NAME, {
+        limit: 100,
+        offset,
+        filter: queryFilter,
+        with_payload: payloadFields
+          ? { include: payloadFields }
+          : { include: ['original_id', 'entity_id', 'entity_type', 'title'] },
+        with_vector: false,
+      });
+
+      for (const point of result.points) {
+        const entityId = (point.payload?.entity_id as string) || (point.payload?.original_id as string) || String(point.id);
+        const entityType = (point.payload?.entity_type as string) || 'unknown';
+        const title = (point.payload?.title as string) || entityId;
+        allPoints.push({ id: entityId, type: entityType, title });
+      }
+
+      if (!result.next_page_offset) break;
+      offset = result.next_page_offset;
+    }
+
+    // Deduplicate by entity id (multiple chunks per entity)
+    const seen = new Set<string>();
+    return allPoints.filter(p => {
+      if (seen.has(p.id)) return false;
+      seen.add(p.id);
+      return true;
+    });
+  } catch (error: any) {
+    const errorMsg = (error.message || '').toLowerCase();
+    if (errorMsg.includes("doesn't exist") || errorMsg.includes('not found')) {
+      return [];
+    }
+    console.error('[vector-store] Error scrolling by filter:', error);
+    throw error;
   }
 }
