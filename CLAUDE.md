@@ -2,7 +2,7 @@
 
 FRAM: dual-agent conversational AI (text + voice) for a design knowledge base.
 Next.js 16, React 19, TypeScript 5, Google Gemini 2.5, Qdrant, GCS.
-Node 24.1 (.nvmrc). ES modules. Deployed: Vercel (text) + Railway (voice).
+Node 24 (.nvmrc). ES modules. Deployed: Vercel (text) + Railway (voice).
 
 ## Critical Rules
 
@@ -22,6 +22,8 @@ Node 24.1 (.nvmrc). ES modules. Deployed: Vercel (text) + Railway (voice).
 - New page → `app/[locale]/`
 - New API endpoint → `app/api/{name}/route.ts`
 - New shared logic → `lib/services/{name}-service.ts` for domain services, `lib/{name}.ts` for utilities
+- New React hook → `lib/hooks/{useName}.ts`
+- New client utility → `lib/utils/{name}.ts`
 - New React component → `components/{Name}.tsx` (PascalCase)
 
 ### After modifying code
@@ -42,8 +44,11 @@ Node 24.1 (.nvmrc). ES modules. Deployed: Vercel (text) + Railway (voice).
 - Build fails on native modules → check `serverExternalPackages` in `next.config.ts`
 - Tools not loading → `npm run build:tools`, verify `tools/tool_registry.json` exists
 - KB search empty → `npx tsx scripts/Embed/verify-kb-embedding.ts`
+- KB data integrity issues → `npm run kb:audit` (validates frontmatter, manifest, cross-refs, GCS, Qdrant)
 - Empty agent responses → check fallback in `app/api/chat/route.ts`
-- Voice connection fails → check `NEXT_PUBLIC_VOICE_URL` env var and Railway status
+- Broken images in agent responses → dead asset detection (`_dead: true` flag in tool responses, `_diagnostics.dead_assets` array)
+- Tool failures at runtime → check tool events via `curl http://localhost:8080/metrics?events=true`
+- Voice connection fails → check `NEXT_PUBLIC_VOICE_SERVER_URL` env var and Railway status
 
 ## Code Patterns
 
@@ -72,11 +77,12 @@ Node 24.1 (.nvmrc). ES modules. Deployed: Vercel (text) + Railway (voice).
 - Throw enhanced error messages in catch blocks
 - Check env vars in `getClient()`, throw if missing
 
-### New test (`tests/{name}.test.ts`)
+### New test (`tests/{category}/{name}.test.ts`)
 - Import from `@jest/globals`: `import { describe, test, expect } from '@jest/globals'`
 - Nested `describe` blocks for organization
 - Fixtures in `tests/fixtures/`
-- File pattern: `*.test.ts`
+- File pattern: `*.test.ts` (or `*.test.js` for tool tests)
+- Organized by category: `tests/features/`, `tests/services/`, `tests/tools/`, `tests/lib/`, `tests/e2e/`
 
 ### New component (`components/{Name}.tsx`)
 - `"use client"` directive at top for client components
@@ -119,6 +125,8 @@ Node 24.1 (.nvmrc). ES modules. Deployed: Vercel (text) + Railway (voice).
 | Test all | `npm test` |
 | Test specific | `npm test {name}` |
 | Agent test | `node scripts/text-agent-test.js --non-interactive` |
+| Test voice | `npm run test:voice` |
+| Test watch | `npm run test:watch` |
 | Embed KB | `npx tsx scripts/Embed/embed-kb.ts` |
 | Verify KB | `npx tsx scripts/Embed/verify-kb-embedding.ts` |
 | Test KB search | `npx tsx scripts/Testing/kb/test-search.ts` |
@@ -129,14 +137,17 @@ Node 24.1 (.nvmrc). ES modules. Deployed: Vercel (text) + Railway (voice).
 
 Required in `.env`:
 ```
-GEMINI_API_KEY             # Google Gemini API
-PERPLEXITY_API_KEY         # External search
-QDRANT_CLUSTER_ENDPOINT    # Vector database URL
-QDRANT_API_KEY             # Vector database auth
-GCS_BUCKET_NAME            # Google Cloud Storage
-GCP_PROJECT_ID             # GCP project
-RESEND_API_KEY             # Email service
-NEXT_PUBLIC_VOICE_URL      # Voice server WebSocket URL
+GEMINI_API_KEY                  # Google Gemini API
+PERPLEXITY_API_KEY              # External search
+QDRANT_CLUSTER_ENDPOINT         # Vector database URL
+QDRANT_API_KEY                  # Vector database auth
+GCS_BUCKET_NAME                 # Google Cloud Storage bucket
+GCS_PROJECT_ID                  # GCS project ID
+GCS_SERVICE_ACCOUNT_KEY         # Base64-encoded service account key (Vercel)
+GOOGLE_APPLICATION_CREDENTIALS  # ADC or JSON credentials (local dev)
+RESEND_API_KEY                  # Email service
+NEXT_PUBLIC_VOICE_SERVER_URL    # Voice server WebSocket URL
+NEXT_PUBLIC_GA_MEASUREMENT_ID   # Google Analytics
 ```
 
 Voice server also needs its own `.env` in `voice-server/` with: `GEMINI_API_KEY`, `QDRANT_CLUSTER_ENDPOINT`, `QDRANT_API_KEY`, `ALLOWED_ORIGINS`.
