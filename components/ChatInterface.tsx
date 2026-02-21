@@ -171,7 +171,7 @@
  * 2. Set footer height: Modify `pt-8 pb-9` in page.tsx
  * 3. Total bottom height = wrapper height + footer height
  */
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import MarkdownWithMermaid from "./MarkdownWithMermaid";
 import {
   generateMessageId,
@@ -557,6 +557,9 @@ export default function ChatInterface() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Detect user's IANA timezone once (e.g. "Europe/Bucharest")
+  const userTimezone = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []);
 
   // Keep a ref to latest messages to avoid stale closures in async handlers
   const messagesRef = useRef(messages);
@@ -1238,10 +1241,11 @@ export default function ChatInterface() {
         let streamedContent = "";
 
       await streamChatResponse(
-        { 
-          messages: requestMessages, 
+        {
+          messages: requestMessages,
           timeoutExpired: false,
-          userId: getUserId()
+          userId: getUserId(),
+          timezone: userTimezone
         },
           (chunk) => {
             streamedContent += chunk;
@@ -1341,10 +1345,11 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
       let fixedContent = "";
 
       await streamChatResponse(
-        { 
-          messages: fixMessages, 
+        {
+          messages: fixMessages,
           timeoutExpired: false,
-          userId: getUserId()
+          userId: getUserId(),
+          timezone: userTimezone
         },
         (chunk) => {
           fixedContent += chunk;
@@ -1454,7 +1459,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
 
       try {
         const response = await streamChatResponse(
-          { messages: requestMessages, timeoutExpired: expired || false },
+          { messages: requestMessages, timeoutExpired: expired || false, timezone: userTimezone },
           (chunk) => {
             if (!streamCompleted) {
               streamedContent += chunk;
@@ -1522,7 +1527,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
             if (pendingRequest) {
               console.log(`📌 Voice session starting with pending request: "${pendingRequest}"`);
             }
-            await voiceService.start(conversationHistory, pendingRequest, getUserId());
+            await voiceService.start(conversationHistory, pendingRequest, getUserId(), userTimezone);
             // Session started event will update state
           } catch (error) {
             console.error('Error starting voice session:', error);
@@ -1601,10 +1606,11 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
         }
 
         // Fallback to JSON request
-        const data = await sendChatRequest({ 
-          messages: requestMessages, 
+        const data = await sendChatRequest({
+          messages: requestMessages,
           timeoutExpired: expired || false,
-          userId: getUserId()
+          userId: getUserId(),
+          timezone: userTimezone
         });
 
         // Check if Fram decided to timeout the user
@@ -1639,7 +1645,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
             if (pendingRequest) {
               console.log(`📌 Voice session starting with pending request: "${pendingRequest}"`);
             }
-            await voiceService.start(conversationHistory, pendingRequest, getUserId());
+            await voiceService.start(conversationHistory, pendingRequest, getUserId(), userTimezone);
             // Session started event will update state
           } catch (error) {
             console.error('Error starting voice session:', error);
@@ -2082,7 +2088,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
                     }));
 
                     // Start voice session
-                    await voiceService.start(conversationHistory);
+                    await voiceService.start(conversationHistory, null, undefined, userTimezone);
                     // Session started event will update state
                   } catch (error) {
                     console.error('Error starting voice session:', error);

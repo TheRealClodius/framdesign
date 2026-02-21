@@ -188,6 +188,7 @@ wss.on('connection', async (ws, req) => {
   let conversationHistory = []; // Store for context injection
   let pendingRequest = null; // Store pending user request from text agent handoff
   let currentUserId = null; // Store userId for usage tracking
+  let currentTimezone = null; // Store user's IANA timezone (e.g. "Europe/Bucharest")
   let currentTurn = 1; // Track conversation turns for loop detection (NEW)
   
   // Track last transcript text to detect and deduplicate overlapping chunks from Gemini
@@ -1310,6 +1311,7 @@ wss.on('connection', async (ws, req) => {
         case 'start':
           console.log(`[${clientId}] Starting Gemini Live session for user: ${data.userId || 'anonymous'}`);
           currentUserId = data.userId || null;
+          currentTimezone = data.timezone || null;
           
           // Check global budget if userId is provided
           if (data.userId) {

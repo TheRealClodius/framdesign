@@ -10,6 +10,7 @@ export interface ChatRequest {
   messages: Message[];
   timeoutExpired?: boolean;
   userId?: string;
+  timezone?: string;
 }
 
 export interface ChatResponse {
@@ -44,6 +45,7 @@ export async function streamChatResponse(
         messages: prepareMessagesForSend(request.messages),
         timeoutExpired: request.timeoutExpired || false,
         userId: request.userId,
+        timezone: request.timezone,
       }),
     });
 
@@ -170,6 +172,7 @@ export async function sendChatRequest(request: ChatRequest): Promise<ChatRespons
     body: JSON.stringify({
       messages: prepareMessagesForSend(request.messages),
       timeoutExpired: request.timeoutExpired || false,
+      timezone: request.timezone,
     }),
   });
 
