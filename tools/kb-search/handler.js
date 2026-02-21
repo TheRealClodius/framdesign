@@ -457,7 +457,7 @@ export async function execute(context) {
       query: args.query,
       filters_applied: args.filters || null,
       clamped: topK !== originalTopK,
-      _allAssets: allAssets,
+      _allAssets: allAssets ? allAssets.slice(0, 20) : null,
       _instructions: buildInstructions(uniqueEntities, imageData, imageDataFor, deduplicatedResults, deadAssets, allAssets),
       _timing: finalTiming,
       _diagnostics: Object.keys(diagnostics).length > 0 ? diagnostics : undefined
@@ -502,11 +502,12 @@ function buildInstructions(uniqueEntities, imageData, imageDataFor, results, dea
     base += `\n\n⚠️ DEAD ASSETS (${deadAssets.length}): The following assets are missing from storage and MUST NOT be shared with the user: ${deadIds}. Their images would appear broken.`;
   }
 
-  // Document _allAssets when present (related_to queries)
+  // Note additional matching assets without encouraging exhaustive display
   if (allAssets && allAssets.length > 0) {
-    base += `\n\n📋 FULL ASSET LIST: _allAssets contains ALL ${allAssets.length} matching assets (id, type, title). `;
-    base += `The 'results' array shows only the top ${uniqueEntities} by relevance with full metadata/URLs. `;
-    base += `To show any asset from _allAssets that isn't in results, use kb_get with that asset's ID.`;
+    const moreCount = Math.max(0, allAssets.length - results.length);
+    if (moreCount > 0) {
+      base += `\n\n${moreCount} more matching assets exist beyond these top results. If the user wants more, run another kb_search with adjusted filters — do NOT try to show all at once.`;
+    }
   }
 
   // Add asset hint guidance for results that have them

@@ -144,28 +144,39 @@ const VISUAL_ASSET_TYPES = new Set(["photo", "diagram", "gif", "video"]);
  * Format a timestamp for display in messages
  * @param timestamp Unix timestamp in milliseconds
  * @param includeYear Whether to include the year in the output
- * @returns Formatted string like "[Jan 28, 14:30]" or "[Jan 28, 2024, 14:30]"
+ * @param timezone IANA timezone string (e.g. "Europe/Bucharest"). Defaults to "UTC".
+ * @returns Formatted string like "[Jan 28, 16:30 EET]" or "[Jan 28, 2024, 16:30 EET]"
  */
-function formatTimestamp(timestamp: number | undefined, includeYear = false): string {
+function formatTimestamp(timestamp: number | undefined, includeYear = false, timezone?: string): string {
   if (!timestamp) return '';
+  const tz = timezone || 'UTC';
   const date = new Date(timestamp);
-  // Use UTC to ensure consistent formatting across timezones
-  const month = date.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' });
-  const day = date.getUTCDate();
-  const hours = date.getUTCHours().toString().padStart(2, '0');
-  const minutes = date.getUTCMinutes().toString().padStart(2, '0');
-  const year = includeYear ? `, ${date.getUTCFullYear()}` : '';
-  return `[${month} ${day}${year}, ${hours}:${minutes}]`;
+  const parts = new Intl.DateTimeFormat('en-US', {
+    month: 'short', day: 'numeric', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+    timeZoneName: 'short', timeZone: tz
+  }).formatToParts(date);
+  const get = (type: string) => parts.find(p => p.type === type)?.value || '';
+  const month = get('month');
+  const day = get('day');
+  const hours = get('hour').padStart(2, '0');
+  const minutes = get('minute').padStart(2, '0');
+  const year = includeYear ? `, ${get('year')}` : '';
+  const tzAbbr = get('timeZoneName');
+  return `[${month} ${day}${year}, ${hours}:${minutes}${tzAbbr ? ' ' + tzAbbr : ''}]`;
 }
 
 /**
  * Extract date range header from messages for summary
  * @param messages Array of messages with optional timestamps
+ * @param timezone IANA timezone string (e.g. "Europe/Bucharest"). Defaults to "UTC".
  * @returns Date range string or empty string if not enough timestamps
  */
 function extractDateRangeHeader(
-  messages: Array<{ role: string; content: string; timestamp?: number }>
+  messages: Array<{ role: string; content: string; timestamp?: number }>,
+  timezone?: string
 ): string {
+  const tz = timezone || 'UTC';
   const timestamps = messages
     .filter((m) => m.timestamp)
     .map((m) => m.timestamp!);
@@ -176,10 +187,7 @@ function extractDateRangeHeader(
   const latest = new Date(Math.max(...timestamps));
 
   const formatDate = (d: Date) => {
-    const month = d.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' });
-    const day = d.getUTCDate();
-    const year = d.getUTCFullYear();
-    return `${month} ${day}, ${year}`;
+    return d.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: tz });
   };
 
   if (timestamps.length === 1) {
@@ -383,11 +391,12 @@ function hashConversation(messages: Array<{ role: string; content: string }>, ti
  */
 async function summarizeMessages(
   ai: GoogleGenAI,
-  messages: Array<{ role: string; content: string; timestamp?: number }>
+  messages: Array<{ role: string; content: string; timestamp?: number }>,
+  timezone?: string
 ): Promise<string> {
   try {
     // Extract date range header from timestamps (if available)
-    const dateRangeHeader = extractDateRangeHeader(messages);
+    const dateRangeHeader = extractDateRangeHeader(messages, timezone);
 
     // Build prompt for summarization
     const conversationText = messages
@@ -422,7 +431,7 @@ Summary:`;
   } catch (error) {
     console.error("Failed to summarize messages:", error);
     // Fallback: return a simple note with date range if available
-    const dateRangeHeader = extractDateRangeHeader(messages);
+    const dateRangeHeader = extractDateRangeHeader(messages, timezone);
     const fallbackText = `Previous conversation with ${messages.length} messages.`;
     return dateRangeHeader ? `${dateRangeHeader}\n\n${fallbackText}` : fallbackText;
   }
@@ -1077,7 +1086,7 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { messages, timeoutExpired, userId } = body;
+    const { messages, timeoutExpired, userId, timezone } = body;
 
     // Check global budget if userId is provided
     // Wrapped in try/catch to prevent chat failures when usage store is inaccessible
@@ -1248,7 +1257,7 @@ export async function POST(request: Request) {
       if (needsNewSummary) {
         console.log(`Scheduling background summarization of ${messagesToSummarize.length} old messages`);
         // Start summarization in background, don't await it
-        summaryPromise = summarizeMessages(ai, messagesToSummarize);
+        summaryPromise = summarizeMessages(ai, messagesToSummarize, timezone);
         // Use existing summary for now (if available)
         summary = cached?.summary || null;
       } else {
@@ -1340,7 +1349,7 @@ export async function POST(request: Request) {
       // For user messages with timestamps, prepend the formatted timestamp
       // Include year on first message after summary for unambiguous year context
       if (msg.role === 'user' && msg.timestamp) {
-        const timestampStr = formatTimestamp(msg.timestamp, includeYearOnNextUserMessage);
+        const timestampStr = formatTimestamp(msg.timestamp, includeYearOnNextUserMessage, timezone);
         content = timestampStr ? `${timestampStr} ${content}` : content;
         includeYearOnNextUserMessage = false; // Only first message gets year
       }
@@ -2098,6 +2107,8 @@ export async function POST(request: Request) {
         if (cleanedResultData && typeof cleanedResultData === 'object') {
           delete cleanedResultData._timing;
           delete cleanedResultData._distance;
+          delete cleanedResultData._allAssets;
+          delete cleanedResultData._diagnostics;
           // Also clean nested results if they exist
           if (Array.isArray(cleanedResultData.results)) {
             cleanedResultData.results.forEach((r: any) => {
