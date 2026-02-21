@@ -1990,38 +1990,9 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
           </div>
         ) : (
           <div className="absolute bottom-14 left-0 right-0 z-20 px-4">
-            <form onSubmit={handleSubmit} className="relative max-w-[500px] mx-auto w-full">
-              <textarea
-                ref={textareaRef}
-                rows={1}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSubmit();
-                  }
-                }}
-                disabled={isVoiceMode}
-                aria-label="Chat message input"
-                className={`w-full bg-transparent py-2 pr-12 focus:outline-none transition-colors rounded-none resize-none overflow-y-auto max-h-[120px] disabled:opacity-50 disabled:cursor-not-allowed ${isDark ? 'border-b border-gray-600 focus:border-gray-400 placeholder:text-gray-600 text-gray-100' : 'border-b border-gray-300 focus:border-black placeholder:text-gray-300 text-black'}`}
-                placeholder={isVoiceMode ? "Voice mode active..." : "Type your message..."}
-              />
-              <button
-                type="submit"
-                disabled={isLoading || isVoiceMode || !input.trim()}
-                aria-label="Send message"
-                className={`absolute right-0 top-2 text-[0.75rem] uppercase tracking-wider transition-colors ${isDark ? 'text-gray-100 disabled:text-gray-600 hover:text-gray-300' : 'text-black disabled:text-gray-300 hover:text-gray-600'}`}
-              >
-                Send
-              </button>
-            </form>
-
-            {/* Voice Mode Controls */}
-            <div className="flex flex-col mt-4 space-y-2">
-            {/* Voice Error Display */}
+            {/* Voice Error Display — above prompt container */}
             {voiceError && (
-              <div className={`w-full max-w-[500px] mx-auto px-4 py-2 rounded text-[0.75rem] font-mono ${
+              <div className={`max-w-[500px] mx-auto mb-2 px-4 py-2 rounded text-[0.75rem] font-mono ${
                 isReconnecting
                   ? isDark
                     ? 'bg-yellow-900/30 border border-yellow-700/50 text-yellow-300'
@@ -2037,115 +2008,138 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
               </div>
             )}
 
-            {/* Audio Playback Disabled Notice */}
+            {/* Audio Playback Disabled Notice — above prompt container */}
             {audioPlaybackDisabled && isVoiceMode && (
-              <div className={`w-full max-w-[500px] mx-auto px-4 py-2 rounded text-[0.75rem] font-mono ${isDark ? 'bg-yellow-900/30 border border-yellow-700/50 text-yellow-300' : 'bg-yellow-50 border border-yellow-200 text-yellow-700'}`}>
+              <div className={`max-w-[500px] mx-auto mb-2 px-4 py-2 rounded text-[0.75rem] font-mono ${isDark ? 'bg-yellow-900/30 border border-yellow-700/50 text-yellow-300' : 'bg-yellow-50 border border-yellow-200 text-yellow-700'}`}>
                 <p className="uppercase text-[0.7rem] mb-1 tracking-wider">Audio Disabled</p>
                 <div>Audio playback unavailable. Transcripts will still be displayed.</div>
               </div>
             )}
 
-            {/* Voice Button Container */}
-            <div className="max-w-[500px] mx-auto w-full flex justify-end">
-              <button
-              onClick={async () => {
-                // Unlock audio context during user interaction (required for mobile)
-                await unlockAudio();
-
-                if (isVoiceMode) {
-                  // End voice mode
-                  try {
-                    if (!hasShownEndCallSummary.current) {
-                      hasShownEndCallSummary.current = true;
-                      const endCallMessage = buildEndCallMessage(voiceSessionStartTime.current);
-                      setMessages((prev) => [
-                        ...prev,
-                        { id: generateMessageId(), role: "assistant", content: endCallMessage }
-                      ]);
-                    }
-
-                    // Play end sound effect
-                    playSoundEffect('/sounds/end.mp3');
-
-                    // Reset session start time
-                    voiceSessionStartTime.current = null;
-
-                    await voiceService.stop();
-                    // Transcripts will be integrated via the 'complete' event handler
-                  } catch (error) {
-                    console.error('Error stopping voice session:', error);
-                    setIsVoiceMode(false);
-                    setIsVoiceLoading(false);
-                  } finally {
-                    // Reset session start time
-                    voiceSessionStartTime.current = null;
+            {/* Bordered prompt container */}
+            <div className={`max-w-[500px] mx-auto w-full rounded-lg border p-3 transition-colors duration-300 ${
+              isDark
+                ? 'bg-gray-950 border-gray-700'
+                : 'bg-gray-50 border-gray-300'
+            }`}>
+              {/* Textarea */}
+              <textarea
+                ref={textareaRef}
+                rows={1}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSubmit();
                   }
-                } else {
-                  // Start voice mode
-                  try {
-                    setIsVoiceLoading(true);
+                }}
+                disabled={isVoiceMode}
+                aria-label="Chat message input"
+                className={`w-full bg-transparent focus:outline-none resize-none overflow-y-auto max-h-[120px] text-[0.875rem] ${
+                  isDark
+                    ? 'placeholder:text-gray-600 text-gray-100'
+                    : 'placeholder:text-gray-400 text-black'
+                }`}
+                placeholder={isVoiceMode ? "Voice mode active..." : "Type your message..."}
+              />
 
-                    // User manually starting voice - next transcript should be a new message
-                    shouldStartNewTurn.current = true;
-                    console.log('🔴 FLAG SET: User starting voice mode - shouldStartNewTurn = TRUE');
+              {/* Chin — right-aligned multi-state button */}
+              <div className="flex justify-end mt-2">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (isLoading) {
+                      // Stop state — cancel generation (no abort controller yet, fallback to clearing loading state)
+                      setIsLoading(false);
+                      setLoadingStatus(null);
+                    } else if (input.trim()) {
+                      // Send state — submit message
+                      handleSubmit();
+                    } else {
+                      // Voice state — toggle voice
+                      await unlockAudio();
 
-                    // Use messagesRef for latest state in async context
-                    const conversationHistory = messagesRef.current.map(m => ({
-                      role: m.role,
-                      content: m.content
-                    }));
+                      if (isVoiceMode) {
+                        // End voice mode
+                        try {
+                          if (!hasShownEndCallSummary.current) {
+                            hasShownEndCallSummary.current = true;
+                            const endCallMessage = buildEndCallMessage(voiceSessionStartTime.current);
+                            setMessages((prev) => [
+                              ...prev,
+                              { id: generateMessageId(), role: "assistant", content: endCallMessage }
+                            ]);
+                          }
 
-                    // Start voice session
-                    await voiceService.start(conversationHistory, null, undefined, userTimezone);
-                    // Session started event will update state
-                  } catch (error) {
-                    console.error('Error starting voice session:', error);
-                    setIsVoiceLoading(false);
-                    setIsVoiceMode(false);
+                          playSoundEffect('/sounds/end.mp3');
+                          voiceSessionStartTime.current = null;
 
-                    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-                    let userFriendlyMessage = errorMessage;
+                          await voiceService.stop();
+                        } catch (error) {
+                          console.error('Error stopping voice session:', error);
+                          setIsVoiceMode(false);
+                          setIsVoiceLoading(false);
+                        } finally {
+                          voiceSessionStartTime.current = null;
+                        }
+                      } else {
+                        // Start voice mode
+                        try {
+                          setIsVoiceLoading(true);
 
-                    // Provide specific guidance based on error type
-                    if (errorMessage.includes('permission') || errorMessage.includes('denied')) {
-                      userFriendlyMessage = 'Microphone permission denied. Please grant microphone access in your browser settings and try again.';
-                    } else if (errorMessage.includes('WebSocket') || errorMessage.includes('connection')) {
-                      userFriendlyMessage = 'Could not connect to voice server. Please check your internet connection and try again.';
-                    } else if (errorMessage.includes('Invalid WebSocket URL')) {
-                      userFriendlyMessage = 'Voice server not configured. Please contact support.';
-                    }
+                          shouldStartNewTurn.current = true;
+                          console.log('🔴 FLAG SET: User starting voice mode - shouldStartNewTurn = TRUE');
 
-                    setMessages((prev) => [
-                      ...prev,
-                      {
-                        id: generateMessageId(),
-                        role: "assistant",
-                        content: `VOICE ERROR: ${userFriendlyMessage}. YOU CAN CONTINUE USING TEXT CHAT.`
+                          const conversationHistory = messagesRef.current.map(m => ({
+                            role: m.role,
+                            content: m.content
+                          }));
+
+                          await voiceService.start(conversationHistory, null, undefined, userTimezone);
+                        } catch (error) {
+                          console.error('Error starting voice session:', error);
+                          setIsVoiceLoading(false);
+                          setIsVoiceMode(false);
+
+                          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+                          let userFriendlyMessage = errorMessage;
+
+                          if (errorMessage.includes('permission') || errorMessage.includes('denied')) {
+                            userFriendlyMessage = 'Microphone permission denied. Please grant microphone access in your browser settings and try again.';
+                          } else if (errorMessage.includes('WebSocket') || errorMessage.includes('connection')) {
+                            userFriendlyMessage = 'Could not connect to voice server. Please check your internet connection and try again.';
+                          } else if (errorMessage.includes('Invalid WebSocket URL')) {
+                            userFriendlyMessage = 'Voice server not configured. Please contact support.';
+                          }
+
+                          setMessages((prev) => [
+                            ...prev,
+                            {
+                              id: generateMessageId(),
+                              role: "assistant",
+                              content: `VOICE ERROR: ${userFriendlyMessage}. YOU CAN CONTINUE USING TEXT CHAT.`
+                            }
+                          ]);
+                        }
                       }
-                    ]);
-                  }
-                }
-              }}
-              disabled={isVoiceLoading || isLoading}
-              className={`text-[0.75rem] uppercase tracking-wider transition-colors ${
-                isVoiceMode
-                  ? isDark
-                    ? "text-red-400 hover:text-red-300"
-                    : "text-red-600 hover:text-red-700"
-                  : isDark
-                    ? "text-gray-100 hover:text-gray-300"
-                    : "text-black hover:text-gray-600"
-              } ${isVoiceLoading || isLoading ? "opacity-50 cursor-not-allowed" : ""}`}
-            >
-              {isVoiceLoading ? (
-                "Starting..."
-              ) : isVoiceMode ? (
-                "END"
-              ) : (
-                "VOICE"
-              )}
-              </button>
-            </div>
+                    }
+                  }}
+                  disabled={isVoiceLoading}
+                  className={`text-[0.75rem] font-mono uppercase tracking-wider transition-colors ${
+                    isLoading
+                      ? isDark ? 'text-red-400 hover:text-red-300' : 'text-red-600 hover:text-red-700'
+                      : input.trim()
+                        ? isDark ? 'text-gray-100 hover:text-gray-300' : 'text-black hover:text-gray-600'
+                        : isVoiceMode
+                          ? isDark ? 'text-red-400 hover:text-red-300' : 'text-red-600 hover:text-red-700'
+                          : isDark ? 'text-gray-100 hover:text-gray-300' : 'text-black hover:text-gray-600'
+                  } ${isVoiceLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  aria-label={isLoading ? 'Stop generating' : input.trim() ? 'Send message' : isVoiceMode ? 'End voice' : 'Start voice'}
+                >
+                  {isLoading ? 'STOP' : input.trim() ? 'SEND' : isVoiceLoading ? 'STARTING...' : isVoiceMode ? 'END' : 'VOICE'}
+                </button>
+              </div>
             </div>
           </div>
         )}
