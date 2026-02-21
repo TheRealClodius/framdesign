@@ -1682,11 +1682,11 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
   };
 
   return (
-    <section className={`w-full max-w-[28rem] md:max-w-[950px] mx-auto pt-12 md:pt-0 pb-0 md:pb-0 h-fit md:flex-1 md:flex md:flex-col md:min-h-0 overflow-x-hidden transition-colors duration-300 ${isDark ? 'bg-gray-900' : 'bg-white'}`}>
+    <section className={`w-full max-w-[28rem] md:max-w-[950px] mx-auto pt-0 pb-0 md:pb-0 h-fit md:flex-1 md:flex md:flex-col md:min-h-0 overflow-x-hidden transition-colors duration-300 ${isDark ? 'bg-gray-900' : 'bg-white'}`}>
       {/* Relative container for absolute-positioned overlays */}
-      <div className="relative flex-1 min-h-0 h-[600px] md:h-auto font-mono text-[0.875rem]">
+      <div className="relative flex-1 min-h-0 h-[110vh] md:h-auto font-mono text-[0.875rem]">
         {/* Scroll area */}
-        <div ref={messagesContainerRef} className={`absolute inset-0 overflow-y-auto overflow-x-hidden scrollbar-boxy ${isDark ? 'scrollbar-dark' : ''}`} style={{ paddingTop: '3.5rem', paddingBottom: '10rem' }}>
+        <div ref={messagesContainerRef} className={`absolute inset-0 overflow-y-auto overflow-x-hidden pt-36 scrollbar-boxy ${isDark ? 'scrollbar-dark' : ''}`}>
           {/* Messages content */}
           <div className="space-y-6 px-4">
           {messages.map((message, index) => {
@@ -1908,13 +1908,13 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
         <div className="pointer-events-none absolute top-0 left-0 right-0 z-10 h-12" style={{ background: `linear-gradient(to bottom, ${isDark ? 'rgb(17 24 39)' : 'rgb(255 255 255)'}, ${isDark ? 'rgb(17 24 39 / 0)' : 'rgb(255 255 255 / 0)'})` }} />
 
         {/* Bottom fade gradient */}
-        <div className="pointer-events-none absolute bottom-0 left-0 right-0 z-10 h-12" style={{ background: `linear-gradient(to top, ${isDark ? 'rgb(17 24 39)' : 'rgb(255 255 255)'}, ${isDark ? 'rgb(17 24 39 / 0)' : 'rgb(255 255 255 / 0)'})` }} />
+        <div className="pointer-events-none absolute bottom-0 left-0 right-0 z-10 h-[120px]" style={{ background: `linear-gradient(to top, ${isDark ? 'rgb(17 24 39)' : 'rgb(255 255 255)'}, ${isDark ? 'rgb(17 24 39 / 0)' : 'rgb(255 255 255 / 0)'})` }} />
 
         {/* Floating header — right-aligned, suggestion-style box */}
-        <div className="absolute top-3 right-2 z-20 pointer-events-none">
+        <div className="absolute top-20 right-2 z-20 pointer-events-none">
           <button
             onClick={handleClearChat}
-            className={`pointer-events-auto text-[0.75rem] font-mono uppercase tracking-wider transition-colors px-3 py-1.5 border rounded ${isDark ? 'text-gray-400 hover:text-gray-100 border-gray-600 hover:border-gray-400 bg-gray-900' : 'text-gray-400 hover:text-black border-gray-300 hover:border-black bg-white'}`}
+            className={`pointer-events-auto text-[0.75rem] font-mono uppercase tracking-wider transition-colors px-3 py-1.5 border rounded shadow-md ${isDark ? 'text-gray-400 hover:text-gray-100 border-gray-600 hover:border-gray-400 bg-gray-950 shadow-black/40' : 'text-gray-400 hover:text-black border-gray-300 hover:border-black bg-gray-50 shadow-gray-400/50'}`}
           >
             + Fresh Conversation
           </button>
@@ -1982,10 +1982,10 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
             )}
 
             {/* Bordered prompt container */}
-            <div className={`max-w-[500px] mx-auto w-full rounded-lg border p-3 transition-colors duration-300 ${
+            <div className={`max-w-[500px] mx-auto w-full rounded-lg border p-3 shadow-md transition-colors duration-300 ${
               isDark
-                ? 'bg-gray-950 border-gray-700'
-                : 'bg-gray-50 border-gray-300'
+                ? 'bg-gray-950 border-gray-700 shadow-black/40 focus-within:border-blue-500'
+                : 'bg-gray-50 border-gray-300 shadow-gray-400/50 focus-within:border-blue-500'
             }`}>
               {/* Textarea */}
               <textarea
@@ -2091,7 +2091,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
                     }
                   }}
                   disabled={isVoiceLoading}
-                  className={`text-[0.75rem] font-mono uppercase tracking-wider transition-colors h-5 flex items-center ${
+                  className={`relative text-[0.75rem] font-mono uppercase tracking-wider transition-colors h-5 flex items-center after:absolute after:-inset-3 after:content-[''] ${
                     isLoading
                       ? isDark ? 'text-red-400 hover:text-red-300' : 'text-red-600 hover:text-red-700'
                       : input.trim()
@@ -2114,6 +2114,11 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
             </div>
           </div>
         )}
+
+        {/* Copyright — centered between prompt bottom edge and container bottom */}
+        <div className={`absolute bottom-5 left-0 right-0 z-10 text-center text-[10px] font-mono pointer-events-none transition-colors duration-300 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+          <p>&copy; {new Date().getFullYear()} FRAM DESIGN. All rights reserved.</p>
+        </div>
       </div>
 
       {/* Suggestion image hover popup */}
