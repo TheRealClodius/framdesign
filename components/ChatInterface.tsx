@@ -557,6 +557,7 @@ export default function ChatInterface() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const promptContainerRef = useRef<HTMLDivElement>(null);
 
   // Detect user's IANA timezone once (e.g. "Europe/Bucharest")
   const userTimezone = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []);
@@ -716,7 +717,13 @@ export default function ChatInterface() {
       textareaRef.current.style.height = "auto";
       textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
     }
-  }, [input]);
+    // Update scroll area bottom padding when prompt height changes
+    if (promptContainerRef.current && messagesContainerRef.current) {
+      const promptHeight = promptContainerRef.current.offsetHeight;
+      // bottom-14 (3.5rem ≈ 56px) inset + prompt height + 16px breathing room
+      messagesContainerRef.current.style.paddingBottom = `${promptHeight + 56 + 16}px`;
+    }
+  }, [input, isBlocked]);
 
   // Preload audio elements on mount for better mobile compatibility
   useEffect(() => {
@@ -1961,7 +1968,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
 
         {/* Floating prompt area */}
         {isBlocked ? (
-          <div className="absolute bottom-14 left-0 right-0 z-20 px-4">
+          <div ref={promptContainerRef} className="absolute bottom-14 left-0 right-0 z-20 px-4">
             <div className={`max-w-[500px] mx-auto w-full rounded-lg border p-4 transition-colors duration-300 ${
               isDark
                 ? 'bg-gray-950 border-gray-700'
@@ -1993,7 +2000,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
             </div>
           </div>
         ) : (
-          <div className="absolute bottom-14 left-0 right-0 z-20 px-4">
+          <div ref={promptContainerRef} className="absolute bottom-14 left-0 right-0 z-20 px-4">
             {/* Voice Error Display — above prompt container */}
             {voiceError && (
               <div className={`max-w-[500px] mx-auto mb-2 px-4 py-2 rounded text-[0.75rem] font-mono ${
