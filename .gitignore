@@ -67,3 +67,6 @@ gcs-service-account-key.json
 
 # usage tracking
 .usage/
+
+# git worktrees
+.worktrees/
