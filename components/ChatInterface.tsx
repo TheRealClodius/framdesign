@@ -2,174 +2,128 @@
 
 /**
  * CHAT SECTION COMPONENT
- * 
+ *
  * This component renders the chat interface section of the website, featuring:
  * - Interactive chat interface with user and assistant messages
  * - Streaming response support with real-time updates
  * - Markdown and Mermaid diagram rendering for assistant responses
  * - Timeout/blocking functionality for inappropriate user behavior
- * - Auto-scrolling message container
+ * - Auto-scrolling message container with dynamic scroll padding
  * - Responsive design with mobile and desktop layouts
- * 
+ * - Floating overlays for header and prompt (no sticky/fixed positioning)
+ * - Multi-state action button (VOICE / SEND / STOP / END)
+ *
  * Location: components/ChatInterface.tsx
  * Used in: app/[locale]/page.tsx (main landing page, below hero section)
  * API Endpoint: /api/chat (handles chat requests and streaming responses)
- * 
- * HEIGHT SYSTEM EXPLANATION:
- * 
- * The height is controlled through a cascading flexbox system:
- * 
+ *
+ * LAYOUT SYSTEM EXPLANATION:
+ *
+ * The chat uses a relative container with absolute-positioned overlays.
+ * No sticky headers, no form wrappers -- everything floats over a single
+ * scroll area whose padding keeps content from hiding behind the overlays.
+ *
  * NESTING STRUCTURE (Desktop):
- * ┌─────────────────────────────────────────────────┐
- * │ page.tsx: form-container (md:h-[100vh])         │ ← 100vh viewport height
- * │   ┌───────────────────────────────────────────┐ │
- * │   │ ChatInterface section (md:flex-1)        │ │ ← Takes remaining space
- * │   │   ┌────────────────────────────────────┐ │ │
- * │   │   │ HEADER (line 983)                  │ │ │ ← Fixed height
- * │   │   │ - "FRAM ASSISTANT" + Clear button  │ │ │   mb-10 (2.5rem)
- * │   │   │ - flex-shrink-0                     │ │ │   flex-shrink-0
- * │   │   └────────────────────────────────────┘ │ │
- * │   │   ┌────────────────────────────────────┐ │ │
- * │   │   │ Messages Wrapper (md:flex-1)      │ │ │ ← Flexible, fills space
- * │   │   │   ┌──────────────────────────────┐ │ │ │
- * │   │   │   │ Messages Container           │ │ │ │ ← Scrollable area
- * │   │   │   │ (md:flex-1, overflow-y-auto) │ │ │ │   md:flex-1
- * │   │   │   └──────────────────────────────┘ │ │ │
- * │   │   │   ┌──────────────────────────────┐ │ │ │
- * │   │   │   │ PROMPT BOX (line 1068)       │ │ │ │ ← Fixed height
- * │   │   │   │ - Textarea form              │ │ │ │   flex-shrink-0
- * │   │   │   │ - Auto-grows (max-h-[120px]) │ │ │ │   Auto height
- * │   │   │   │ - Voice controls below        │ │ │ │
- * │   │   │   └──────────────────────────────┘ │ │ │
- * │   │   └────────────────────────────────────┘ │ │
- * │   └───────────────────────────────────────────┘ │
- * │   ┌───────────────────────────────────────────┐ │
- * │   │ FOOTER (page.tsx line 26)                 │ │ ← Fixed height
- * │   │ - Copyright text                          │ │   pt-8 pb-9
- * │   │ - flex-shrink-0                           │ │   flex-shrink-0
- * │   └───────────────────────────────────────────┘ │
- * └─────────────────────────────────────────────────┘
- * 
- * DETAILED HEIGHT BREAKDOWN:
- * 
- * 1. PARENT CONTAINER (page.tsx line 23):
+ * ┌──────────────────────────────────────────────────────┐
+ * │ page.tsx: form-container (md:h-[100vh])              │ ← viewport height
+ * │   ┌────────────────────────────────────────────────┐ │
+ * │   │ ChatInterface <section> (md:flex-1)            │ │ ← fills space
+ * │   │   ┌──────────────────────────────────────────┐ │ │
+ * │   │   │ RELATIVE CONTAINER (flex-1 min-h-0)      │ │ │ ← positioning ctx
+ * │   │   │                                          │ │ │
+ * │   │   │   ┌── absolute inset-0 ───────────────┐ │ │ │
+ * │   │   │   │ SCROLL AREA (overflow-y-auto)     │ │ │ │ ← full-bleed scroll
+ * │   │   │   │   paddingTop: 3.5rem              │ │ │ │   (dynamic paddings)
+ * │   │   │   │   paddingBottom: dynamic          │ │ │ │
+ * │   │   │   │   ┌────────────────────────────┐  │ │ │ │
+ * │   │   │   │   │ Messages (space-y-6)       │  │ │ │ │
+ * │   │   │   │   └────────────────────────────┘  │ │ │ │
+ * │   │   │   └───────────────────────────────────┘ │ │ │
+ * │   │   │                                          │ │ │
+ * │   │   │   ┌── absolute top-3 right-0 z-20 ───┐ │ │ │
+ * │   │   │   │ FLOATING HEADER                   │ │ │ │ ← no background
+ * │   │   │   │ "+ Fresh Conversation" button     │ │ │ │   pointer-events-none
+ * │   │   │   └──────────────────────────────────┘ │ │ │   (button auto only)
+ * │   │   │                                          │ │ │
+ * │   │   │   ┌── chat-fade-top ──────────────────┐ │ │ │
+ * │   │   │   │ TOP FADE GRADIENT                 │ │ │ │ ← CSS class overlay
+ * │   │   │   └──────────────────────────────────┘ │ │ │
+ * │   │   │                                          │ │ │
+ * │   │   │   ┌── chat-fade-bottom ───────────────┐ │ │ │
+ * │   │   │   │ BOTTOM FADE GRADIENT              │ │ │ │ ← CSS class overlay
+ * │   │   │   └──────────────────────────────────┘ │ │ │
+ * │   │   │                                          │ │ │
+ * │   │   │   ┌── absolute bottom-14 z-20 ───────┐ │ │ │
+ * │   │   │   │ FLOATING PROMPT OVERLAY           │ │ │ │ ← bordered container
+ * │   │   │   │ ┌──────────────────────────────┐  │ │ │ │
+ * │   │   │   │ │ Bordered prompt container    │  │ │ │ │   max-w-[500px]
+ * │   │   │   │ │  - Textarea (max-h-[120px])  │  │ │ │ │   rounded-lg border
+ * │   │   │   │ │  - Multi-state button chin   │  │ │ │ │
+ * │   │   │   │ │    VOICE / SEND / STOP / END │  │ │ │ │
+ * │   │   │   │ └──────────────────────────────┘  │ │ │ │
+ * │   │   │   │ (or blocked-state variant)        │ │ │ │
+ * │   │   │   └──────────────────────────────────┘ │ │ │
+ * │   │   └──────────────────────────────────────────┘ │ │
+ * │   └────────────────────────────────────────────────┘ │
+ * │   ┌────────────────────────────────────────────────┐ │
+ * │   │ FOOTER (page.tsx)                              │ │ ← flex-shrink-0
+ * │   │ - Copyright text                               │ │   pt-8 pb-9
+ * │   └────────────────────────────────────────────────┘ │
+ * └──────────────────────────────────────────────────────┘
+ *
+ * DETAILED BREAKDOWN:
+ *
+ * 1. PARENT CONTAINER (page.tsx):
  *    - Mobile: No fixed height (content-driven)
- *    - Desktop: `md:h-[100vh]` - Sets container to 100% of viewport height
- *    - Desktop: `md:flex md:flex-col` - Enables flexbox column layout
- * 
- * 2. CHAT SECTION (line 982):
+ *    - Desktop: `md:h-[100vh]` with `md:flex md:flex-col`
+ *
+ * 2. CHAT SECTION (<section>):
  *    - Mobile: `h-fit` - Height fits content naturally
- *    - Desktop: `md:flex-1` - Takes up remaining space in parent flex container
- *    - Desktop: `md:flex md:flex-col` - Becomes flex container for children
- *    - Desktop: `md:min-h-0` - Critical! Allows flex children to shrink below content size
- *    - Padding: `pt-12 pb-9` (top: 3rem, bottom: 2.25rem)
- * 
- * 3. HEADER (line 983):
- *    - Contains: "FRAM ASSISTANT" text + Clear button
- *    - Height: Content height (text + button)
- *    - Spacing: `mb-10` (margin-bottom: 2.5rem)
- *    - Behavior: `flex-shrink-0` - Never shrinks, maintains fixed height
- *    - To edit header height: Change `mb-10` or add explicit height class
- * 
- * 4. MESSAGES WRAPPER (line 994):
- *    - Mobile: `h-[600px]` - Fixed 600px height
- *    - Desktop: `md:flex-1` - Fills available space in chat section
- *    - Desktop: `md:min-h-0` - Allows proper scrolling behavior
- *    - Contains: Messages container + Prompt box + Voice controls
- * 
- * 5. MESSAGES CONTAINER (line 995):
- *    - Mobile: `h-[600px]` - Fixed 600px height with scroll
- *    - Desktop: `md:flex-1` - Fills available space
- *    - Desktop: `md:min-h-0` - Enables overflow scrolling
- *    - Has `overflow-y-auto` for scrollable content
- *    - Spacing: `mb-2` (margin-bottom: 0.5rem)
- * 
- * 6. PROMPT BOX (line 1068):
- *    - Contains: Textarea + Send button + Voice controls
- *    - Height: Auto-growing textarea (max-h-[120px])
- *    - Behavior: `flex-shrink-0` - Never shrinks, maintains content height
- *    - Spacing: Voice controls have `mt-4` (margin-top: 1rem)
- *    - To edit prompt box height: Change textarea `max-h-[120px]` or add padding
- * 
- * 7. FOOTER (page.tsx line 26):
- *    - Contains: Copyright text
- *    - Height: Content height + padding
- *    - Padding: `pt-8 pb-9` (top: 2rem, bottom: 2.25rem)
- *    - Behavior: `flex-shrink-0` - Never shrinks, maintains fixed height
- *    - To edit footer height: Change `pt-8 pb-9` padding values
- * 
- * KEY CONCEPT: `min-h-0` is essential for flexbox scrolling!
- * Without it, flex items default to `min-height: auto`, which prevents them
- * from shrinking below their content size, breaking the scroll behavior.
- * 
- * HOW TO EDIT HEIGHTS:
- * - Header height: Change `mb-10` on line 983, or add explicit height class
- * - Prompt box height: Change textarea `max-h-[120px]` on line 1081
- * - Footer height: Change `pt-8 pb-9` on page.tsx line 26
- * - Messages area: Automatically fills remaining space via flex-1
- * 
- * BOTTOM SECTION NESTING EXPLANATION (Desktop):
- * 
- * The "bottom section" consists of TWO separate parts:
- * 
- * PART 1: Inside ChatInterface (lines 1131-1257)
- * ┌─────────────────────────────────────────────┐
- * │ Messages Wrapper (line 1057)                │ ← md:flex-1 (flexible)
- * │   ┌───────────────────────────────────────┐ │
- * │   │ Messages Container (line 1058)        │ │ ← md:flex-1 (scrollable)
- * │   │ [Scrollable messages area]            │ │
- * │   └───────────────────────────────────────┘ │
- * │   ┌───────────────────────────────────────┐ │
- * │   │ PROMPT BOX (line 1131)               │ │ ← flex-shrink-0
- * │   │ - Form wrapper                       │ │   (fixed height)
- * │   │   - Textarea (max-h-[120px])         │ │
- * │   │   - Send button                      │ │
- * │   └───────────────────────────────────────┘ │
- * │   ┌───────────────────────────────────────┐ │
- * │   │ VOICE CONTROLS (line 1159)          │ │ ← mt-4 spacing
- * │   │ - Voice error display (conditional)  │ │   (content-driven)
- * │   │ - Audio disabled notice (conditional)│ │
- * │   │ - Voice button                      │ │
- * │   └───────────────────────────────────────┘ │
- * └─────────────────────────────────────────────┘
- * 
- * PART 2: Outside ChatInterface (page.tsx line 26)
- * ┌─────────────────────────────────────────────┐
- * │ FOOTER (page.tsx line 26)                  │ ← flex-shrink-0
- * │ - Copyright text                           │   pt-8 pb-9
- * │ - Sibling to ChatInterface                 │   (fixed height)
- * └─────────────────────────────────────────────┘
- * 
- * CURRENT STRUCTURE:
- * - Messages Wrapper uses `md:flex-1` - fills available space
- * - Messages Container uses `md:flex-1` - scrollable, fills space
- * - Prompt Box uses `flex-shrink-0` - fixed height (content-driven)
- * - Voice Controls use `mt-4` - spacing, content-driven height
- * - Footer uses `flex-shrink-0 pt-8 pb-9` - fixed height
- * 
- * TO MODIFY ENTIRE BOTTOM SECTION HEIGHT ON DESKTOP:
- * 
- * Option 1: Wrap prompt box + voice controls in a container
- *   - Add a wrapper div around lines 1131-1257
- *   - Give it `md:h-[XXX]` (e.g., `md:h-32` for 128px)
- *   - This controls prompt box + voice controls together
- *   - Footer height is separate (modify in page.tsx)
- * 
- * Option 2: Set explicit heights on individual components
- *   - Prompt box: Add `md:h-[XXX]` to form (line 1131)
- *   - Voice controls: Add `md:h-[XXX]` to voice controls div (line 1159)
- *   - Footer: Change `pt-8 pb-9` in page.tsx (line 26)
- * 
- * Option 3: Control via Messages Wrapper
- *   - The Messages Wrapper (line 1057) uses `md:flex-1`
- *   - You could add `md:max-h-[XXX]` to limit its max height
- *   - This would indirectly control bottom section space
- * 
- * RECOMMENDED APPROACH:
- * To control the entire bottom section (prompt + voice + footer):
- * 1. Wrap prompt box + voice controls: Add wrapper with `md:h-[XXX]`
- * 2. Set footer height: Modify `pt-8 pb-9` in page.tsx
- * 3. Total bottom height = wrapper height + footer height
+ *    - Desktop: `md:flex-1 md:flex md:flex-col md:min-h-0`
+ *    - Padding: `pt-12 md:pt-0 pb-0`
+ *
+ * 3. RELATIVE CONTAINER:
+ *    - `relative flex-1 min-h-0 h-[600px] md:h-auto`
+ *    - Establishes the positioning context for all absolute children
+ *    - Mobile: fixed 600px height; Desktop: fills available flex space
+ *
+ * 4. SCROLL AREA (absolute inset-0):
+ *    - `absolute inset-0 overflow-y-auto overflow-x-hidden`
+ *    - paddingTop: 3.5rem (space for floating header)
+ *    - paddingBottom: dynamically computed from promptContainerRef height
+ *      (updated via useEffect whenever input or prompt container resizes)
+ *    - Contains all chat messages in a `space-y-6` wrapper
+ *
+ * 5. FLOATING HEADER (absolute top-3 right-0 z-20):
+ *    - "+ Fresh Conversation" button, right-aligned
+ *    - No background, no backdrop-blur -- text only
+ *    - Parent is `pointer-events-none`, button is `pointer-events-auto`
+ *
+ * 6. FADE GRADIENTS:
+ *    - `.chat-fade-top` / `.chat-fade-bottom` CSS classes
+ *    - Light variants: `.chat-fade-top-light` / `.chat-fade-bottom-light`
+ *    - Purely decorative; they sit above the scroll area (no pointer-events)
+ *
+ * 7. FLOATING PROMPT OVERLAY (absolute bottom-14 z-20):
+ *    - Bordered container: `max-w-[500px] mx-auto rounded-lg border p-3`
+ *    - Contains textarea + multi-state button in a "chin" row
+ *    - Multi-state button logic (single <button>, label changes):
+ *        input.trim()  => "SEND"  (submits message)
+ *        isLoading      => "STOP"  (cancels generation)
+ *        isVoiceMode    => "END"   (ends voice session)
+ *        default        => "VOICE" (starts voice session)
+ *    - Blocked state shows a different variant with blocked/budget message
+ *    - Voice error and audio-disabled notices float above the container
+ *    - promptContainerRef tracks height for dynamic scroll padding
+ *
+ * 8. FOOTER (page.tsx):
+ *    - Copyright text, `flex-shrink-0 pt-8 pb-9`
+ *
+ * KEY CONCEPTS:
+ * - `min-h-0` on flex containers is essential for scrolling inside flex layouts.
+ * - Scroll padding is dynamically computed so messages never hide behind the
+ *   floating prompt overlay, even as the textarea grows (max-h-[120px]).
+ * - The fade gradients use CSS classes defined in globals, not inline styles.
  */
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import MarkdownWithMermaid from "./MarkdownWithMermaid";
