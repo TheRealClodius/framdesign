@@ -677,7 +677,7 @@ export default function ChatInterface() {
       // bottom-14 (3.5rem ≈ 56px) inset + prompt height + 16px breathing room
       messagesContainerRef.current.style.paddingBottom = `${promptHeight + 56 + 16}px`;
     }
-  }, [input, isBlocked]);
+  }, [input, timeoutUntil, budgetExhausted]);
 
   // Preload audio elements on mount for better mobile compatibility
   useEffect(() => {
