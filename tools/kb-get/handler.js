@@ -11,6 +11,7 @@ import {
   isServiceUnavailable
 } from '../_core/helpers.js';
 import { emitToolEvent } from '../_core/tool-events.js';
+import { buildStableAssetRef, buildAssetMarkdown } from '../_core/asset-ref.js';
 
 function normalizeEntityId(rawId) {
   if (typeof rawId !== 'string') return rawId;
@@ -135,115 +136,88 @@ export async function execute(context) {
       const blobId = metadata.blob_id;
       const extension = metadata.file_extension;
 
-      // Resolve blob_id to GCS URL if available
+      // Build stable asset reference (short /kb-assets/ path instead of signed URL)
+      // Client resolves to signed GCS URL at render time
       let assetUrl = '';
       let markdown = '';
       let imageData = null; // For multimodal analysis
       let imageDataFetchError = null; // Track why image data wasn't fetched
 
       if (blobId && extension) {
+        // Check if asset exists in GCS (dead asset detection)
+        let assetMissing = false;
+        let fetchAssetBuffer = null;
+
         try {
-          // Import blob storage service using same pattern as embedding/vector services
-          let resolveBlobUrlSafe, resolveBlobUrl, fetchAssetBuffer;
+          let resolveBlobUrlSafe;
           try {
             const blobModule = await import('@/lib/services/blob-storage-service');
             resolveBlobUrlSafe = blobModule.resolveBlobUrlSafe || blobModule.default?.resolveBlobUrlSafe;
-            resolveBlobUrl = blobModule.resolveBlobUrl || blobModule.default?.resolveBlobUrl;
             fetchAssetBuffer = blobModule.fetchAssetBuffer || blobModule.default?.fetchAssetBuffer;
           } catch {
             const getPath = (name) => `../../lib/services/${name}`;
             const blobModule = await import(/* webpackIgnore: true */ getPath('blob-storage-service'));
             resolveBlobUrlSafe = blobModule.resolveBlobUrlSafe || blobModule.default?.resolveBlobUrlSafe;
-            resolveBlobUrl = blobModule.resolveBlobUrl || blobModule.default?.resolveBlobUrl;
             fetchAssetBuffer = blobModule.fetchAssetBuffer || blobModule.default?.fetchAssetBuffer;
           }
 
-          if (!resolveBlobUrlSafe && !resolveBlobUrl) {
-            throw new Error('Blob storage service not available');
-          }
-
-          // Use safe resolver to detect dead assets
-          let assetMissing = false;
           if (resolveBlobUrlSafe) {
             const resolved = await resolveBlobUrlSafe(blobId, extension);
-            assetUrl = resolved.url;
             assetMissing = !resolved.exists;
-          } else {
-            assetUrl = await resolveBlobUrl(blobId, extension);
-          }
-
-          if (assetMissing) {
-            emitToolEvent('dead_asset', {
-              toolId: 'kb_get',
-              message: `Asset missing from GCS: ${entityId}`,
-              details: { entityId, blobId, extension }
-            });
-            console.warn(`[kb_get] Dead asset detected: ${entityId} (blob: ${blobId}.${extension})`);
-            imageDataFetchError = `Asset file missing from storage: assets/${blobId}.${extension}`;
-          }
-          const caption = metadata.caption || metadata.title || '';
-
-          // Skip markdown/URL generation for dead assets — agent must not share broken links
-          if (assetMissing) {
-            markdown = '';
-            assetUrl = '';
-          } else if (entityType === 'video' || extension === 'mov' || extension === 'mp4' || extension === 'webm') {
-            markdown = `<video controls><source src="${assetUrl}" type="video/${extension === 'mov' ? 'quicktime' : extension}">Your browser does not support the video tag.</video>\n\n${caption ? `*${caption}*` : ''}`;
-          } else {
-            // Images and GIFs use markdown image syntax
-            markdown = `![${caption}](${assetUrl})`;
-
-            // For visual assets (photo, diagram, gif), fetch image data ONLY if requested for multimodal analysis
-            // This avoids oversized payloads and expensive token costs when pixels aren't needed
-            if (includeImageData && ['photo', 'diagram', 'gif'].includes(entityType)) {
-              console.log(`[kb_get] Attempting image data fetch for ${entityId}`, {
-                blobId,
-                extension,
-                entityType
-              });
-
-              try {
-                if (!fetchAssetBuffer) {
-                  imageDataFetchError = 'fetchAssetBuffer service not available';
-                  throw new Error(imageDataFetchError);
-                }
-                const imageBuffer = await fetchAssetBuffer(blobId, extension);
-
-                // Determine MIME type from extension
-                const mimeTypeMap = {
-                  'png': 'image/png',
-                  'jpg': 'image/jpeg',
-                  'jpeg': 'image/jpeg',
-                  'gif': 'image/gif',
-                  'webp': 'image/webp'
-                };
-                const mimeType = mimeTypeMap[extension.toLowerCase()] || 'image/png';
-
-                imageData = {
-                  mimeType,
-                  data: imageBuffer.toString('base64')
-                };
-
-                console.log(`[kb_get] Fetched image data for ${entityId} (${Math.round(imageBuffer.length / 1024)}KB)`);
-              } catch (imageError) {
-                imageDataFetchError = imageError.message;
-                console.warn(`[kb_get] Failed to fetch image buffer for ${entityId}:`, imageError.message);
-                // Continue without image data - metadata is still useful
-              }
-            }
           }
         } catch (blobError) {
-          console.warn(`[kb_get] Failed to resolve blob URL for ${entityId}:`, blobError.message);
-          // Fallback to old path if available
-          if (metadata.path) {
-            assetUrl = metadata.path;
-            const caption = metadata.caption || metadata.title || '';
-            // Handle videos with HTML video tag, images/GIFs with markdown
-            if (entityType === 'video' || metadata.path?.match(/\.(mov|mp4|webm)$/i)) {
-              const ext = metadata.path.match(/\.(\w+)$/)?.[1] || 'mp4';
-              markdown = `<video controls><source src="${assetUrl}" type="video/${ext === 'mov' ? 'quicktime' : ext}">Your browser does not support the video tag.</video>\n\n${caption ? `*${caption}*` : ''}`;
-            } else {
-              markdown = `![${caption}](${assetUrl})`;
+          // Blob service unavailable — emit stable ref optimistically
+          console.warn(`[kb_get] Blob service check failed for ${entityId}:`, blobError.message);
+        }
+
+        if (assetMissing) {
+          emitToolEvent('dead_asset', {
+            toolId: 'kb_get',
+            message: `Asset missing from GCS: ${entityId}`,
+            details: { entityId, blobId, extension }
+          });
+          console.warn(`[kb_get] Dead asset detected: ${entityId} (blob: ${blobId}.${extension})`);
+          imageDataFetchError = `Asset file missing from storage: assets/${blobId}.${extension}`;
+          markdown = '';
+          assetUrl = '';
+        } else {
+          const caption = metadata.caption || metadata.title || '';
+          assetUrl = buildStableAssetRef(blobId, extension);
+          markdown = buildAssetMarkdown(entityType, blobId, extension, caption);
+
+          // For visual assets, fetch image data ONLY if requested for multimodal analysis
+          if (includeImageData && ['photo', 'diagram', 'gif'].includes(entityType)) {
+            console.log(`[kb_get] Attempting image data fetch for ${entityId}`, {
+              blobId,
+              extension,
+              entityType
+            });
+
+            try {
+              if (!fetchAssetBuffer) {
+                imageDataFetchError = 'fetchAssetBuffer service not available';
+                throw new Error(imageDataFetchError);
+              }
+              const imageBuffer = await fetchAssetBuffer(blobId, extension);
+
+              const mimeTypeMap = {
+                'png': 'image/png',
+                'jpg': 'image/jpeg',
+                'jpeg': 'image/jpeg',
+                'gif': 'image/gif',
+                'webp': 'image/webp'
+              };
+              const mimeType = mimeTypeMap[extension.toLowerCase()] || 'image/png';
+
+              imageData = {
+                mimeType,
+                data: imageBuffer.toString('base64')
+              };
+
+              console.log(`[kb_get] Fetched image data for ${entityId} (${Math.round(imageBuffer.length / 1024)}KB)`);
+            } catch (imageError) {
+              imageDataFetchError = imageError.message;
+              console.warn(`[kb_get] Failed to fetch image buffer for ${entityId}:`, imageError.message);
             }
           }
         }

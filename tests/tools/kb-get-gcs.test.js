@@ -1,19 +1,23 @@
 /**
  * Tests for kb_get tool with GCS assets
- * 
- * These tests verify that kb_get correctly resolves blob_ids
- * and returns markdown fields for assets.
+ *
+ * These tests verify that kb_get emits stable /kb-assets/ references
+ * (not signed GCS URLs) and correctly detects dead assets.
  */
 
 import { describe, test, expect, beforeEach, jest } from '@jest/globals';
 
-// Mock the blob storage service BEFORE importing handlers
-const mockResolveBlobUrl = jest.fn((blobId, extension) => {
-  return `https://storage.googleapis.com/framdesign-assets/assets/${blobId}.${extension}`;
+// Mock the blob storage service — handler uses resolveBlobUrlSafe for dead asset detection
+const mockResolveBlobUrlSafe = jest.fn((blobId, extension) => {
+  return {
+    url: `https://storage.googleapis.com/framdesign-assets/assets/${blobId}.${extension}`,
+    exists: true,
+  };
 });
 
 jest.mock('@/lib/services/blob-storage-service', () => ({
-  resolveBlobUrl: mockResolveBlobUrl,
+  resolveBlobUrlSafe: mockResolveBlobUrlSafe,
+  fetchAssetBuffer: jest.fn(),
   generateSignedUrl: jest.fn(),
   uploadAsset: jest.fn(),
   assetExists: jest.fn(),
@@ -28,15 +32,13 @@ describe('kb_get with GCS assets', () => {
     execute = handler.execute;
   });
 
-  test('returns markdown field for asset', async () => {
-    // Mock Qdrant response with asset metadata
+  test('returns stable /kb-assets/ ref in markdown field', async () => {
     const mockContext = {
       args: {
         id: 'asset:andrei_clodius_photo_001',
       },
     };
 
-    // Mock searchSimilar to return asset chunks
     jest.mock('@/lib/services/vector-store-service', () => ({
       searchSimilar: jest.fn().mockResolvedValue([
         {
@@ -59,10 +61,12 @@ describe('kb_get with GCS assets', () => {
     expect(result.ok).toBe(true);
     expect(result.data.markdown).toBeDefined();
     expect(result.data.markdown).toContain('![');
-    expect(result.data.markdown).toContain('https://storage.googleapis.com');
+    expect(result.data.markdown).toContain('/kb-assets/');
+    // Should NOT contain signed GCS URL
+    expect(result.data.markdown).not.toContain('https://storage.googleapis.com');
   });
 
-  test('markdown contains correct GCS URL', async () => {
+  test('url field contains stable /kb-assets/ ref', async () => {
     const mockContext = {
       args: {
         id: 'asset:test_asset_001',
@@ -89,7 +93,7 @@ describe('kb_get with GCS assets', () => {
     const result = await execute(mockContext);
 
     expect(result.data.markdown).toContain('test/category-asset.png');
-    expect(result.data.url).toBe('https://storage.googleapis.com/framdesign-assets/assets/test/category-asset.png');
+    expect(result.data.url).toBe('/kb-assets/test/category-asset.png');
   });
 
   test('includes blob_id in response', async () => {
