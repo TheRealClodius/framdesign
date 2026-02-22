@@ -10,6 +10,7 @@ import {
   isServiceUnavailable
 } from '../_core/helpers.js';
 import { emitToolEvent } from '../_core/tool-events.js';
+import { buildStableAssetRef, buildAssetMarkdown } from '../_core/asset-ref.js';
 
 /**
  * Execute kb_search tool
@@ -185,18 +186,16 @@ export async function execute(context) {
       };
     }
 
-    // Load blob service for asset URL resolution using direct imports
-    let resolveBlobUrlSafe, resolveBlobUrl, fetchAssetBuffer;
+    // Load blob service for dead asset detection and image buffer fetching
+    let resolveBlobUrlSafe, fetchAssetBuffer;
     try {
       const blobModule = await import('@/lib/services/blob-storage-service');
       resolveBlobUrlSafe = blobModule.resolveBlobUrlSafe || blobModule.default?.resolveBlobUrlSafe;
-      resolveBlobUrl = blobModule.resolveBlobUrl || blobModule.default?.resolveBlobUrl;
       fetchAssetBuffer = blobModule.fetchAssetBuffer || blobModule.default?.fetchAssetBuffer;
     } catch {
       const getPath = (name) => `../../lib/services/${name}`;
       const blobModule = await import(/* webpackIgnore: true */ getPath('blob-storage-service'));
       resolveBlobUrlSafe = blobModule.resolveBlobUrlSafe || blobModule.default?.resolveBlobUrlSafe;
-      resolveBlobUrl = blobModule.resolveBlobUrl || blobModule.default?.resolveBlobUrl;
       fetchAssetBuffer = blobModule.fetchAssetBuffer || blobModule.default?.fetchAssetBuffer;
     }
 
@@ -229,51 +228,38 @@ export async function execute(context) {
         const extension = result.metadata?.file_extension;
         const caption = result.metadata?.caption || result.metadata?.title || '';
 
-        if (blobId && extension && (resolveBlobUrlSafe || resolveBlobUrl)) {
-          try {
-            // Use safe resolver to detect dead assets before generating URLs
-            let assetUrl;
-            let assetMissing = false;
-
-            if (resolveBlobUrlSafe) {
+        if (blobId && extension) {
+          // Check if asset exists (dead asset detection)
+          let assetMissing = false;
+          if (resolveBlobUrlSafe) {
+            try {
               const resolved = await resolveBlobUrlSafe(blobId, extension);
-              assetUrl = resolved.url;
               assetMissing = !resolved.exists;
-            } else {
-              assetUrl = await resolveBlobUrl(blobId, extension);
+            } catch (blobError) {
+              console.warn(`[kb_search] Blob check failed for ${baseResult.id}:`, blobError.message);
+              // Optimistically emit stable ref if blob service fails
             }
+          }
 
-            if (assetMissing) {
-              // Track dead asset for diagnostics
-              deadAssets.push({ id: baseResult.id, blob_id: blobId, extension });
-              baseResult.metadata._dead = true;
-              emitToolEvent('dead_asset', {
-                toolId: 'kb_search',
-                message: `Asset missing from GCS: ${baseResult.id}`,
-                details: { entityId: baseResult.id, blobId, extension }
-              });
-              console.warn(`[kb_search] Dead asset detected: ${baseResult.id} (blob: ${blobId}.${extension})`);
-            } else {
-              const entityType = result.metadata?.entity_type || '';
-
-              // Handle videos with HTML video tag, images/GIFs with markdown
-              let markdown;
-              if (entityType === 'video' || extension === 'mov' || extension === 'mp4' || extension === 'webm') {
-                markdown = `<video controls><source src="${assetUrl}" type="video/${extension === 'mov' ? 'quicktime' : extension}">Your browser does not support the video tag.</video>\n\n${caption ? `*${caption}*` : ''}`;
-              } else {
-                // Images and GIFs use markdown image syntax
-                markdown = `![${caption}](${assetUrl})`;
-              }
-
-              // Add markdown to metadata
-              baseResult.metadata.markdown = markdown;
-              baseResult.metadata.url = assetUrl;
-              baseResult.metadata.blob_id = blobId;
-            }
-          } catch (blobError) {
-            console.warn(`[kb_search] Failed to resolve blob URL for ${baseResult.id}:`, blobError.message);
-            deadAssets.push({ id: baseResult.id, blob_id: blobId, extension, error: blobError.message });
+          if (assetMissing) {
+            deadAssets.push({ id: baseResult.id, blob_id: blobId, extension });
             baseResult.metadata._dead = true;
+            emitToolEvent('dead_asset', {
+              toolId: 'kb_search',
+              message: `Asset missing from GCS: ${baseResult.id}`,
+              details: { entityId: baseResult.id, blobId, extension }
+            });
+            console.warn(`[kb_search] Dead asset detected: ${baseResult.id} (blob: ${blobId}.${extension})`);
+          } else {
+            const entityType = result.metadata?.entity_type || '';
+
+            // Emit stable /kb-assets/ reference — client resolves to signed URL at render time
+            const assetRef = buildStableAssetRef(blobId, extension);
+            const markdown = buildAssetMarkdown(entityType, blobId, extension, caption);
+
+            baseResult.metadata.markdown = markdown;
+            baseResult.metadata.url = assetRef;
+            baseResult.metadata.blob_id = blobId;
           }
         } else if (result.metadata?.path) {
           // Fallback to old path if blob_id not available

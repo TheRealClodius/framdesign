@@ -1,17 +1,21 @@
 /**
  * Tests for kb_search tool with GCS assets
- * 
- * These tests verify that kb_search correctly resolves blob_ids
- * for asset results and includes markdown fields.
+ *
+ * These tests verify that kb_search emits stable /kb-assets/ references
+ * (not signed GCS URLs) for asset results.
  */
 
 import { describe, test, expect, beforeEach, jest } from '@jest/globals';
 
-// Mock the blob storage service
+// Mock the blob storage service — handler uses resolveBlobUrlSafe for dead asset detection
 jest.mock('@/lib/services/blob-storage-service', () => ({
-  resolveBlobUrl: jest.fn((blobId, extension) => {
-    return `https://storage.googleapis.com/framdesign-assets/assets/${blobId}.${extension}`;
+  resolveBlobUrlSafe: jest.fn((blobId, extension) => {
+    return {
+      url: `https://storage.googleapis.com/framdesign-assets/assets/${blobId}.${extension}`,
+      exists: true,
+    };
   }),
+  fetchAssetBuffer: jest.fn(),
 }));
 
 describe('kb_search with GCS assets', () => {
@@ -23,7 +27,7 @@ describe('kb_search with GCS assets', () => {
     execute = handler.execute;
   });
 
-  test('resolves multiple assets URLs', async () => {
+  test('emits stable /kb-assets/ refs for assets', async () => {
     const mockContext = {
       args: {
         query: 'photos of Andrei',
@@ -32,7 +36,6 @@ describe('kb_search with GCS assets', () => {
       capabilities: { voice: false },
     };
 
-    // Mock searchSimilar to return multiple assets
     jest.mock('@/lib/services/vector-store-service', () => ({
       searchSimilar: jest.fn().mockResolvedValue([
         {
@@ -60,7 +63,6 @@ describe('kb_search with GCS assets', () => {
       ]),
     }));
 
-    // Mock generateQueryEmbedding
     jest.mock('@/lib/services/embedding-service', () => ({
       generateQueryEmbedding: jest.fn().mockResolvedValue([0.1, 0.2, 0.3]),
     }));
@@ -69,17 +71,19 @@ describe('kb_search with GCS assets', () => {
 
     expect(result.ok).toBe(true);
     expect(result.data.results).toHaveLength(2);
-    
-    // Each asset result should have markdown field
+
+    // Each asset result should have /kb-assets/ ref, NOT signed GCS URL
     result.data.results.forEach((assetResult) => {
       if (assetResult.type === 'photo' || assetResult.type === 'diagram') {
         expect(assetResult.metadata?.markdown).toBeDefined();
-        expect(assetResult.metadata?.markdown).toContain('https://storage.googleapis.com');
+        expect(assetResult.metadata?.markdown).toContain('/kb-assets/');
+        expect(assetResult.metadata?.markdown).not.toContain('https://storage.googleapis.com');
+        expect(assetResult.metadata?.url).toMatch(/^\/kb-assets\//);
       }
     });
   });
 
-  test('markdown field in search results', async () => {
+  test('markdown field in search results contains stable ref', async () => {
     const mockContext = {
       args: {
         query: 'canvas sketch',
@@ -113,6 +117,7 @@ describe('kb_search with GCS assets', () => {
 
     expect(result.data.results[0].metadata?.markdown).toBeDefined();
     expect(result.data.results[0].metadata?.markdown).toContain('semantic-space/canvas-sketch.png');
+    expect(result.data.results[0].metadata?.url).toBe('/kb-assets/semantic-space/canvas-sketch.png');
   });
 
   test('mixed results (text + assets)', async () => {
@@ -133,7 +138,6 @@ describe('kb_search with GCS assets', () => {
             entity_id: 'person:andrei_clodius',
             entity_type: 'person',
             title: 'Andrei Clodius',
-            // No blob_id - this is a text document
           },
         },
         {
@@ -157,14 +161,15 @@ describe('kb_search with GCS assets', () => {
     const result = await execute(mockContext);
 
     expect(result.data.results).toHaveLength(2);
-    
+
     // Text entity should NOT have markdown field
     const textResult = result.data.results.find(r => r.type === 'person');
     expect(textResult.metadata?.markdown).toBeUndefined();
-    
-    // Asset entity SHOULD have markdown field
+
+    // Asset entity SHOULD have markdown field with stable ref
     const assetResult = result.data.results.find(r => r.type === 'photo');
     expect(assetResult.metadata?.markdown).toBeDefined();
+    expect(assetResult.metadata?.markdown).toContain('/kb-assets/');
   });
 
   test('filters by related_to parameter', async () => {
@@ -177,7 +182,6 @@ describe('kb_search with GCS assets', () => {
       capabilities: { voice: false },
     };
 
-    // Mock searchSimilar to return filtered results
     jest.mock('@/lib/services/vector-store-service', () => ({
       searchSimilar: jest.fn().mockResolvedValue([
         {
@@ -204,7 +208,6 @@ describe('kb_search with GCS assets', () => {
     expect(result.ok).toBe(true);
     expect(result.data.results).toHaveLength(1);
     expect(result.data.results[0].id).toBe('asset:third_ear_ui_001');
-    // Verify filters_applied includes the original filter
     expect(result.data.filters_applied).toEqual({ related_to: 'project:third_ear' });
   });
 
