@@ -24,7 +24,7 @@ export default function Home() {
       <Hero />
       {/* Black spacer to cover safe area on mobile */}
       <div className="w-full bg-black safe-area-spacer" style={{ minHeight: '60px' }} />
-      <div className={`w-full form-container md:h-[100vh] relative overflow-x-hidden transition-colors duration-300 ${isDark ? 'bg-gray-900' : 'bg-white'}`}>
+      <div className={`w-full form-container md:h-[100vh] md:flex md:flex-col md:items-center relative overflow-x-hidden transition-colors duration-300 ${isDark ? 'bg-gray-900' : 'bg-white'}`}>
         <ChatInterface />
       </div>
     </main>

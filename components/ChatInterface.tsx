@@ -1682,7 +1682,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
   };
 
   return (
-    <section className={`w-full max-w-[28rem] md:max-w-[950px] mx-auto pt-0 pb-0 md:pb-0 h-fit md:flex-1 md:flex md:flex-col md:min-h-0 overflow-x-hidden transition-colors duration-300 ${isDark ? 'bg-gray-900' : 'bg-white'}`}>
+    <section className={`w-full max-w-[28rem] md:max-w-[950px] mx-auto pt-0 pb-0 md:pb-0 h-fit md:h-[100vh] md:flex md:flex-col md:min-h-0 overflow-x-hidden transition-colors duration-300 ${isDark ? 'bg-gray-900' : 'bg-white'}`}>
       {/* Relative container for absolute-positioned overlays */}
       <div className="relative flex-1 min-h-0 h-[110vh] md:h-auto font-mono text-[0.875rem]">
         {/* Scroll area */}
