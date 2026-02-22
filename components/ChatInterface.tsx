@@ -1911,7 +1911,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
         <div className="pointer-events-none absolute bottom-0 left-0 right-0 z-10 h-[120px]" style={{ background: `linear-gradient(to top, ${isDark ? 'rgb(17 24 39)' : 'rgb(255 255 255)'}, ${isDark ? 'rgb(17 24 39 / 0)' : 'rgb(255 255 255 / 0)'})` }} />
 
         {/* Floating header — right-aligned, suggestion-style box */}
-        <div className="absolute top-20 right-2 z-20 pointer-events-none">
+        <div className="absolute top-25 right-2 z-20 pointer-events-none">
           <button
             onClick={handleClearChat}
             className={`pointer-events-auto text-[0.75rem] font-mono uppercase tracking-wider transition-colors px-3 py-1.5 border rounded shadow-md ${isDark ? 'text-gray-400 hover:text-gray-100 border-gray-600 hover:border-gray-400 bg-gray-950 shadow-black/40' : 'text-gray-400 hover:text-black border-gray-300 hover:border-black bg-gray-50 shadow-gray-400/50'}`}
