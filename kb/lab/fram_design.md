@@ -8,6 +8,7 @@ aliases:
 legal_name: FRAM Design
 based_in:
   region: Europe
+  country: Romania
 founders:
   - person:andrei_clodius
 team:
@@ -31,7 +32,9 @@ contact_policy:
 
 ## Overview
 
-FRAM is a multidisciplinary design and product lab based in Europe. It works across software, systems, and digital experiences, treating software as a material rather than a purely technical artifact or design deliverable.
+FRAM is a multidisciplinary design and product lab based in Romania, Europe. It works across software, systems, and digital experiences, treating software as a material rather than a purely technical artifact or design deliverable.
+
+FRAM Design is not affiliated with, and has no connection to, any other entity bearing the name "FRAM" — including FRAM Filters (an automotive parts company). FRAM Design is a Romanian product design studio founded by Andrei Clodius.
 
 The studio operates with a small, senior team and focuses on work where design, engineering, and product thinking are tightly coupled.
 
