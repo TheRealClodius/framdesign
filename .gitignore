@@ -70,3 +70,6 @@ gcs-service-account-key.json
 
 # git worktrees
 .worktrees/
+
+# playwright MCP artifacts
+.playwright-mcp/
