@@ -24,9 +24,7 @@ function stringIdToInteger(id: string): number {
   return Number(hashInt & BigInt(0xFFFFFFFF));
 }
 
-// Qdrant configuration
-const QDRANT_CLUSTER_ENDPOINT = process.env.QDRANT_CLUSTER_ENDPOINT;
-const QDRANT_API_KEY = process.env.QDRANT_API_KEY;
+// Qdrant configuration (read lazily to support dotenv in scripts)
 const COLLECTION_NAME = 'kb_documents';
 const VECTOR_SIZE = 768; // gemini-embedding-001 with outputDimensionality=768
 
@@ -38,14 +36,17 @@ let qdrantClient: QdrantClient | null = null;
  */
 function getQdrantClient(): QdrantClient {
   if (!qdrantClient) {
-    if (!QDRANT_CLUSTER_ENDPOINT) {
+    const endpoint = process.env.QDRANT_CLUSTER_ENDPOINT;
+    const apiKey = process.env.QDRANT_API_KEY;
+
+    if (!endpoint) {
       throw new Error(
         'QDRANT_CLUSTER_ENDPOINT environment variable is required. ' +
         'Set it to your Qdrant Cloud cluster URL.'
       );
     }
 
-    if (!QDRANT_API_KEY) {
+    if (!apiKey) {
       throw new Error(
         'QDRANT_API_KEY environment variable is required. ' +
         'Set it to your Qdrant Cloud API key.'
@@ -53,8 +54,8 @@ function getQdrantClient(): QdrantClient {
     }
 
     qdrantClient = new QdrantClient({
-      url: QDRANT_CLUSTER_ENDPOINT,
-      apiKey: QDRANT_API_KEY,
+      url: endpoint,
+      apiKey: apiKey,
     });
   }
 

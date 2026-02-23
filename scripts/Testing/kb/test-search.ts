@@ -5,13 +5,13 @@
  * Usage: npx tsx scripts/Testing/kb/test-search.ts "your search query"
  */
 
-import { GoogleGenAI } from '@google/genai';
 import { config } from 'dotenv';
 import path from 'path';
-import { searchSimilar } from '../../../lib/services/vector-store-service';
+// Load environment variables BEFORE other imports that read them
+config({ path: path.join(process.cwd(), '.env'), override: true });
 
-// Load environment variables
-config({ path: path.join(process.cwd(), '.env') });
+import { GoogleGenAI } from '@google/genai';
+import { searchSimilar } from '../../../lib/services/vector-store-service';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 // Note: text-embedding-004 was shut down Jan 14, 2026

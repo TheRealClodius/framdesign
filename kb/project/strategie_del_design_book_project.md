@@ -7,7 +7,7 @@ aliases:
   - Design Strategy Book
 status: published
 period: 2011-2012
-client: internal
+client: Politecnico di Milano
 team:
   - person:andrei_clodius
   - person:francesco_zurlo
@@ -15,32 +15,44 @@ domains:
   - design-strategy
   - organizational-behavior
   - communication
+  - illustration
+outcomes:
+  - Published by Politecnico di Milano design research department
+  - Available on Amazon in Italian
+links:
+  amazon: https://www.amazon.com/strategie-del-design-Miliarium-Italian-ebook/dp/B00HSIWRSK
 ---
 
 ## Overview
 
-*Strategie del Design* is a book that explores the intersection of design thinking, organizational strategy, and communication. Andrei Clodius collaborated closely on the book's illustrations with the author, **Francesco Zurlo**, who was Andrei's professor at the Politecnico di Milano. Together, they used visual metaphors and illustrations to explain complex concepts regarding how design can influence and be integrated into large organizations.
+*Strategie del Design* is a book exploring the intersection of design thinking, organisational strategy, and communication. Written by Francesco Zurlo, Andrei's professor and coordinator at Politecnico di Milano, the book was published as part of the university's design research department. Andrei contributed to researching the content and concepts, with his contained contribution being the illustration of the book's theoretical frameworks through visual metaphors.
 
-## Theoretical Frameworks and Visual Metaphors
+## Context and problem
 
-The book presents several core design strategy concepts through distinctive visual metaphors, many of which were poetically interpreted through illustrations:
+The book addresses how design principles can move beyond objects and interfaces into organisational strategy — how design thinking can influence large organisations, facilitate conversation between diverse stakeholders, and improve collaborative outcomes. The challenge was to make abstract strategic concepts tangible and accessible through visual communication.
 
-- **The Fish in the Cloud (Design Knowledge)**: A central metaphor where a cloud containing fish represents the realm of "design knowledge" and the capture of "weak signals" from society. It illustrates the designer's ability to sense and interpret emerging cultural patterns that others might miss.
-- **Broad versus Deep (T-Shaped Professional)**: Illustrates how organization members interact horizontally (broad) while maintaining deep expertise in their specific subjects.
-- **Communication Interference (Perception Filters)**: Shows that interference is natural. Concepts change meaning as they pass through various organizational "filters" of perception (represented by the Italian phrase: *"lo scambio di parole, di idee, che viene filtrato dalla mente di ogni personaggio finché arriva all'ultimo in un'altra forma"*).
-- **The Designer as Connector (Connected Disciplines)**: Depicts the designer as the central figure connecting product, services, and communication viewpoints.
-- **Far Vedere (Making Visible)**: Emphasizes the designer's power to visualize things that do not yet exist, turning abstract strategy into tangible scenarios that "activate" conversation and reflection within an organization.
-- **Design Thinking and Tools**: A T-shaped interdependent structure showing that theoretical thinking and practical tools are inseparable.
-- **Skewed Interpretations of User Needs**: Demonstrates how roles like Manufacturing, Sales, Engineering, and Marketing each have a biased view of the client, requiring a collaborative design-led synthesis to reach the "true" need.
-- **Leadership and Action**: Symbols of a leader opening up to show goals, serving as a catalyst for organizational alignment and collective purpose.
+## Role and scope
 
-## Philosophical Roots
+Francesco Zurlo approached Andrei as his coordinator at Politecnico di Milano. Andrei contributed in two ways:
 
-The project is grounded in Italian design theory, particularly the work of **Francesco Zurlo** (Politecnico di Milano). It draws from concepts such as:
-- **Design of Options (Il design delle opzioni)**: Moving beyond designing a single object to designing the "background" and the various strategic paths available to an organization.
-- **Homo Fabulans**: The idea that man is fundamentally a storytelling animal, and design is the tool for constructing those narratives.
-- **Situated Cognition**: The belief that thought is not just internal but is born from the continuous dialogue between the designer, the environment, and the artifacts they create (sketches, models, scenarios).
+- **Research**: Participating in the research of content and concepts that informed the book's theoretical frameworks.
+- **Illustration**: Creating visual metaphors and illustrations that translate complex organisational and design strategy concepts into accessible imagery. This was Andrei's contained, primary contribution.
 
-## Impact and Purpose
+## What was built
 
-*Strategie del Design* represents a shift from "designing objects" to "designing strategies." It serves as a foundational text for understanding how design principles can be applied to solve organizational problems, facilitate conversation between diverse stakeholders, and improve collaborative outcomes.
+- **Visual metaphor system**: A series of illustrations interpreting the book's core concepts:
+  - *The Fish in the Cloud* — design knowledge as the capture of weak signals from society.
+  - *Broad versus Deep* — the T-shaped professional balancing horizontal breadth with deep expertise.
+  - *Communication Interference* — concepts changing meaning as they pass through organisational perception filters.
+  - *The Designer as Connector* — the designer as central figure linking product, services, and communication.
+  - *Far Vedere (Making Visible)* — the designer's power to visualise things that do not yet exist.
+  - *Skewed Interpretations of User Needs* — how different roles (manufacturing, sales, engineering, marketing) each have a biased view of the client.
+  - *Leadership and Action* — symbols of a leader as catalyst for organisational alignment.
+
+## Outcomes
+
+The book was published as part of Politecnico di Milano's design research department. It is available on Amazon in Italian.
+
+## What this project represents
+
+Strategie del Design is one of Andrei's earliest collaborative works, produced during his time at Politecnico di Milano. It demonstrates his ability to translate abstract theoretical concepts into visual communication — a skill that carries through into his later product and brand work. The book's subject matter — design as organisational strategy rather than object-making — touches on themes that reappear across Andrei's career, from the product-service-communication spectrum to FRAM's current systems-level approach.

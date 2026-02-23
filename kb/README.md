@@ -50,7 +50,7 @@
 | `id` | ✓ | `string` | Format: `project:{filename}` |
 | `type` | ✓ | `enum("project")` | |
 | `title` | ✓ | `string` | Project name |
-| `status` | ✓ | `enum("shipped", "ongoing", "archived")` | |
+| `status` | ✓ | `enum("shipped", "ongoing", "archived", "completed", "paused", "exploration", "concept", "prototype", "published")` | |
 | `aliases` | | `array<string>` | Alternative names for matching |
 | `period` | | `string` | Timeframe (e.g., `2024-2025`) |
 | `client` | | `string` | Reference ID or external org name |

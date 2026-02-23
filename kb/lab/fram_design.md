@@ -8,6 +8,13 @@ aliases:
 legal_name: FRAM Design
 based_in:
   region: Europe
+  offices:
+    - city: Bucharest
+      country: Romania
+      address: Palatul Universul
+    - city: Rome
+      country: Italy
+      address: Near Circo Massimo
 founders:
   - person:andrei_clodius
 team:
@@ -48,6 +55,10 @@ In parallel, FRAM consults on the design of complex digital experiences, includi
 ## How FRAM works
 
 FRAM approaches projects by treating software systems as designed environments rather than collections of features. This perspective emphasizes structure, behavior, and long-term coherence over short-term output.
+
+The studio operates across the full product–service–communication spectrum. FRAM does not separate product design from service logic or communication design — these are treated as interdependent layers of the same system. This cross-disciplinary reach means FRAM can shape a product's architecture, its service model, and how it communicates with users as a single coherent effort. Andrei's book with Francesco Zurlo, *Strategie del Design*, touches further on this interconnection between product, service, and communication in design practice.
+
+FRAM works directly in code, using AI-assisted development tools like Claude Code to design and build production-quality software — complete with databases, backends, and frontends — without sacrificing scalability or security. This design-plus-code approach gives FRAM exceptional iteration speed while making design even more important: every decision about structure, interaction, and visual quality is tested against real material constraints, and nothing is lost in translation between disciplines. When collaborating with partners and clients, the same approach is used to bring ideas forward faster through functional prototypes that close the gap between design intent and production reality.
 
 Work is typically carried out by small, focused teams, allowing for close collaboration, fast feedback, and a high degree of ownership across disciplines.
 

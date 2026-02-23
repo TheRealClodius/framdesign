@@ -13,6 +13,10 @@ domains:
   - wearables
   - mobile
   - IoT
+outcomes:
+  - Over 50,000 units sold
+  - Acquired by Fitbit
+  - Proprietary low-power OS and developer ecosystem built
 links:
   website: https://vectorwatch.com
 ---

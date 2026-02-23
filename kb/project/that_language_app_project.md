@@ -14,19 +14,34 @@ domains:
   - education
   - AR
   - gamification
+  - mobile
+outcomes:
+  - Prototype only, personal AR learning exercise
 ---
 
 ## Overview
 
-"That" is an innovative language learning application that leverages augmented reality (AR) and personal context to make vocabulary acquisition more intuitive and engaging. Instead of following a structured curriculum, users learn by interacting with their immediate physical environment.
+"That" is a language learning app concept that uses augmented reality to turn the user's physical environment into a living dictionary. Instead of following a structured curriculum, users point their phone camera at any object, tap it on screen, and hear the word in the target language. Andrei built it as a personal project while learning AR development.
 
-## Interaction Model
+## Context and problem
 
-The core interaction is remarkably simple: users point their phone camera at any object and tap it on the screen, as if asking "What's that?". The app identifies the object and speaks the corresponding word in the target language, providing an immediate and contextual link between the object and the new word.
+Traditional language learning apps rely on pre-built curricula and abstract flashcard systems disconnected from the learner's daily life. The idea was to flip this: use the real environment as the learning material, making vocabulary acquisition contextual and immediate.
 
-## Features and Gamification
+## Role and scope
 
-- **Contextual Learning**: Uses the user's real-world environment as a living dictionary.
-- **Personalized Review**: The app leverages gamification principles by using the user's own photos to review and reinforce language understanding.
-- **Achievement System**: Users accumulate points and progress by successfully identifying and reviewing objects from their daily lives.
-- **Interactive Onboarding**: A seamless introduction that teaches the "point-and-tap" mechanic as the primary way of exploring new languages.
+Andrei conceived and designed the entire concept — interaction model, gamification system, and onboarding flow — as a personal exploration into AR technology.
+
+## What was built
+
+- **Point-and-tap interaction**: Users point the camera at any object and tap it on screen. The app identifies the object and speaks the word in the target language.
+- **Contextual review system**: The app uses the user's own photos to reinforce vocabulary through personalised review.
+- **Achievement and progression**: Points and progress tied to successfully identifying and reviewing objects from daily life.
+- **Interactive onboarding**: Introduction that teaches the core mechanic as the primary way of exploring new languages.
+
+## Outcomes
+
+The project remained as a prototype. It was a personal learning exercise in AR development and did not progress further.
+
+## What this project represents
+
+That is a small personal experiment from a period where Andrei was exploring AR as a technology and interaction medium. It demonstrates his tendency to learn new technologies by designing and building complete product concepts around them rather than working through abstract tutorials.

@@ -16,6 +16,8 @@ domains:
   - brainstorming
   - agentic-automation
   - creative-tools
+outcomes:
+  - Ongoing internal lab project
 ---
 
 ## Overview

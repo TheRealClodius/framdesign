@@ -6,15 +6,16 @@
  * Usage: npx tsx scripts/Embed/verify-kb-embedding.ts
  */
 
-import fs from 'fs/promises';
-import path from 'path';
 import { config } from 'dotenv';
+import path from 'path';
+// Load environment variables BEFORE other imports that read them
+config({ path: path.join(process.cwd(), '.env'), override: true });
+
+import fs from 'fs/promises';
 import { getAllDocumentIds, hasDocuments } from '../../lib/services/vector-store-service';
 
-// Load environment variables
-config({ path: path.join(process.cwd(), '.env') });
-
 const KB_DIR = path.join(process.cwd(), 'kb');
+const ASSETS_MANIFEST_PATH = path.join(KB_DIR, 'assets', 'manifest.json');
 
 /**
  * Recursively find all markdown files in kb directory (excluding README.md)
@@ -161,16 +162,73 @@ async function verifyKBEmbedding() {
     console.log('\n✅ All KB files are embedded correctly!');
   }
 
-  // Check for orphaned chunks (chunks in vector store that don't match any KB file)
+  // Load manifest assets
+  let manifestAssetIds: Set<string> = new Set();
+  let manifestAssetCount = 0;
+  try {
+    const manifestContent = await fs.readFile(ASSETS_MANIFEST_PATH, 'utf-8');
+    const manifest = JSON.parse(manifestContent);
+    if (manifest.assets && Array.isArray(manifest.assets)) {
+      manifestAssetCount = manifest.assets.length;
+      for (const asset of manifest.assets) {
+        if (asset.id) {
+          manifestAssetIds.add(asset.id);
+        }
+      }
+    }
+  } catch {
+    console.log('\n⚠️  Could not read assets manifest — skipping asset verification');
+  }
+
+  // Check manifest asset embeddings
+  if (manifestAssetCount > 0) {
+    const embeddedAssetIds = embeddedIds.filter(id => id.startsWith('asset:'));
+    const matchedAssets: string[] = [];
+    const missingAssets: string[] = [];
+
+    for (const assetId of manifestAssetIds) {
+      const hasChunk = embeddedIds.some(id => id === assetId || id.startsWith(`${assetId}_chunk_`));
+      if (hasChunk) {
+        matchedAssets.push(assetId);
+      } else {
+        missingAssets.push(assetId);
+      }
+    }
+
+    console.log(`\n🖼️  Assets (from manifest):`);
+    console.log(`   Manifest assets: ${manifestAssetCount}`);
+    console.log(`   Embedded assets: ${matchedAssets.length}`);
+    console.log(`   Missing assets: ${missingAssets.length}`);
+
+    if (missingAssets.length > 0) {
+      console.log('\n⚠️  Missing asset embeddings:');
+      missingAssets.slice(0, 10).forEach(id => console.log(`   - ${id}`));
+      if (missingAssets.length > 10) {
+        console.log(`   ... and ${missingAssets.length - 10} more`);
+      }
+    } else {
+      console.log('   ✅ All manifest assets are embedded!');
+    }
+  }
+
+  // Build set of all known IDs (KB files + manifest assets)
+  const knownBaseIds: Set<string> = new Set();
+  for (const filePath of kbFiles) {
+    const fileId = getFileId(filePath);
+    const entityId = await getEntityId(filePath);
+    knownBaseIds.add(entityId || fileId);
+    knownBaseIds.add(fileId);
+  }
+  for (const assetId of manifestAssetIds) {
+    knownBaseIds.add(assetId);
+  }
+
+  // Check for orphaned chunks (in vector store but not matching any KB file or manifest asset)
   const orphanedIds: string[] = [];
   for (const id of embeddedIds) {
     let matched = false;
-    for (const filePath of kbFiles) {
-      const fileId = getFileId(filePath);
-      const entityId = await getEntityId(filePath);
-      const baseId = entityId || fileId;
-      
-      if (id === baseId || id.startsWith(`${baseId}_chunk_`) || id.startsWith(`${fileId}_chunk_`)) {
+    for (const baseId of knownBaseIds) {
+      if (id === baseId || id.startsWith(`${baseId}_chunk_`)) {
         matched = true;
         break;
       }
@@ -186,6 +244,8 @@ async function verifyKBEmbedding() {
     if (orphanedIds.length > 10) {
       console.log(`   ... and ${orphanedIds.length - 10} more`);
     }
+  } else {
+    console.log('\n✅ No orphaned chunks — all vectors accounted for!');
   }
 }
 

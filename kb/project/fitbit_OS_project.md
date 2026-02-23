@@ -14,6 +14,10 @@ domains:
   - wearables
   - mobile
   - IoT
+outcomes:
+  - 18 apps launched for Fitbit OS first update
+  - Each app generated approximately $200k in indirect revenue
+  - Established Fitbit smartwatch as viable partner ecosystem
 ---
 
 ## Overview

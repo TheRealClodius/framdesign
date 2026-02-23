@@ -5,7 +5,7 @@ title: UiPath Autopilot
 aliases:
   - Autopilot
   - UiPath Autopilot
-status: ongoing
+status: shipped
 period: 2025-2026
 client: UiPath
 team:
@@ -16,6 +16,10 @@ domains:
   - LLM
   - agentic-automation
   - conversational-UI
+outcomes:
+  - Shipped across UiPath product catalog as side-chat and standalone desktop app
+  - Component library and UI agent patterns adopted across all UiPath products
+  - Established design language for enterprise agentic automation
 ---
 
 ## Overview

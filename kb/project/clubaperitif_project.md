@@ -4,54 +4,49 @@ type: project
 title: ClubAperitif
 aliases:
   - Club Aperitif
-  - CLUBAPERITIF
-legal_name: ClubAperitif
-based_in:
-  region: Europe
-focus:
-  - membership club
-  - curated dining experiences
+status: concept
+period: 2018
+client: event planning group
+team:
+  - person:andrei_clodius
+domains:
+  - branding
+  - copywriting
+  - mobile
+  - membership-platform
   - hospitality
-  - lifestyle concierge
-engagement_modes:
-  - membership
-  - partner network
-  - events
-  - concierge services
-brand_elements:
-  logo: typographic logo with stylized "A"
-  symbol: door/portal motif (open and closed variants)
-  object: the key (membership artifact)
-  pattern: geometric compositions
-  colors: warm gradients (orange, coral), black, white
-status: ongoing
+outcomes:
+  - Concept only, never pitched
 ---
 
 ## Overview
 
-ClubAperitif is a membership-based lifestyle platform centered on curated dining and hospitality experiences. The brand positions itself as a community of like-minded individuals who collectively shape a "City of Flavors and Experiences" through their interactions with partner venues and each other.
+ClubAperitif is a membership-based lifestyle platform centered on curated dining and hospitality experiences. Andrei conceived and designed the entire concept — brand identity, membership system, mobile application, and all copywriting — for an event planning group. The project remained as a concept and was never pitched. The client has since closed.
 
-The membership model emphasizes exclusivity, sensory discovery, and seamless digital-physical integration through a dedicated mobile application.
+## Context and problem
 
----
+The brief was to create a membership platform that could connect curated restaurants, bars, and event venues with a community of members seeking privileged access and seamless hospitality experiences. The challenge was to design a system where the digital and physical felt continuous — from the moment of invitation through every venue visit.
 
-## What ClubAperitif does
+## Role and scope
 
-ClubAperitif provides members with access to a curated network of restaurants, bars, coffee places, and event venues. The platform handles reservations, payments, and personalized service delivery while offering exclusive discounts and experiences.
+Andrei led the entire project end-to-end:
 
-Core services include table booking with privileged access, integrated payment processing, personalized service preferences (dietary needs, seating preferences), member-only events, and up to 30% discounts at partner locations.
+- **Brand identity**: Logo system with a typographic mark featuring a stylized "A", door/portal symbol, key motif, color palette (warm gradients, black, white), and geometric pattern language.
+- **Membership system design**: Conceptualised the invitation ritual (the gift), personal password system, and dynamic digital badge.
+- **Mobile app design**: Full UX for both the member app (discovery, booking, payment, badge) and the partner app (staff-facing service tool).
+- **Copywriting**: Wrote all brand copy, including narrative chapters that frame the membership experience as a journey through a metaphorical city.
 
----
+## What was built
 
-## Brand philosophy
+- **Brand identity system**: Typographic logo, door/portal symbol in open and closed variants, physical key as membership artifact, warm gradient color palette, geometric compositions.
+- **Membership concept**: An invitation-based system where new members receive a physical box containing a key and a personal password, designed to feel like receiving a gift rather than completing a transaction.
+- **Dynamic digital badge**: A personalised interface element that shifts based on time of day, location, and member identity — functioning as both membership proof and visual identity.
+- **Mobile application concept**: Member app handling venue discovery, booking, payment, preference storage (allergies, dietary needs, seating), bill splitting, and tipping. Partner app for venue staff to scan badges and manage orders.
+- **Brand narrative**: A series of written chapters (The Gift, The Password, The Presence, The Meet, The Journey) that frame the entire membership experience through poetic, sensory-driven storytelling.
 
-ClubAperitif frames membership as a journey through a metaphorical city created by its members. The brand emphasizes sensory engagement—taste, sound, smell, touch, and sight—as the foundation of meaningful experiences.
+## Brand copy (selected chapters)
 
-The membership admission process is designed to feel like receiving a gift rather than completing a transaction. New members receive a physical box containing a key object and a personal password, establishing a sense of ritual and belonging.
-
----
-
-## The membership system
+The following sections are Andrei's original copywriting for the ClubAperitif concept. They are preserved here as written.
 
 ### The Gift
 
@@ -62,12 +57,6 @@ The invitation is not expected. It should come as a surprise, and usually surpri
 The invitee receives a black envelope that has Club Aperitif's logo-mark inscribed in golden foil and embossed on one side, with the name of the invitee embossed in the same way on the other side. Other than this, the envelope is clean of other details, making you wonder of its content. This envelope in itself serves as a symbol. The one who receives it has been chosen to be part of something special.
 
 Opening the envelope reveals an item with a special word written on it. This item may be a metal card, it may be something else, you never know.
-
-![The Gift chapter visual](/kb-assets/clubaperitif/the-gift.png)
-
-### The Password
-
-Each member receives a personal, non-transferable password that represents their individual identity within the community. The brand describes this as members collectively "writing the City" through their unique words.
 
 ### The Presence
 
@@ -81,15 +70,7 @@ If you look at their confirmation codes, the ones the invitees use to make their
 
 What's near you? Where can you go? What's good for you? These are all questions with easy answers in the app.
 
-![The Presence chapter visual](/kb-assets/clubaperitif/the-presence.png)
-
-### The Badge
-
-The digital badge is a dynamic interface element that changes based on time of day and week. It uses geometric patterns and animated components to create a personalized, ever-shifting visual identity for each member.
-
----
-
-## The Meet
+### The Meet
 
 We're walking out. We're going somewhere. Somewhere relaxing where we've invited someone.
 
@@ -105,79 +86,7 @@ Show your badge and you're all set. That "someone" just pointed their camera at 
 
 Leaving? The waiter was nice, she deserves a tip, don't you think? Tip in the app or better yet, just tip cash.
 
-![The Meet chapter visual](/kb-assets/clubaperitif/the-meet.png)
-
----
-
-## The mobile application
-
-The ClubAperitif app serves as both membership badge and service assistant. Key features include venue discovery and recommendations, table booking with instant confirmation, order placement and payment processing, service preference storage (allergies, dietary restrictions, smoking preference), bill splitting and tipping functionality, venue rating and history tracking, and real-time staff communication.
-
-The app eliminates traditional friction points like requesting checks, payment discussions, or repeating personal preferences at each visit.
-
----
-
-## Partner network
-
-ClubAperitif maintains a curated portfolio of partner venues across multiple categories: restaurants, coffee places, casual eateries, cocktail bars, and event venues. The network extends beyond local markets to support members while traveling.
-
-Partners receive member information relevant to service delivery (preferences, allergies) and provide exclusive benefits including discounts up to 30%, special packages, chef's table experiences, and exclusive tastings.
-
----
-
-## Member benefits
-
-### Curated venues
-
-The platform emphasizes quality over quantity in venue selection. Venues are continuously reviewed and selected to match diverse moods and occasions.
-
-### Streamlined booking
-
-Members book tables without phone calls or back-and-forth communication. The system provides privileged access to high-demand venues and maintains complete visit history for future reference.
-
-### Exclusive experiences
-
-Members receive access to special events, chef interactions, exclusive dishes, and partner-only offers delivered through the app.
-
----
-
-## Brand identity elements
-
-### Visual symbol
-
-The primary symbol is a door or portal motif, rendered in various states (open, closed, with oval/circular elements). This represents entry into the ClubAperitif community and the "City" members collectively create.
-
-### The key
-
-The physical key serves as the central brand object. It functions as both a membership artifact and a wearable accessory, carrying the member's unique password.
-
-### Typography
-
-The brand uses a typographic logo with a distinctive stylized "A" that appears underlined or accented, distinguishing it from standard letterforms.
-
-### Color palette
-
-Primary colors include warm gradient tones (orange to coral), black for contrast and elegance, and white for clarity. The badge interface uses dynamic gradient backgrounds that shift throughout the day.
-
----
-
-## Service philosophy
-
-ClubAperitif positions discretion and seamlessness as core values. The payment process is designed to be invisible—no checks requested, no payment discussions, no interruption to social engagement.
-
-Staff at partner venues are briefed on member preferences before arrival, enabling personalized service without repetitive questions or explanations.
-
----
-
-## Brand positioning
-
-ClubAperitif distinguishes itself from conventional membership clubs by emphasizing community trust over transactional benefits. The brand describes itself as a community that designs the city through collective choices rather than a discount program.
-
-The platform targets members who value curated experiences, minimal friction, and a sense of belonging to a discerning community.
-
----
-
-## The Journey
+### The Journey
 
 We're all moving, and looking back, and viewing things fresh. We've been there, but now it's different. In tune, falling flat or picking it up as you go.
 
@@ -185,6 +94,10 @@ We're all moving, and looking back, and viewing things fresh. We've been there, 
 
 You can take a plane and land in another country and still be able to enjoy Club Aperitif. Your presence will be known, your time well considered and you never ask for checks.
 
-![The Journey chapter visual](/kb-assets/clubaperitif/the-journey.png)
+## Outcomes
 
----
+The project remained as a concept and was never pitched. The client — an event planning group — has since closed.
+
+## What this project represents
+
+ClubAperitif is a demonstration of Andrei's ability to conceive an entire brand and product system from scratch — identity, interaction model, membership ritual, and application design — while also writing all the narrative copy. The poetic, sensory-driven tone of the brand chapters showcases a copywriting voice that is rarely found alongside product design work. The project illustrates how brand storytelling and product logic can be shaped by the same hand.

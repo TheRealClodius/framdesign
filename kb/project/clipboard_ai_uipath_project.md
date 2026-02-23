@@ -17,6 +17,9 @@ domains:
   - automation
   - productivity
   - document-processing
+outcomes:
+  - Shipped as part of UiPath product suite
+  - Integrated with UiPath Autopilot for AI-powered copy-paste
 ---
 
 ## Overview

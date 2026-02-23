@@ -6,7 +6,7 @@ aliases:
   - Andrei
 roles:
   - Founder
-affiliation: studio:fram_design
+affiliation: lab:fram_design
 location:
   country: Romania
 
@@ -17,6 +17,8 @@ education:
 experience:
   - company: Leroy Merlin
     role: Industrial Designer
+    location: Lille, France
+    period: 2013-2014
 
   - company: HAX (HAXLR8R)
     role: Digital Product Designer
@@ -49,7 +51,7 @@ experience:
 
   - company: UiPath
     role: Lead Product Designer
-    period: 2025-2026
+    period: March 2024-January 2026
 
   - company: FRAM Design
     role: Founder
@@ -67,7 +69,7 @@ contact_policy:
 ## Bio
 Andrei Clodius is the founder of FRAM Design. He lives in Romania and studied Industrial Design at Politecnico di Milano.
 
-His early work focused on hardware and emerging technology products, including time spent in China with HAXLR8R and at Vector Watch, which was later acquired by Fitbit. More recently, he has worked with UiPath on agentic automation and AI-native systems.
+His early work focused on hardware and emerging technology products, including time spent in China with HAXLR8R and at Vector Watch, which was later acquired by Fitbit. He worked with UiPath on agentic automation and AI-native systems.
 
 His practice focuses on the form and behavior of digital surfaces and systems, and on how these benefit the collective.
 ---
@@ -75,7 +77,7 @@ His practice focuses on the form and behavior of digital surfaces and systems, a
 ## Background
 
 ### Leroy Merlin
-Andrei worked as an Industrial Designer on smart thermostats and chairs.
+At Leroy Merlin in Lille, France (2013–2014), Andrei worked in the Innovation Team for a year. He contributed to multiple projects that went into production — electrical plugs for factory workers, exterior plastic chairs, and a reusable box system for store buyers — with the CELIA heater collection as the primary focus. The experience of designing the CELIA thermostat's monochrome LCD interface marked his first transition from physical object design to digital interface work.
 
 ### HAX (HAXLR8R)
 At HAX in Shenzhen, China (2014–2015), Andrei supported product ideation, visited factories, met with suppliers, and built prototypes as part of the hardware accelerator program. This period emphasized working under physical constraints, tight iteration loops, and close coupling between design and engineering.
@@ -90,13 +92,13 @@ At Fitbit (2017–2018), Andrei managed and mentored a team of three design cont
 As Principal Product Designer (2018–2019), Andrei pitched and led the successful redesign of ING HomeBank's mobile application, resulting in one million active users ahead of projections. The redesign shifted the mobile user segment from 70% to 90% of total users within a year. Key elements included a new navigation system and information hierarchy.
 
 ### Neobility
-As Design Director (2019–2022), Andrei directed all product design and experimentation, leading a team of five designers and front-end developers. He was instrumental in the company's inception, establishing design processes and launching the first app version. He released five updates, increasing daily active users to 10,000. Key contributions include the development of Universal Unlock.
+Andrei was the first employee at Neobility (2019–2022) and helped secure the initial seed round of $650,000 USD. As Product Director, he informed every product decision for UrbanAir, Neobility's mobility aggregator. He designed the foundational UX, conceived Universal Unlock — the app's core feature — and grew the team to 15 people at peak. He directed five major releases, reaching 10,000 daily active users.
 
 ### Playable Studios
 As Studio Director (2022–2025), Andrei led a team of five domain experts spanning brand design, UX, and front-end development. The studio focused on rapidly scaling mobile-first products, driving discovery sessions with founders, and iterating using scalable techniques and technologies. The studio partnered only with startups of fewer than 60 people. Notable projects include Superpost, an AI-assisted article writing tool.
 
 ### UiPath
-As Lead Product Designer (2025–2026), Andrei built multiple agent-driven products, focusing on AI design patterns and components, immersive conversational interfaces, and agentic experiences.
+As Lead Product Designer (March 2024–January 2026), Andrei built multiple agent-driven products, focusing on AI design patterns and components, immersive conversational interfaces, and agentic experiences.
 
 ### FRAM Design
 Andrei founded FRAM Design in 2025 as a product lab focused on digital systems, agent-owned interfaces, and AI-native product development.
@@ -131,7 +133,7 @@ He views trends as a natural part of cultural evolution. While often short-lived
 
 ---
 
-## Topics of recurring interest
+## Current interests
 - Dynamic design systems
 - Agent-owned interfaces
 - Animation-driven interactions
@@ -160,4 +162,4 @@ All tools and all frameworks live and die by the context in which they are to be
 What I find to be the one really important thing is **systems thinking**. 
 Building continuous feedback loops either between project phases, stakeholders or people that use the artefacts that we create is **at the core** of being able to iterate with purpose. 
 Continuous iteration is super important
-Speed is absolutely a KPI but "shipping features" is the absolutely the WORST outcome to focus this metric on. The only important outcome for speed is quality! You iterate to improve quality, not to ship slop faster.
+Speed is absolutely a KPI but "shipping features" is absolutely the worst outcome to focus this metric on. The only important outcome for speed is quality. You iterate to improve quality, not to ship slop faster.
