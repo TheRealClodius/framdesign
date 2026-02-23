@@ -2431,13 +2431,39 @@ export async function POST(request: Request) {
         ) {
           // Find the top project result that has asset hints
           const kbResults = Array.isArray(cleanedResultData?.results) ? cleanedResultData.results : [];
-          const topProjectWithAssets = kbResults.find(
+
+          // Build set of already-fetched asset IDs to avoid re-fetching
+          const enrichedAssetIds = new Set(
+            pastToolCalls
+              .filter(c => c.toolId === "kb_get" && c.ok)
+              .map(c => (c.args as any)?.id)
+              .filter(Boolean)
+          );
+
+          type ProjectWithAssets = { id: string; title: string; _assetHints: { count: number; sample: Array<{ id: string; type: string; title: string }> } };
+
+          // Prefer a project that still has unfetched assets; fall back to any project with assets
+          const topProjectWithAssets = (kbResults.find(
+            (r: any) => r.type === 'project'
+              && r._assetHints?.count > 0
+              && r._assetHints?.sample?.length > 0
+              && r._assetHints.sample.some((a: any) => !enrichedAssetIds.has(a.id))
+          ) ?? kbResults.find(
             (r: any) => r.type === 'project' && r._assetHints?.count > 0 && r._assetHints?.sample?.length > 0
-          ) as { id: string; title: string; _assetHints: { count: number; sample: Array<{ id: string; type: string; title: string }> } } | undefined;
+          )) as ProjectWithAssets | undefined;
 
           if (topProjectWithAssets) {
-            const sampleAsset = topProjectWithAssets._assetHints.sample[0];
+            // Pick an asset that hasn't been fetched yet; fall back to first if all fetched
+            const sampleAsset = topProjectWithAssets._assetHints.sample.find(
+              (a: any) => !enrichedAssetIds.has(a.id)
+            ) ?? topProjectWithAssets._assetHints.sample[0];
             const enrichAssetId = sampleAsset.id;
+
+            // Skip Phase 3 entirely if this asset was already fetched
+            const alreadyFetched = enrichedAssetIds.has(enrichAssetId);
+            if (alreadyFetched) {
+              console.log(`[AutoChain] Skipping Phase 3 — all assets for "${topProjectWithAssets.title}" already fetched`);
+            } else {
             const enrichToolName = "kb_get";
             const enrichArgs = { id: enrichAssetId, include_image_data: false };
             const enrichToolMetadata = toolRegistry.getToolMetadata(enrichToolName) as ToolMetadata | null;
@@ -2591,6 +2617,7 @@ export async function POST(request: Request) {
                 console.warn(`[AutoChain] Project enrichment failed for ${enrichAssetId}:`, enrichResult.error?.message);
               }
             }
+            } // end else (!alreadyFetched)
           }
         }
 
