@@ -2006,7 +2006,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
                     ? 'placeholder:text-gray-600 text-gray-100'
                     : 'placeholder:text-gray-400 text-black'
                 }`}
-                placeholder={isVoiceMode ? "Voice mode active..." : "Type your message..."}
+                placeholder={isVoiceMode ? "Voice mode active..." : "Ask me anything about FRAM..."}
               />
 
               {/* Chin — right-aligned multi-state button */}
