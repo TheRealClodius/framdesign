@@ -28,7 +28,6 @@ import { UsageService } from '@/lib/services/usage-service';
 import { toolMemoryStore } from '@/tools/_core/tool-memory-store';
 import { loopDetector } from '@/tools/_core/loop-detector';
 import { toolMemoryDedup } from '@/tools/_core/tool-memory-dedup';
-import { toolMemorySummarizer } from '@/tools/_core/tool-memory-summarizer';
 import { hashArgs } from '@/tools/_core/utils/hash-args';
 import { estimateTokens as estimateTokensForJson } from '@/tools/_core/utils/estimate-tokens';
 
@@ -146,28 +145,39 @@ const VISUAL_ASSET_TYPES = new Set(["photo", "diagram", "gif", "video"]);
  * Format a timestamp for display in messages
  * @param timestamp Unix timestamp in milliseconds
  * @param includeYear Whether to include the year in the output
- * @returns Formatted string like "[Jan 28, 14:30]" or "[Jan 28, 2024, 14:30]"
+ * @param timezone IANA timezone string (e.g. "Europe/Bucharest"). Defaults to "UTC".
+ * @returns Formatted string like "[Jan 28, 16:30 EET]" or "[Jan 28, 2024, 16:30 EET]"
  */
-function formatTimestamp(timestamp: number | undefined, includeYear = false): string {
+function formatTimestamp(timestamp: number | undefined, includeYear = false, timezone?: string): string {
   if (!timestamp) return '';
+  const tz = timezone || 'UTC';
   const date = new Date(timestamp);
-  // Use UTC to ensure consistent formatting across timezones
-  const month = date.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' });
-  const day = date.getUTCDate();
-  const hours = date.getUTCHours().toString().padStart(2, '0');
-  const minutes = date.getUTCMinutes().toString().padStart(2, '0');
-  const year = includeYear ? `, ${date.getUTCFullYear()}` : '';
-  return `[${month} ${day}${year}, ${hours}:${minutes}]`;
+  const parts = new Intl.DateTimeFormat('en-US', {
+    month: 'short', day: 'numeric', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+    timeZoneName: 'short', timeZone: tz
+  }).formatToParts(date);
+  const get = (type: string) => parts.find(p => p.type === type)?.value || '';
+  const month = get('month');
+  const day = get('day');
+  const hours = get('hour').padStart(2, '0');
+  const minutes = get('minute').padStart(2, '0');
+  const year = includeYear ? `, ${get('year')}` : '';
+  const tzAbbr = get('timeZoneName');
+  return `[${month} ${day}${year}, ${hours}:${minutes}${tzAbbr ? ' ' + tzAbbr : ''}]`;
 }
 
 /**
  * Extract date range header from messages for summary
  * @param messages Array of messages with optional timestamps
+ * @param timezone IANA timezone string (e.g. "Europe/Bucharest"). Defaults to "UTC".
  * @returns Date range string or empty string if not enough timestamps
  */
 function extractDateRangeHeader(
-  messages: Array<{ role: string; content: string; timestamp?: number }>
+  messages: Array<{ role: string; content: string; timestamp?: number }>,
+  timezone?: string
 ): string {
+  const tz = timezone || 'UTC';
   const timestamps = messages
     .filter((m) => m.timestamp)
     .map((m) => m.timestamp!);
@@ -178,10 +188,7 @@ function extractDateRangeHeader(
   const latest = new Date(Math.max(...timestamps));
 
   const formatDate = (d: Date) => {
-    const month = d.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' });
-    const day = d.getUTCDate();
-    const year = d.getUTCFullYear();
-    return `${month} ${day}, ${year}`;
+    return d.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: tz });
   };
 
   if (timestamps.length === 1) {
@@ -207,6 +214,20 @@ function isVisualShowRequest(text: string): boolean {
   const hasShowVerb = /\b(show|see|display|view|look)\b/.test(normalized);
   const hasAnother = /\b(another|different|else|more|other)\b/.test(normalized);
   return hasVisualNoun || (hasShowVerb && normalized.includes("me")) || (hasShowVerb && hasAnother);
+}
+
+function isProjectExplorationRequest(
+  text: string,
+  kbResults: Array<{ type?: string; _assetHints?: { count: number; sample?: Array<{ id: string; type: string; title: string }> } }>
+): boolean {
+  const normalized = (text || "").toLowerCase();
+  if (!normalized) return false;
+  const hasProjectWithAssets = kbResults.some(
+    r => r.type === 'project' && (r._assetHints?.count || 0) > 0
+  );
+  if (!hasProjectWithAssets) return false;
+  const hasExplorationSignal = /\b(tell|about|what|explain|describe|how|walk.*through|overview|details)\b/.test(normalized);
+  return hasExplorationSignal;
 }
 
 function selectTopVisualResultId(
@@ -338,6 +359,7 @@ function recordToolResult(
 let systemPromptCache: string | null = null;
 let systemPromptCachePromise: Promise<string | null> | null = null;
 let systemPromptHash: string | null = null; // Hash of the system prompt to detect changes
+let systemPromptCacheCreatedAt: number = 0; // Timestamp when cache was created
 
 /**
  * Creates a hash of the conversation history to identify unique conversations
@@ -366,11 +388,12 @@ function hashConversation(messages: Array<{ role: string; content: string }>, ti
  */
 async function summarizeMessages(
   ai: GoogleGenAI,
-  messages: Array<{ role: string; content: string; timestamp?: number }>
+  messages: Array<{ role: string; content: string; timestamp?: number }>,
+  timezone?: string
 ): Promise<string> {
   try {
     // Extract date range header from timestamps (if available)
-    const dateRangeHeader = extractDateRangeHeader(messages);
+    const dateRangeHeader = extractDateRangeHeader(messages, timezone);
 
     // Build prompt for summarization
     const conversationText = messages
@@ -405,7 +428,7 @@ Summary:`;
   } catch (error) {
     console.error("Failed to summarize messages:", error);
     // Fallback: return a simple note with date range if available
-    const dateRangeHeader = extractDateRangeHeader(messages);
+    const dateRangeHeader = extractDateRangeHeader(messages, timezone);
     const fallbackText = `Previous conversation with ${messages.length} messages.`;
     return dateRangeHeader ? `${dateRangeHeader}\n\n${fallbackText}` : fallbackText;
   }
@@ -425,29 +448,44 @@ function hashSystemPrompt(prompt: string): string {
  */
 function areKbResultsRelevant(
   query: string,
-  results: Array<{ score?: number; title?: string; snippet?: string; id?: string }>
+  results: Array<{ score?: number; title?: string; snippet?: string; id?: string; type?: string }>
 ): boolean {
   if (!results || results.length === 0) {
     return false;
   }
 
-  // Extract query terms (lowercase, simple words)
-  const queryTerms = query.toLowerCase().split(/\s+/).filter(term => term.length > 2);
+  // Stop words to exclude from query term matching
+  const STOP_WORDS = new Set([
+    'the', 'and', 'for', 'with', 'about', 'this', 'that',
+    'from', 'what', 'how', 'who', 'where', 'when', 'which',
+    'tell', 'show', 'give', 'can', 'does', 'has', 'have',
+    'are', 'was', 'were', 'been', 'being', 'its', 'any'
+  ]);
+
+  // Extract query terms (lowercase, simple words, excluding stop words)
+  const queryTerms = query.toLowerCase().split(/\s+/)
+    .filter(term => term.length > 2 && !STOP_WORDS.has(term));
   if (queryTerms.length === 0) {
     return true; // Can't determine, assume relevant
   }
 
-  // Check if any result has a high enough score and matches query terms
-  const RELEVANCE_THRESHOLD = 0.4; // Scores below this are likely irrelevant
-  const hasRelevantScore = results.some(r => (r.score || 0) >= RELEVANCE_THRESHOLD);
-  
+  // Type-aware relevance thresholds
+  const ASSET_TYPES = new Set(['photo', 'video', 'gif', 'diagram']);
+  const ASSET_THRESHOLD = 0.30;  // Assets match on tags/description, need lower threshold
+  const TEXT_THRESHOLD = 0.35;   // Text entities (projects, people, labs)
+
+  const hasRelevantScore = results.some(r => {
+    const threshold = ASSET_TYPES.has(r.type || '') ? ASSET_THRESHOLD : TEXT_THRESHOLD;
+    return (r.score || 0) >= threshold;
+  });
+
   // Check if query terms appear in titles or snippets
   const hasQueryMatch = results.some(result => {
     const title = (result.title || '').toLowerCase();
     const snippet = (result.snippet || '').toLowerCase();
     const id = (result.id || '').toLowerCase();
     const combined = `${title} ${snippet} ${id}`;
-    
+
     // Check if any query term appears in the result
     return queryTerms.some(term => combined.includes(term));
   });
@@ -544,6 +582,46 @@ function toRecord(value: unknown): Record<string, unknown> {
 }
 
 /**
+ * Enforce Gemini API role alternation rules on a message array.
+ *
+ * Gemini requires:
+ * 1. Conversations MUST start with a "user" role message
+ * 2. Roles MUST strictly alternate: user → model → user → model
+ *
+ * When violations are detected (e.g. due to message windowing splitting
+ * on an assistant message, or messages being dropped after suggestion stripping),
+ * this function merges consecutive same-role messages by combining their parts.
+ */
+function enforceRoleAlternation(messages: ContentMessage[]): ContentMessage[] {
+  if (messages.length === 0) return messages;
+
+  const result: ContentMessage[] = [];
+
+  for (const msg of messages) {
+    const prev = result[result.length - 1];
+    if (prev && prev.role === msg.role) {
+      // Merge consecutive same-role messages by combining parts
+      prev.parts = [...prev.parts, ...msg.parts];
+      console.log(`[Role Alternation] Merged consecutive ${msg.role} messages (${prev.parts.length} parts total)`);
+    } else {
+      result.push({ ...msg, parts: [...msg.parts] });
+    }
+  }
+
+  // Ensure first message is "user" role (Gemini requirement)
+  if (result.length > 0 && result[0].role !== "user") {
+    // Prepend a minimal user context message
+    result.unshift({
+      role: "user",
+      parts: [{ text: "[Conversation continues]" }],
+    });
+    console.log(`[Role Alternation] Prepended user message — first message was "${result[1]?.role}"`);
+  }
+
+  return result;
+}
+
+/**
  * Enforce token budget by trimming summary and dropping oldest context items.
  */
 function enforceTokenBudget(
@@ -608,9 +686,21 @@ async function getSystemPromptCache(ai: GoogleGenAI, providerSchemas: ProviderSc
     console.log("System prompt changed, invalidating cache");
     systemPromptCache = null;
     systemPromptCachePromise = null;
+    systemPromptCacheCreatedAt = 0;
     // Note: We don't delete the old cache from Gemini API - it will expire naturally
   }
-  
+
+  // Invalidate cache if it has exceeded Gemini's TTL (with 60s safety margin)
+  if (systemPromptCache && systemPromptCacheCreatedAt > 0) {
+    const cacheAgeSeconds = (Date.now() - systemPromptCacheCreatedAt) / 1000;
+    if (cacheAgeSeconds >= CACHE_CONFIG.TTL_SECONDS - 60) {
+      console.log(`System prompt cache expired (age: ${cacheAgeSeconds.toFixed(0)}s, TTL: ${CACHE_CONFIG.TTL_SECONDS}s), recreating`);
+      systemPromptCache = null;
+      systemPromptCachePromise = null;
+      systemPromptCacheCreatedAt = 0;
+    }
+  }
+
   // Update hash to current
   systemPromptHash = currentPromptHash;
 
@@ -633,27 +723,13 @@ async function getSystemPromptCache(ai: GoogleGenAI, providerSchemas: ProviderSc
         return null;
       }
 
-      // Build system prompt content with acknowledgment
-      const systemContent = [
-        {
-          role: "user" as const,
-          parts: [{ text: FRAM_SYSTEM_PROMPT }],
-        },
-        {
-          role: "model" as const,
-          parts: [{ text: "UNDERSTOOD." }],
-        }
-      ];
-
-      // Check token count first (optional, but good practice)
-      // Note: this model might not support caching yet
-      // We'll try to create cache, but fall back gracefully if it fails
-      // Include tools in cache so we don't need to pass them when using cached content
+      // Create cache with system prompt and tools only
+      // NOTE: Do NOT include contents with the system prompt as a user message -
+      // this causes confusion when the actual user message arrives
       const cache = await ai.caches.create({
         model: "gemini-2.5-flash",
         config: {
           systemInstruction: FRAM_SYSTEM_PROMPT,
-          contents: systemContent,
           tools: [{ functionDeclarations: providerSchemas }],
           ttl: `${CACHE_CONFIG.TTL_SECONDS}s`,
           displayName: "fram-system-prompt"
@@ -661,6 +737,7 @@ async function getSystemPromptCache(ai: GoogleGenAI, providerSchemas: ProviderSc
       });
 
       systemPromptCache = cache.name || null;
+      systemPromptCacheCreatedAt = Date.now();
       console.log("System prompt cache created:", cache.name);
       return cache.name || null;
     } catch (error: unknown) {
@@ -861,6 +938,132 @@ async function retryWithBackoff<T>(
   throw lastError;
 }
 
+interface ToolExecutionContext {
+  conversationHash: string;
+  messages: RawMessage[];
+  sessionId: string;
+  observability?: ObservabilityData | null;
+}
+
+interface ToolExecutionResult {
+  ok: boolean;
+  data?: unknown;
+  error?: { type: string; message: string; retryable: boolean; details?: unknown };
+  duration: number;
+  meta?: Record<string, unknown>;
+}
+
+/**
+ * Execute a tool with standard recording, retry, and observability
+ * Consolidates common tool execution logic from the three tool handling blocks
+ */
+async function executeToolWithContext(
+  toolName: string,
+  args: Record<string, unknown>,
+  thoughtSignature: string | undefined,
+  ctx: ToolExecutionContext
+): Promise<ToolExecutionResult> {
+  const turnNumber = Math.ceil(ctx.messages.length / 2);
+  const state = createStateController({ mode: 'text', isActive: true }) as StateController;
+
+  // Record tool call
+  recordToolCall(ctx.conversationHash, turnNumber, toolName, args, thoughtSignature, 0);
+
+  const toolMetadata = toolRegistry.getToolMetadata(toolName) as ToolMetadata | null;
+
+  const executionContext = {
+    clientId: `text-${Date.now()}`,
+    ws: null,
+    geminiSession: null,
+    args,
+    capabilities: { voice: false },
+    session: {
+      isActive: state.get('isActive'),
+      toolsVersion: toolRegistry.getVersion(),
+      state: state.getSnapshot()
+    },
+    meta: {
+      perplexityApiKey: process.env.PERPLEXITY_API_KEY
+    }
+  };
+
+  const startTime = Date.now();
+
+  // Check for loops
+  const loopCheck = loopDetector.detectLoop(ctx.sessionId, turnNumber, toolName, args);
+  if (loopCheck.detected) {
+    const duration = Date.now() - startTime;
+    const error = { type: 'LOOP_DETECTED', message: loopCheck.message || 'Loop detected', retryable: false };
+    recordToolResult(ctx.conversationHash, turnNumber, toolName, { error: true, ...error }, 0);
+
+    // Record observability
+    if (ctx.observability) {
+      ctx.observability.toolCalls.push({
+        position: ctx.observability.toolCalls.length + 1,
+        chainPosition: 0,
+        toolId: toolName,
+        args,
+        thoughtSignature,
+        startTime,
+        duration,
+        ok: false,
+        result: null,
+        error
+      });
+      ctx.observability.totalDuration = Date.now() - ctx.observability.requestStartTime;
+    }
+
+    return { ok: false, error, duration };
+  }
+
+  loopDetector.recordCall(ctx.sessionId, turnNumber, toolName, args, null);
+
+  // Execute with retry
+  const result = await retryToolExecution(
+    () => toolRegistry.executeTool(toolName, executionContext),
+    { mode: 'text', maxRetries: 3, toolId: toolName, toolMetadata: toolMetadata || {}, clientId: `text-${Date.now()}` }
+  );
+
+  const duration = Date.now() - startTime;
+
+  // Record result
+  recordToolResult(ctx.conversationHash, turnNumber, toolName,
+    result.ok ? (result.data as Record<string, unknown>) :
+    { error: true, type: result.error?.type, message: result.error?.message, retryable: result.error?.retryable },
+    0);
+
+  // Record observability
+  if (ctx.observability) {
+    ctx.observability.toolCalls.push({
+      position: ctx.observability.toolCalls.length + 1,
+      chainPosition: 0,
+      toolId: toolName,
+      args,
+      thoughtSignature,
+      startTime,
+      duration,
+      ok: result.ok,
+      result: result.ok ? result.data : null,
+      error: result.ok ? null : result.error
+    });
+    ctx.observability.totalDuration = Date.now() - ctx.observability.requestStartTime;
+  }
+
+  // Audit log
+  console.log(JSON.stringify({
+    event: 'tool_execution',
+    toolId: toolName,
+    toolVersion: toolMetadata?.version || 'unknown',
+    registryVersion: toolRegistry.getVersion(),
+    duration,
+    ok: result.ok,
+    category: toolMetadata?.category || 'unknown',
+    mode: 'text'
+  }));
+
+  return { ...result, duration };
+}
+
 export async function POST(request: Request) {
   // T0: Request received
   const requestStartTime = Date.now();
@@ -881,7 +1084,7 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { messages, timeoutExpired, userId } = body;
+    const { messages, timeoutExpired, userId, timezone } = body;
 
     // Check global budget if userId is provided
     // Wrapped in try/catch to prevent chat failures when usage store is inaccessible
@@ -904,11 +1107,6 @@ export async function POST(request: Request) {
     // Log for debugging (API key presence, not the key itself)
     console.log("GEMINI_API_KEY present:", !!apiKey);
     console.log("GEMINI_API_KEY length:", apiKey ? apiKey.length : 0);
-
-    // Ensure the tool memory summarizer is initialized with the API key
-    if (apiKey) {
-      toolMemorySummarizer.reinitialize();
-    }
 
     if (!apiKey) {
       // Return a mock response if no API key is configured
@@ -1057,7 +1255,7 @@ export async function POST(request: Request) {
       if (needsNewSummary) {
         console.log(`Scheduling background summarization of ${messagesToSummarize.length} old messages`);
         // Start summarization in background, don't await it
-        summaryPromise = summarizeMessages(ai, messagesToSummarize);
+        summaryPromise = summarizeMessages(ai, messagesToSummarize, timezone);
         // Use existing summary for now (if available)
         summary = cached?.summary || null;
       } else {
@@ -1078,6 +1276,19 @@ export async function POST(request: Request) {
     // Inject Tool Memory Summary (Point B/C from tool-memory.md)
     // This ensures the agent is always aware of its "vision status" before answering
     const sessionId = userId || 'anonymous-text-session';
+
+    // IMPORTANT: Clear stale tool memory for new conversations
+    // A "new conversation" is detected when messages.length <= 2 (just first user message, or user + assistant)
+    // This prevents stale tool memory from previous sessions from confusing the model
+    if (messages.length <= 2) {
+      const existingCalls = toolMemoryStore.queryToolCalls(sessionId, { toolId: "", timeRange: 'all', includeErrors: true });
+      if (existingCalls.length > 0) {
+        console.log(`[ToolMemory] Clearing ${existingCalls.length} stale tool calls for new conversation (messages: ${messages.length})`);
+        toolMemoryStore.clearSession(sessionId);
+        loopDetector.clearSession(sessionId);
+      }
+    }
+
     const pastToolCalls = toolMemoryStore.queryToolCalls(sessionId, { toolId: "", timeRange: 'all', includeErrors: false });
     
     if (pastToolCalls.length > 0) {
@@ -1136,7 +1347,7 @@ export async function POST(request: Request) {
       // For user messages with timestamps, prepend the formatted timestamp
       // Include year on first message after summary for unambiguous year context
       if (msg.role === 'user' && msg.timestamp) {
-        const timestampStr = formatTimestamp(msg.timestamp, includeYearOnNextUserMessage);
+        const timestampStr = formatTimestamp(msg.timestamp, includeYearOnNextUserMessage, timezone);
         content = timestampStr ? `${timestampStr} ${content}` : content;
         includeYearOnNextUserMessage = false; // Only first message gets year
       }
@@ -1379,6 +1590,11 @@ export async function POST(request: Request) {
       console.log("Caching disabled, sending summary + recent messages");
     }
 
+    // Enforce role alternation before sending to Gemini
+    // This fixes issues where message windowing splits on an assistant message,
+    // or where stripped assistant messages create consecutive same-role messages
+    contentsToSend = enforceRoleAlternation(contentsToSend);
+
     // Enforce token budget after cache decisions
     const budgetResult = enforceTokenBudget(contentsToSend, summary, TOKEN_CONFIG.MAX_TOKENS);
     contentsToSend = budgetResult.contents;
@@ -1606,111 +1822,34 @@ export async function POST(request: Request) {
       // If function call detected early, handle it and return JSON (no stream)
       const ignoreUserCall = functionCalls.find(c => c.name === "ignore_user");
       const ignoreUserPart = functionCallParts.find(p => p.functionCall.name === "ignore_user");
-      
+
       if (ignoreUserCall) {
-        // Initialize state controller
-        const turnNumber = Math.ceil(messages.length / 2);
-        const state = createStateController({
-          mode: 'text',
-          isActive: true
-        }) as StateController;
-
-        // Record tool call
-        recordToolCall(
+        const ignoreUserArgs = toRecord(ignoreUserCall.args || {});
+        const ctx: ToolExecutionContext = {
           conversationHash,
-          turnNumber,
-          'ignore_user',
-          ignoreUserCall.args || {},
-          ignoreUserPart?.thoughtSignature,
-          0
-        );
-
-        // Get tool metadata
-        const toolMetadata = toolRegistry.getToolMetadata('ignore_user') as ToolMetadata | null;
-
-        // Build execution context
-        const executionContext = {
-          clientId: `text-${Date.now()}`,
-          ws: null,  // No WebSocket in text mode
-          geminiSession: null,
-          args: ignoreUserCall.args,
-          session: {
-            isActive: state.get('isActive'),
-            toolsVersion: toolRegistry.getVersion(),
-            state: state.getSnapshot()
-          }
+          messages,
+          sessionId: userId || 'anonymous',
+          observability
         };
 
-        // Execute tool through registry with retry logic
-        const startTime = Date.now();
-        const result = await retryToolExecution(
-          () => toolRegistry.executeTool('ignore_user', executionContext),
-          {
-            mode: 'text',
-            maxRetries: 3,
-            toolId: 'ignore_user',
-            toolMetadata: (toolMetadata || {}) as object,
-            clientId: `text-${Date.now()}`
-          }
-        );
-        const duration = Date.now() - startTime;
-
-        const ignoreUserArgs = toRecord(ignoreUserCall.args || {});
-
-        // Record tool result
-        recordToolResult(
-          conversationHash,
-          turnNumber,
+        const result = await executeToolWithContext(
           'ignore_user',
-          result.ok ? (result.data as Record<string, unknown>) : {
-            error: true,
-            type: result.error.type,
-            message: result.error.message,
-            retryable: result.error.retryable,
-            details: result.error.details
-          },
-          0
+          ignoreUserArgs,
+          ignoreUserPart?.thoughtSignature,
+          ctx
         );
-
-        // Collect observability data
-        if (observability) {
-          observability.toolCalls.push({
-            position: observability.toolCalls.length + 1,
-            chainPosition: 0,
-            toolId: 'ignore_user',
-            args: ignoreUserArgs,
-            thoughtSignature: ignoreUserPart?.thoughtSignature,
-            startTime: startTime,
-            duration: duration,
-            ok: result.ok,
-            result: result.ok ? result.data : null,
-            error: result.ok ? null : result.error
-          });
-          observability.totalDuration = Date.now() - observability.requestStartTime;
-        }
-
-        // Structured audit logging
-        console.log(JSON.stringify({
-          event: 'tool_execution',
-          toolId: 'ignore_user',
-          toolVersion: toolMetadata?.version || 'unknown',
-          registryVersion: toolRegistry.getVersion(),
-          duration,
-          ok: result.ok,
-          category: toolMetadata?.category || 'unknown',
-          mode: 'text'
-        }));
 
         // Return response based on result
         if (result.ok) {
+          const resultData = result.data as Record<string, unknown>;
           const response = {
-            message: result.data.farewellMessage || ignoreUserArgs.farewell_message,
+            message: resultData.farewellMessage || ignoreUserArgs.farewell_message,
             timeout: {
-              duration: result.data.durationSeconds || ignoreUserArgs.duration_seconds,
-              until: result.data.timeoutUntil
+              duration: resultData.durationSeconds || ignoreUserArgs.duration_seconds,
+              until: resultData.timeoutUntil
             }
           };
-          
+
           // Append observability if enabled
           if (observability) {
             (response as { observability?: ObservabilityData }).observability = {
@@ -1722,14 +1861,14 @@ export async function POST(request: Request) {
               requestStartTime: observability.requestStartTime
             };
           }
-          
+
           return NextResponse.json(response);
         } else {
           console.error('ignore_user tool failed:', result.error);
           const errorResponse = {
-            error: result.error.message
+            error: result.error?.message
           };
-          
+
           // Append observability even on error
           if (observability) {
             (errorResponse as { observability?: ObservabilityData }).observability = {
@@ -1741,7 +1880,7 @@ export async function POST(request: Request) {
               requestStartTime: observability.requestStartTime
             };
           }
-          
+
           return NextResponse.json(errorResponse, { status: 500 });
         }
       }
@@ -1751,98 +1890,25 @@ export async function POST(request: Request) {
       const startVoicePart = functionCallParts.find(p => p.functionCall.name === "start_voice_session");
 
       if (startVoiceCall) {
-        // Initialize state controller
-        const turnNumber = Math.ceil(messages.length / 2);
-        const state = createStateController({
-          mode: 'text',
-          isActive: true
-        }) as StateController;
-
-        // Record tool call
-        recordToolCall(
+        const startVoiceArgs = (startVoiceCall.args || {}) as Record<string, unknown>;
+        const ctx: ToolExecutionContext = {
           conversationHash,
-          turnNumber,
-          'start_voice_session',
-          startVoiceCall.args || {},
-          startVoicePart?.thoughtSignature,
-          0
-        );
-
-        const toolMetadata = toolRegistry.getToolMetadata('start_voice_session') as ToolMetadata | null;
-
-        const executionContext = {
-          clientId: `text-${Date.now()}`,
-          ws: null,
-          geminiSession: null,
-          args: startVoiceCall.args || {},
-          session: {
-            isActive: state.get('isActive'),
-            toolsVersion: toolRegistry.getVersion(),
-            state: state.getSnapshot()
-          }
+          messages,
+          sessionId: userId || 'anonymous',
+          observability
         };
 
-        const startTime = Date.now();
-        const result = await retryToolExecution(
-          () => toolRegistry.executeTool('start_voice_session', executionContext),
-          {
-            mode: 'text',
-            maxRetries: 3,
-            toolId: 'start_voice_session',
-            toolMetadata: toolMetadata ? (toolMetadata as object) : {},
-            clientId: `text-${Date.now()}`
-          }
-        );
-        const duration = Date.now() - startTime;
-
-        // Record tool result
-        recordToolResult(
-          conversationHash,
-          turnNumber,
+        const result = await executeToolWithContext(
           'start_voice_session',
-          result.ok ? (result.data as Record<string, unknown>) : {
-            error: true,
-            type: result.error.type,
-            message: result.error.message,
-            retryable: result.error.retryable,
-            details: result.error.details
-          },
-          0
+          startVoiceArgs,
+          startVoicePart?.thoughtSignature,
+          ctx
         );
-
-        // Collect observability data
-        if (observability) {
-          observability.toolCalls.push({
-            position: observability.toolCalls.length + 1,
-            chainPosition: 0,
-            toolId: 'start_voice_session',
-            args: startVoiceCall.args || {},
-            thoughtSignature: startVoicePart?.thoughtSignature,
-            startTime: startTime,
-            duration: duration,
-            ok: result.ok,
-            result: result.ok ? result.data : null,
-            error: result.ok ? null : result.error
-          });
-          observability.totalDuration = Date.now() - observability.requestStartTime;
-        }
-
-        console.log(JSON.stringify({
-          event: 'tool_execution',
-          toolId: 'start_voice_session',
-          toolVersion: toolMetadata?.version || 'unknown',
-          registryVersion: toolRegistry.getVersion(),
-          duration,
-          ok: result.ok,
-          category: toolMetadata?.category || 'unknown',
-          mode: 'text'
-        }));
 
         if (result.ok) {
           // Filter out empty or too-short pending_request values
-          // Schema allows null/empty, but we normalize to null for consistency
-          let pendingRequest = startVoiceCall.args?.pending_request || null;
-          if (pendingRequest && typeof pendingRequest === 'string' && pendingRequest.trim().length < 3) {
+          let pendingRequest = startVoiceArgs.pending_request || null;
+          if (pendingRequest && typeof pendingRequest === 'string' && (pendingRequest as string).trim().length < 3) {
             pendingRequest = null;
           }
 
@@ -1867,7 +1933,7 @@ export async function POST(request: Request) {
             startVoiceSession: true,
             pendingRequest: pendingRequest
           };
-          
+
           // Append observability if enabled
           if (observability) {
             (response as { observability?: ObservabilityData }).observability = {
@@ -1879,14 +1945,14 @@ export async function POST(request: Request) {
               requestStartTime: observability.requestStartTime
             };
           }
-          
+
           return NextResponse.json(response);
         } else {
           console.error('start_voice_session tool failed:', result.error);
           const errorResponse = {
-            error: result.error.message
+            error: result.error?.message
           };
-          
+
           // Append observability even on error
           if (observability) {
             (errorResponse as { observability?: ObservabilityData }).observability = {
@@ -1898,7 +1964,7 @@ export async function POST(request: Request) {
               requestStartTime: observability.requestStartTime
             };
           }
-          
+
           return NextResponse.json(errorResponse, { status: 500 });
         }
       }
@@ -1906,165 +1972,102 @@ export async function POST(request: Request) {
       // Handle all other function calls (kb_search, kb_get, end_voice_session, etc.)
       const otherFunctionCall = functionCalls.find(c => c.name !== "ignore_user" && c.name !== "start_voice_session");
       const otherFunctionPart = functionCallParts.find(p => p.functionCall.name !== "ignore_user" && p.functionCall.name !== "start_voice_session");
-      
+
       if (otherFunctionCall && otherFunctionCall.name) {
         const toolName = otherFunctionCall.name;
+        const toolArgs = (otherFunctionCall.args || {}) as Record<string, unknown>;
         console.log(`Handling function call: ${toolName}`);
         const toolErrorNotices: Array<{ toolName: string; type: string; message: string }> = [];
-        
-        // Initialize state controller
-        const turnNumber = Math.ceil(messages.length / 2);
-        const state = createStateController({
-          mode: 'text',
-          isActive: true
-        }) as StateController;
 
-        // Record tool call
-        recordToolCall(
-          conversationHash,
-          turnNumber,
-          toolName,
-          otherFunctionCall.args || {},
-          otherFunctionPart?.thoughtSignature,
-          0
-        );
-
-        // Get tool metadata
+        // Get tool metadata early for validation
         const toolMetadata = toolRegistry.getToolMetadata(toolName) as ToolMetadata | null;
-        
         if (!toolMetadata) {
           console.error(`Unknown tool: ${toolName}`);
-          return NextResponse.json({
-            error: `Unknown tool: ${toolName}`
-          }, { status: 400 });
+          return NextResponse.json({ error: `Unknown tool: ${toolName}` }, { status: 400 });
         }
 
-        // Build execution context
         const sessionId = userId || 'anonymous-text-session';
-        const executionContext = {
-          clientId: `text-${Date.now()}`,
-          ws: null,
-          geminiSession: null,
-          args: otherFunctionCall.args || {},
-          capabilities: { voice: false },
-          session: {
-            isActive: state.get('isActive'),
-            toolsVersion: toolRegistry.getVersion(),
-            state: state.getSnapshot()
-          },
-          meta: {
-            perplexityApiKey: process.env.PERPLEXITY_API_KEY
-          }
-        };
+        const turnNumber = Math.ceil(messages.length / 2);
 
         // Pre-execution deduplication check (tool memory)
-        const dedupCheck = toolMemoryDedup.checkForDuplicate(
-          sessionId,
-          toolName,
-          otherFunctionCall.args || {}
-        );
+        const dedupCheck = toolMemoryDedup.checkForDuplicate(sessionId, toolName, toolArgs);
 
-        let result;
-        let duration;
+        let result: ToolExecutionResult;
         const startTime = Date.now();
 
         if (dedupCheck.isDuplicate) {
+          // Use cached result from deduplication
           console.log(`[ToolMemory] Reusing cached result for ${toolName} (call: ${dedupCheck.originalCallId})`);
-          result = dedupCheck.cachedResult;
-          duration = Date.now() - startTime; // Should be ~0ms (instant)
-        } else {
-        // Check for loop before execution
-        const loopCheck = loopDetector.detectLoop(sessionId, turnNumber, toolName, otherFunctionCall.args || {});
-        if (loopCheck.detected) {
-          console.warn(`[Loop Detection] Loop detected for ${toolName}: ${loopCheck.message}`);
-          result = {
-            ok: false,
-            error: {
-              type: 'LOOP_DETECTED',
-              message: loopCheck.message,
-              retryable: false
-            }
-          };
-        } else {
-          // Record call
-          loopDetector.recordCall(sessionId, turnNumber, toolName, otherFunctionCall.args || {}, null);
+          result = { ...dedupCheck.cachedResult, duration: 0 };
 
-          // Execute tool through registry with retry logic
-          result = await retryToolExecution(
-            () => toolRegistry.executeTool(toolName, executionContext),
-            {
-              mode: 'text',
-              maxRetries: 3,
+          // Record observability for deduplicated call
+          if (observability) {
+            observability.toolCalls.push({
+              position: observability.toolCalls.length + 1,
+              chainPosition: 0,
               toolId: toolName,
-              toolMetadata: toolMetadata ? (toolMetadata as object) : {},
-              clientId: `text-${Date.now()}`
-            }
-          );
-        }
-          duration = Date.now() - startTime;
+              args: toolArgs,
+              thoughtSignature: otherFunctionPart?.thoughtSignature,
+              startTime,
+              duration: 0,
+              ok: result.ok,
+              result: result.ok ? result.data : null,
+              error: result.ok ? null : result.error
+            });
+            observability.totalDuration = Date.now() - observability.requestStartTime;
+          }
+
+          // Audit log for deduplicated call
+          console.log(JSON.stringify({
+            event: 'tool_execution',
+            toolId: toolName,
+            toolVersion: toolMetadata?.version || 'unknown',
+            registryVersion: toolRegistry.getVersion(),
+            duration: 0,
+            ok: result.ok,
+            category: toolMetadata?.category || 'unknown',
+            mode: 'text',
+            deduplicated: true
+          }));
+        } else {
+          // Execute through unified helper (handles recording, loop detection, observability, logging)
+          const ctx: ToolExecutionContext = {
+            conversationHash,
+            messages,
+            sessionId,
+            observability
+          };
+          result = await executeToolWithContext(toolName, toolArgs, otherFunctionPart?.thoughtSignature, ctx);
 
           // Enhanced timing log for slow tool calls
-          if (duration > 500) {
-            console.log(`[Tool] ⏱️ SLOW TOOL CALL: ${toolName} took ${duration}ms`);
+          if (result.duration > 500) {
+            console.log(`[Tool] SLOW TOOL CALL: ${toolName} took ${result.duration}ms`);
             if (result.meta?._timing) {
-              console.log(`[Tool] ⏱️ Breakdown: ${JSON.stringify(result.meta._timing)}`);
+              console.log(`[Tool] Breakdown: ${JSON.stringify(result.meta._timing)}`);
             }
           }
 
-          // Record in tool memory store (post-execution)
+          // Record in tool memory store (post-execution, separate from tool session)
           const callId = `call-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
           toolMemoryStore.recordToolCall(sessionId, {
             id: callId,
             toolId: toolName,
-            args: otherFunctionCall.args || {},
-            argsHash: hashArgs(otherFunctionCall.args || {}),
+            args: toolArgs,
+            argsHash: hashArgs(toolArgs),
             timestamp: Date.now(),
-            turn: 1, // TODO: Track actual turn number
-            duration: duration,
+            turn: turnNumber,
+            duration: result.duration,
             fullResponse: result,
-            summary: null, // Will be generated async
+            summary: null,
             ok: result.ok,
             error: result.ok ? null : result.error,
             tokens: estimateTokensForJson(JSON.stringify(result))
           });
         }
 
-        // Collect observability data
-        if (observability) {
-          observability.toolCalls.push({
-            position: observability.toolCalls.length + 1,
-            chainPosition: 0,
-            toolId: toolName,
-            args: otherFunctionCall.args || {},
-            thoughtSignature: otherFunctionPart?.thoughtSignature,
-            startTime: startTime,
-            duration: duration,
-            ok: result.ok,
-            result: result.ok ? result.data : null,
-            error: result.ok ? null : result.error
-          });
-          observability.totalDuration = Date.now() - observability.requestStartTime;
-        }
-
-        console.log(JSON.stringify({
-          event: 'tool_execution',
-          toolId: toolName,
-          toolVersion: toolMetadata?.version || 'unknown',
-          registryVersion: toolRegistry.getVersion(),
-          duration,
-          ok: result.ok,
-          category: toolMetadata?.category || 'unknown',
-          mode: 'text'
-        }));
-
         // Handle tool errors by sending them back to the model
-        // The model will interpret the error and respond naturally to the user
         if (!result.ok) {
           console.error(`${toolName} tool failed:`, result.error);
-          
-          // Don't return an error response - instead, send the error back to the model
-          // as a functionResponse so it can handle it naturally
-          // The error object already contains: type, message, retryable, details
         }
 
         // Check if KB search results are relevant
@@ -2102,6 +2105,8 @@ export async function POST(request: Request) {
         if (cleanedResultData && typeof cleanedResultData === 'object') {
           delete cleanedResultData._timing;
           delete cleanedResultData._distance;
+          delete cleanedResultData._allAssets;
+          delete cleanedResultData._diagnostics;
           // Also clean nested results if they exist
           if (Array.isArray(cleanedResultData.results)) {
             cleanedResultData.results.forEach((r: any) => {
@@ -2132,10 +2137,10 @@ export async function POST(request: Request) {
           toolName,
           result.ok ? (cleanedResultData as Record<string, unknown>) : {
             error: true,
-            type: result.error.type,
-            message: result.error.message,
-            retryable: result.error.retryable,
-            details: result.error.details
+            type: result.error?.type,
+            message: result.error?.message,
+            retryable: result.error?.retryable,
+            details: result.error?.details
           },
           0
         );
@@ -2148,10 +2153,10 @@ export async function POST(request: Request) {
           // Send cleaned data to model
           response: result.ok ? (cleanedResultData as Record<string, unknown>) : {
             error: true,
-            type: result.error.type,
-            message: result.error.message,
-            retryable: result.error.retryable,
-            details: result.error.details
+            type: result.error?.type,
+            message: result.error?.message,
+            retryable: result.error?.retryable,
+            details: result.error?.details
           }
         }
       }
@@ -2240,6 +2245,24 @@ export async function POST(request: Request) {
                 1
               );
 
+              // Create execution context for auto-chained tool
+              const autoState = createStateController({ mode: 'text', isActive: true }) as StateController;
+              const autoExecutionContext = {
+                clientId: `text-${Date.now()}`,
+                ws: null,
+                geminiSession: null,
+                args: autoArgs,
+                capabilities: { voice: false },
+                session: {
+                  isActive: autoState.get('isActive'),
+                  toolsVersion: toolRegistry.getVersion(),
+                  state: autoState.getSnapshot()
+                },
+                meta: {
+                  perplexityApiKey: process.env.PERPLEXITY_API_KEY
+                }
+              };
+
               const autoStartTime = Date.now();
               let autoResult;
 
@@ -2257,7 +2280,7 @@ export async function POST(request: Request) {
               } else {
                 loopDetector.recordCall(sessionId, turnNumber, autoToolName, autoArgs, null);
                 autoResult = await retryToolExecution(
-                  () => toolRegistry.executeTool(autoToolName, { ...executionContext, args: autoArgs }),
+                  () => toolRegistry.executeTool(autoToolName, autoExecutionContext),
                   {
                     mode: "text",
                     maxRetries: 3,
@@ -2394,16 +2417,193 @@ export async function POST(request: Request) {
           }
         }
 
+        // Phase 3: Project exploration auto-chain
+        // When a project with available assets is returned for an exploratory query,
+        // auto-fetch one representative asset even without an explicit visual request
+        if (
+          toolName === "kb_search" &&
+          result.ok &&
+          !isVisualShowRequest(lastUserMessageText) &&
+          isProjectExplorationRequest(
+            lastUserMessageText,
+            Array.isArray(cleanedResultData?.results) ? cleanedResultData.results : []
+          )
+        ) {
+          // Find the top project result that has asset hints
+          const kbResults = Array.isArray(cleanedResultData?.results) ? cleanedResultData.results : [];
+          const topProjectWithAssets = kbResults.find(
+            (r: any) => r.type === 'project' && r._assetHints?.count > 0 && r._assetHints?.sample?.length > 0
+          ) as { id: string; title: string; _assetHints: { count: number; sample: Array<{ id: string; type: string; title: string }> } } | undefined;
+
+          if (topProjectWithAssets) {
+            const sampleAsset = topProjectWithAssets._assetHints.sample[0];
+            const enrichAssetId = sampleAsset.id;
+            const enrichToolName = "kb_get";
+            const enrichArgs = { id: enrichAssetId, include_image_data: false };
+            const enrichToolMetadata = toolRegistry.getToolMetadata(enrichToolName) as ToolMetadata | null;
+
+            if (enrichToolMetadata) {
+              console.log(`[AutoChain] Project exploration detected for "${topProjectWithAssets.title}", auto-fetching asset ${enrichAssetId}`);
+
+              // Record auto-chained tool call
+              recordToolCall(
+                conversationHash,
+                turnNumber,
+                enrichToolName,
+                enrichArgs,
+                undefined,
+                1
+              );
+
+              // Create execution context for auto-chained tool
+              const enrichState = createStateController({ mode: 'text', isActive: true }) as StateController;
+              const enrichExecutionContext = {
+                clientId: `text-${Date.now()}`,
+                ws: null,
+                geminiSession: null,
+                args: enrichArgs,
+                capabilities: { voice: false },
+                session: {
+                  isActive: enrichState.get('isActive'),
+                  toolsVersion: toolRegistry.getVersion(),
+                  state: enrichState.getSnapshot()
+                },
+                meta: {
+                  perplexityApiKey: process.env.PERPLEXITY_API_KEY
+                }
+              };
+
+              const enrichStartTime = Date.now();
+              let enrichResult: any;
+
+              const enrichLoopCheck = loopDetector.detectLoop(sessionId, turnNumber, enrichToolName, enrichArgs);
+              if (enrichLoopCheck.detected) {
+                console.warn(`[Loop Detection] Project enrichment loop detected for ${enrichToolName}: ${enrichLoopCheck.message}`);
+                enrichResult = {
+                  ok: false,
+                  error: {
+                    type: "LOOP_DETECTED",
+                    message: enrichLoopCheck.message,
+                    retryable: false
+                  }
+                };
+              } else {
+                loopDetector.recordCall(sessionId, turnNumber, enrichToolName, enrichArgs, null);
+                enrichResult = await retryToolExecution(
+                  () => toolRegistry.executeTool(enrichToolName, enrichExecutionContext),
+                  {
+                    mode: "text",
+                    maxRetries: 3,
+                    toolId: enrichToolName,
+                    toolMetadata: enrichToolMetadata ? (enrichToolMetadata as object) : {},
+                    clientId: `text-${Date.now()}`
+                  }
+                );
+              }
+
+              const enrichDuration = Date.now() - enrichStartTime;
+              const enrichCallId = `call-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+              toolMemoryStore.recordToolCall(sessionId, {
+                id: enrichCallId,
+                toolId: enrichToolName,
+                args: enrichArgs,
+                argsHash: hashArgs(enrichArgs),
+                timestamp: Date.now(),
+                turn: 1,
+                duration: enrichDuration,
+                fullResponse: enrichResult,
+                summary: null,
+                ok: enrichResult.ok,
+                error: enrichResult.ok ? null : enrichResult.error,
+                tokens: estimateTokensForJson(JSON.stringify(enrichResult))
+              });
+
+              if (observability) {
+                observability.toolCalls.push({
+                  position: observability.toolCalls.length + 1,
+                  chainPosition: 1,
+                  toolId: enrichToolName,
+                  args: enrichArgs,
+                  thoughtSignature: undefined,
+                  startTime: enrichStartTime,
+                  duration: enrichDuration,
+                  ok: enrichResult.ok,
+                  result: enrichResult.ok ? enrichResult.data : null,
+                  error: enrichResult.ok ? null : enrichResult.error
+                });
+                observability.chainedCalls += 1;
+                observability.totalDuration = Date.now() - observability.requestStartTime;
+              }
+
+              if (enrichResult.ok) {
+                const cleanedEnrichData = JSON.parse(JSON.stringify(enrichResult.data));
+                if (cleanedEnrichData && typeof cleanedEnrichData === "object") {
+                  delete cleanedEnrichData._imageData;
+                  delete cleanedEnrichData._timing;
+                  delete cleanedEnrichData._distance;
+                }
+
+                // Record auto-chained tool result
+                recordToolResult(
+                  conversationHash,
+                  turnNumber,
+                  enrichToolName,
+                  cleanedEnrichData as Record<string, unknown>,
+                  1
+                );
+
+                const enrichResponseParts: any[] = [
+                  {
+                    functionResponse: {
+                      name: enrichToolName,
+                      response: cleanedEnrichData as Record<string, unknown>
+                    }
+                  }
+                ];
+
+                updatedContents.push(
+                  {
+                    role: "model" as const,
+                    parts: [{ functionCall: { name: enrichToolName, args: enrichArgs } }]
+                  },
+                  {
+                    role: "user" as const,
+                    parts: enrichResponseParts
+                  }
+                );
+
+                // Add guidance for the model
+                updatedContents.push({
+                  role: "user" as const,
+                  parts: [{
+                    text: "GUIDANCE: A representative visual has been fetched for the project being discussed. Include it if it supports the narrative. Skip it if irrelevant to the user's specific question."
+                  }]
+                });
+              } else {
+                // Record failure for observability (non-critical, no user-facing error)
+                recordToolResult(
+                  conversationHash,
+                  turnNumber,
+                  enrichToolName,
+                  { error: true, type: enrichResult.error?.type, message: enrichResult.error?.message, retryable: enrichResult.error?.retryable } as Record<string, unknown>,
+                  1
+                );
+                console.warn(`[AutoChain] Project enrichment failed for ${enrichAssetId}:`, enrichResult.error?.message);
+              }
+            }
+          }
+        }
+
         if (!result.ok) {
           toolErrorNotices.push({
             toolName,
-            type: result.error.type,
-            message: result.error.message
+            type: result.error?.type || 'UNKNOWN',
+            message: result.error?.message || 'Unknown error'
           });
           updatedContents.push({
             role: "user" as const,
             parts: [{
-              text: `IMPORTANT: The tool "${toolName}" failed with a ${result.error.type} error. You must tell the user this happened and include the error message verbatim: "${result.error.message}". If the message includes suggestions or next steps, surface them explicitly.`
+              text: `IMPORTANT: The tool "${toolName}" failed with a ${result.error?.type || 'UNKNOWN'} error. You must tell the user this happened and include the error message verbatim: "${result.error?.message || 'Unknown error'}". If the message includes suggestions or next steps, surface them explicitly.`
             }]
           });
         }
@@ -2620,6 +2820,8 @@ export async function POST(request: Request) {
                       startsWith: perplexityApiKey?.substring(0, 4) || 'N/A'
                     });
 
+                    // Create state controller for chained execution
+                    const chainedState = createStateController({ mode: 'text', isActive: true }) as StateController;
                     const chainedExecutionContext = {
                       clientId: `text-${Date.now()}`,
                       ws: null,
@@ -2627,9 +2829,9 @@ export async function POST(request: Request) {
                       args: nextFunctionCall.args || {},
                       capabilities: { voice: false },
                       session: {
-                        isActive: state.get('isActive'),
+                        isActive: chainedState.get('isActive'),
                         toolsVersion: toolRegistry.getVersion(),
-                        state: state.getSnapshot()
+                        state: chainedState.getSnapshot()
                       },
                       meta: {
                         perplexityApiKey: perplexityApiKey
@@ -2917,7 +3119,42 @@ export async function POST(request: Request) {
                     accumulatedFullText += responseText;
                     console.log(`Final response streamed: ${responseText.length} bytes (after ${chainCount} chained calls)`);
                   } else {
-                    console.warn(`No text in final response after ${chainCount} chained calls`);
+                    console.warn(`No text in final response after ${chainCount} chained calls, retrying without cache...`);
+
+                    // Retry the last API call without cache
+                    try {
+                      const retryConfig: GeminiConfig = {
+                        tools: [{ functionDeclarations: providerSchemas }],
+                        systemInstruction: FRAM_SYSTEM_PROMPT
+                      };
+                      const retryStream = await ai.models.generateContentStream({
+                        model: "gemini-2.5-flash",
+                        contents: currentContents,
+                        config: retryConfig
+                      });
+                      for await (const chunk of retryStream) {
+                        const typed = chunk as StreamChunk;
+                        const parts = typed?.candidates?.[0]?.content?.parts || [];
+                        for (const part of parts) {
+                          if (part.text) {
+                            accumulatedFullText += part.text;
+                            const encoded = encoder.encode(part.text);
+                            totalBytesSent += encoded.length;
+                            controller.enqueue(encoded);
+                          }
+                        }
+                      }
+                      if (accumulatedFullText.trim()) {
+                        console.log(`[Chain Retry] Succeeded: ${accumulatedFullText.length} chars`);
+                        systemPromptCache = null;
+                        systemPromptCachePromise = null;
+                        systemPromptCacheCreatedAt = 0;
+                      } else {
+                        console.warn(`[Chain Retry] Also produced no text`);
+                      }
+                    } catch (retryError) {
+                      console.error(`[Chain Retry] Failed:`, retryError);
+                    }
                   }
 
                   if (toolErrorNotices.length > 0) {
@@ -2997,9 +3234,6 @@ export async function POST(request: Request) {
                     .catch(err => console.warn(`[Usage] Failed to record usage for ${userId}:`, err));
                 }
 
-                // Trigger background summarization for this turn (tool memory)
-                toolMemorySummarizer.enqueueSummarization(userId || 'anonymous-text-session')
-                  .catch(err => console.warn(`[ToolMemory] Summarization failed:`, err));
 
                 // T6: Final response sent (chained path)
                 const requestEndTime = Date.now();
@@ -3033,14 +3267,18 @@ export async function POST(request: Request) {
             let bytesSent = 0;
             let accumulatedFullText = "";
 
+            // Track late function calls that arrive after the buffering window
+            let lateFunctionCall: { name: string; args: Record<string, unknown> } | null = null;
+            let lateThoughtSignature: string | undefined = undefined;
+
             const enqueueTextFromChunk = (chunk: unknown) => {
-              const typed = chunk as { 
-                text?: string | (() => string); 
-                candidates?: Array<{ 
-                  content?: { parts?: Array<{ text?: string, functionCall?: any }> },
+              const typed = chunk as {
+                text?: string | (() => string);
+                candidates?: Array<{
+                  content?: { parts?: Array<{ text?: string, functionCall?: any, thoughtSignature?: string }> },
                   finishReason?: string,
                   safetyRatings?: Array<{ category: string, probability: string }>
-                }> 
+                }>
               };
               const candidates = typed.candidates?.[0]?.content?.parts || [];
               const finishReason = typed.candidates?.[0]?.finishReason;
@@ -3065,6 +3303,13 @@ export async function POST(request: Request) {
                 }
               }
 
+              // DEBUG: Log chunk contents when no text found
+              if (!text && candidates.length > 0) {
+                const hasThought = candidates.some((p: any) => p.thoughtSignature);
+                const hasFunction = candidates.some((p: any) => p.functionCall);
+                console.log(`[Debug] Chunk with no text: finishReason=${finishReason}, hasThought=${hasThought}, hasFunction=${hasFunction}, parts=${candidates.length}`);
+              }
+
               if (text) {
                 accumulatedFullText += text;
                 const encoded = encoder.encode(text);
@@ -3084,10 +3329,19 @@ export async function POST(request: Request) {
                 }
                 
                 if (candidates.length > 0 && candidates.some((p: any) => p.functionCall)) {
-                  // This is a function call chunk that wasn't handled in the early detection
-                  // (shouldn't happen for the first turn, but good for debugging)
-                  const calls = candidates.filter((p: any) => p.functionCall).map((p: any) => p.functionCall.name);
-                  debugLog(`[Gemini API] Stream chunk contains function calls: ${calls.join(', ')}`);
+                  // Late function call detected - track it for execution after stream completes
+                  const functionCallPart = candidates.find((p: any) => p.functionCall) as any;
+                  if (functionCallPart && !lateFunctionCall) {
+                    lateFunctionCall = {
+                      name: functionCallPart.functionCall.name,
+                      args: functionCallPart.functionCall.args || {}
+                    };
+                    // Extract thoughtSignature if present (sibling to functionCall in the part)
+                    if (functionCallPart.thoughtSignature) {
+                      lateThoughtSignature = functionCallPart.thoughtSignature;
+                    }
+                    console.log(`[Late Function Call] Detected ${lateFunctionCall.name} during streaming (past buffer window)`);
+                  }
                 } else if (candidates.length > 0 && candidates.some((p: any) => p.thoughtSignature)) {
                   const thoughtPart = candidates.find((p: any) => p.thoughtSignature) as any;
                   debugLog(`[Gemini API] Stream chunk contains thoughtSignature (length: ${thoughtPart?.thoughtSignature?.length || 0})`);
@@ -3111,15 +3365,308 @@ export async function POST(request: Request) {
 
               console.log(`Stream completed: ${chunksProcessed} chunks, ${bytesSent} bytes`);
 
-              // CRITICAL: Ensure we never return an empty response
-              // If agent produced no text (only thinking blocks), provide a fallback
+              // Check if we have a late function call that needs execution
+              const meaningfulTextThreshold = 50;
+              const hasMinimalText = accumulatedFullText.trim().length < meaningfulTextThreshold;
+
+              if (lateFunctionCall !== null && hasMinimalText) {
+                // Capture with explicit type to help TypeScript
+                const pendingLateCall = lateFunctionCall as { name: string; args: Record<string, unknown> };
+                console.log(`[Late Function Call] Executing ${pendingLateCall.name} (accumulated text: "${accumulatedFullText.trim().slice(0, 100)}...")`);
+
+                try {
+                  // Initialize state controller (same as early detection path)
+                  const turnNumber = Math.ceil(messages.length / 2);
+                  const lateState = createStateController({
+                    mode: 'text',
+                    isActive: true
+                  }) as StateController;
+
+                  // Record tool call
+                  recordToolCall(
+                    conversationHash,
+                    turnNumber,
+                    pendingLateCall.name,
+                    pendingLateCall.args,
+                    lateThoughtSignature,
+                    0
+                  );
+
+                  // Get tool metadata
+                  const lateToolMetadata = toolRegistry.getToolMetadata(pendingLateCall.name) as ToolMetadata | null;
+
+                  if (!lateToolMetadata) {
+                    console.error(`[Late Function Call] Unknown tool: ${pendingLateCall.name}`);
+                    // Fall through to fallback
+                  } else {
+                    // Build execution context
+                    const sessionId = userId || 'anonymous-text-session';
+                    const lateExecutionContext = {
+                      clientId: `text-late-${Date.now()}`,
+                      ws: null,
+                      geminiSession: null,
+                      args: pendingLateCall.args,
+                      capabilities: { voice: false },
+                      session: {
+                        isActive: lateState.get('isActive'),
+                        toolsVersion: toolRegistry.getVersion(),
+                        state: lateState.getSnapshot()
+                      },
+                      meta: {
+                        perplexityApiKey: process.env.PERPLEXITY_API_KEY
+                      }
+                    };
+
+                    // Deduplication check
+                    const dedupCheck = toolMemoryDedup.checkForDuplicate(
+                      sessionId,
+                      pendingLateCall.name,
+                      pendingLateCall.args
+                    );
+
+                    let lateResult;
+                    let lateDuration;
+                    const lateStartTime = Date.now();
+
+                    if (dedupCheck.isDuplicate) {
+                      console.log(`[Late Function Call] Reusing cached result (call: ${dedupCheck.originalCallId})`);
+                      lateResult = dedupCheck.cachedResult;
+                      lateDuration = 0;
+                    } else {
+                      // Loop detection
+                      const loopCheck = loopDetector.detectLoop(sessionId, turnNumber, pendingLateCall.name, pendingLateCall.args);
+                      if (loopCheck.detected) {
+                        console.warn(`[Late Function Call] Loop detected: ${loopCheck.message}`);
+                        lateResult = {
+                          ok: false,
+                          error: { type: 'LOOP_DETECTED', message: loopCheck.message, retryable: false }
+                        };
+                      } else {
+                        loopDetector.recordCall(sessionId, turnNumber, pendingLateCall.name, pendingLateCall.args, null);
+
+                        // Execute tool
+                        lateResult = await retryToolExecution(
+                          () => toolRegistry.executeTool(pendingLateCall.name, lateExecutionContext),
+                          {
+                            mode: 'text',
+                            maxRetries: 3,
+                            toolId: pendingLateCall.name,
+                            toolMetadata: lateToolMetadata as object,
+                            clientId: `text-late-${Date.now()}`
+                          }
+                        );
+                      }
+                      lateDuration = Date.now() - lateStartTime;
+
+                      // Record in tool memory store
+                      const callId = `call-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+                      toolMemoryStore.recordToolCall(sessionId, {
+                        id: callId,
+                        toolId: pendingLateCall.name,
+                        args: pendingLateCall.args,
+                        argsHash: hashArgs(pendingLateCall.args),
+                        timestamp: Date.now(),
+                        turn: turnNumber,
+                        duration: lateDuration,
+                        fullResponse: lateResult,
+                        summary: null,
+                        ok: lateResult.ok,
+                        error: lateResult.ok ? null : lateResult.error,
+                        tokens: estimateTokensForJson(JSON.stringify(lateResult))
+                      });
+                    }
+
+                    console.log(`[Late Function Call] ${pendingLateCall.name} executed in ${lateDuration}ms, ok: ${lateResult.ok}`);
+
+                    // Clean result data
+                    const cleanedLateResultData = lateResult.ok ? JSON.parse(JSON.stringify(lateResult.data)) : null;
+
+                    // Extract image data if present
+                    let lateImageData = null;
+                    if (cleanedLateResultData?._imageData) {
+                      lateImageData = cleanedLateResultData._imageData;
+                      delete cleanedLateResultData._imageData;
+                    }
+
+                    if (cleanedLateResultData && typeof cleanedLateResultData === 'object') {
+                      delete cleanedLateResultData._timing;
+                      delete cleanedLateResultData._distance;
+                      if (Array.isArray(cleanedLateResultData.results)) {
+                        cleanedLateResultData.results.forEach((r: any) => {
+                          if (r.metadata) {
+                            delete r.metadata._distance;
+                            delete r.metadata.vector;
+                          }
+                        });
+                      }
+                    }
+
+                    // Record tool result
+                    recordToolResult(
+                      conversationHash,
+                      turnNumber,
+                      pendingLateCall.name,
+                      lateResult.ok ? cleanedLateResultData : {
+                        error: true,
+                        type: lateResult.error.type,
+                        message: lateResult.error.message,
+                        retryable: lateResult.error.retryable,
+                        details: lateResult.error.details
+                      },
+                      0
+                    );
+
+                    // Build response parts
+                    const lateResponseParts: any[] = [{
+                      functionResponse: {
+                        name: pendingLateCall.name,
+                        response: lateResult.ok ? cleanedLateResultData : {
+                          error: true,
+                          type: lateResult.error.type,
+                          message: lateResult.error.message,
+                          retryable: lateResult.error.retryable,
+                          details: lateResult.error.details
+                        }
+                      }
+                    }];
+
+                    // Add image data if available
+                    if (lateImageData?.mimeType && lateImageData?.data) {
+                      lateResponseParts.push({
+                        inlineData: { mimeType: lateImageData.mimeType, data: lateImageData.data }
+                      });
+                      console.log(`[Late Function Call] Including image data (${lateImageData.mimeType})`);
+                    }
+
+                    // Build updated contents for follow-up call
+                    const lateUpdatedContents = [
+                      ...contentsToSend,
+                      {
+                        role: "model" as const,
+                        parts: [{
+                          functionCall: { name: pendingLateCall.name, args: pendingLateCall.args },
+                          thoughtSignature: lateThoughtSignature
+                        }]
+                      },
+                      {
+                        role: "user" as const,
+                        parts: lateResponseParts
+                      }
+                    ];
+
+                    // Make follow-up API call
+                    const lateFollowUpStream = await retryWithBackoff(async () => {
+                      const config: GeminiConfig = {};
+                      if (cachedContent?.trim()) {
+                        config.cachedContent = cachedContent;
+                      } else {
+                        config.tools = [{ functionDeclarations: providerSchemas }];
+                        config.systemInstruction = FRAM_SYSTEM_PROMPT;
+                      }
+
+                      return await ai.models.generateContentStream({
+                        model: "gemini-2.5-flash",
+                        contents: lateUpdatedContents,
+                        config
+                      });
+                    });
+
+                    // Stream the follow-up response
+                    let lateFollowUpText = "";
+                    for await (const chunk of lateFollowUpStream) {
+                      const typed = chunk as StreamChunk;
+                      const parts = typed?.candidates?.[0]?.content?.parts || [];
+
+                      for (const part of parts) {
+                        if (part.text) {
+                          lateFollowUpText += part.text;
+                          const encoded = encoder.encode(part.text);
+                          bytesSent += encoded.length;
+                          controller.enqueue(encoded);
+                        }
+                        // Note: We don't handle nested function calls here for v1
+                        // If needed, this could be extended to support chaining
+                      }
+                    }
+
+                    accumulatedFullText += lateFollowUpText;
+                    console.log(`[Late Function Call] Follow-up response streamed: ${lateFollowUpText.length} chars`);
+
+                    // Update observability
+                    if (observability) {
+                      observability.toolCalls.push({
+                        position: observability.toolCalls.length + 1,
+                        chainPosition: 0,
+                        toolId: pendingLateCall.name,
+                        args: pendingLateCall.args,
+                        thoughtSignature: lateThoughtSignature,
+                        startTime: lateStartTime,
+                        duration: lateDuration,
+                        ok: lateResult.ok,
+                        result: lateResult.ok ? lateResult.data : null,
+                        error: lateResult.ok ? null : lateResult.error
+                      });
+                    }
+                  }
+                } catch (lateToolError) {
+                  console.error(`[Late Function Call] Execution failed:`, lateToolError);
+                  // Fall through to fallback if needed
+                }
+              }
+
+              // CRITICAL: If the model produced no text, retry once without cache
+              // This handles cases where a stale/invalid cache caused Gemini to
+              // return an empty or thinking-only response
               if (!accumulatedFullText.trim()) {
-                const fallbackMessage = "I'm ready to help. Could you please clarify what you'd like to know?";
-                console.warn(`[Empty Response] Agent returned no text - using fallback message`);
-                const encoded = encoder.encode(fallbackMessage);
-                bytesSent += encoded.length;
-                controller.enqueue(encoded);
-                accumulatedFullText = fallbackMessage;
+                console.warn(`[Empty Response] No text produced. chunksProcessed=${chunksProcessed}, bytesSent=${bytesSent}, lateFunctionCall=${lateFunctionCall ? (lateFunctionCall as {name: string}).name : 'none'}, bufferedChunks=${bufferedChunks.length}`);
+                console.warn(`[Empty Response] Retrying Gemini API call without cache...`);
+
+                try {
+                  // Force non-cached retry with explicit system prompt and tools
+                  const retryConfig: GeminiConfig = {
+                    tools: [{ functionDeclarations: providerSchemas }],
+                    systemInstruction: FRAM_SYSTEM_PROMPT
+                  };
+
+                  const retryStream = await ai.models.generateContentStream({
+                    model: "gemini-2.5-flash",
+                    contents: contentsToSend,
+                    config: retryConfig
+                  });
+
+                  for await (const chunk of retryStream) {
+                    const typed = chunk as StreamChunk;
+                    const parts = typed?.candidates?.[0]?.content?.parts || [];
+                    for (const part of parts) {
+                      if (part.text) {
+                        accumulatedFullText += part.text;
+                        const encoded = encoder.encode(part.text);
+                        bytesSent += encoded.length;
+                        controller.enqueue(encoded);
+                      }
+                    }
+                  }
+
+                  if (accumulatedFullText.trim()) {
+                    console.log(`[Empty Response] Retry succeeded: ${accumulatedFullText.length} chars`);
+                    // Invalidate stale system prompt cache so next request creates a fresh one
+                    systemPromptCache = null;
+                    systemPromptCachePromise = null;
+                    systemPromptCacheCreatedAt = 0;
+                  }
+                } catch (retryError) {
+                  console.error(`[Empty Response] Retry failed:`, retryError);
+                }
+
+                // Truly last resort: if retry also produced nothing
+                if (!accumulatedFullText.trim()) {
+                  const fallbackMessage = "I'm sorry, I wasn't able to process that. Could you try again?";
+                  console.warn(`[Empty Response] Retry also returned no text - using fallback`);
+                  const encoded = encoder.encode(fallbackMessage);
+                  bytesSent += encoded.length;
+                  controller.enqueue(encoded);
+                  accumulatedFullText = fallbackMessage;
+                }
               }
 
               // T6: Final response sent (plain text path)
@@ -3161,9 +3708,6 @@ export async function POST(request: Request) {
                   .catch(err => console.warn(`[Usage] Failed to record usage for ${userId}:`, err));
               }
 
-              // Trigger background summarization for this turn (tool memory)
-              toolMemorySummarizer.enqueueSummarization(userId || 'anonymous-text-session')
-                .catch(err => console.warn(`[ToolMemory] Summarization failed:`, err));
 
               controller.close();
             } catch (error) {

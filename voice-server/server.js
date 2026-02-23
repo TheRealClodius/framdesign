@@ -34,7 +34,6 @@ import { loopDetector } from '../tools/_core/loop-detector.js';
 import { UsageService } from '../lib/services/usage-service.ts';
 import { toolMemoryStore } from '../tools/_core/tool-memory-store.js';
 import { toolMemoryDedup } from '../tools/_core/tool-memory-dedup.js';
-import { toolMemorySummarizer } from '../tools/_core/tool-memory-summarizer.js';
 import { hashArgs } from '../tools/_core/utils/hash-args.js';
 import { estimateTokensForObject } from '../tools/_core/utils/estimate-tokens.js';
 import {
@@ -52,8 +51,6 @@ const __dirname = dirname(__filename);
 // Load environment variables from voice-server/.env regardless of cwd
 config({ path: join(__dirname, '.env') });
 
-// Reinitialize tool memory summarizer with the newly loaded environment variables
-toolMemorySummarizer.reinitialize();
 
 // Load tool registry at startup
 let geminiToolSchemas = [];
@@ -66,7 +63,7 @@ try {
     console.log('[STARTUP] Enabling tool registry hot-reload watch...');
     toolRegistry.watch(() => {
       // Update the local reference to schemas when registry reloads
-      geminiToolSchemas = toolRegistry.getProviderSchemas('geminiNative');
+      geminiToolSchemas = toolRegistry.getProviderSchemas('geminiNative', 'voice');
       console.log(`[TOOLS] ✓ Hot-reloaded ${geminiToolSchemas.length} tool schemas for future sessions`);
     });
   } else {
@@ -74,7 +71,7 @@ try {
   }
   
   // Get Gemini Native provider schemas for session config (loaded from registry)
-  geminiToolSchemas = toolRegistry.getProviderSchemas('geminiNative');
+  geminiToolSchemas = toolRegistry.getProviderSchemas('geminiNative', 'voice');
   console.log(`[STARTUP] ✓ Tool registry loaded successfully`);
 } catch (error) {
   console.error('[STARTUP] ✗ Failed to load tool registry:', error);
@@ -192,6 +189,7 @@ wss.on('connection', async (ws, req) => {
   let conversationHistory = []; // Store for context injection
   let pendingRequest = null; // Store pending user request from text agent handoff
   let currentUserId = null; // Store userId for usage tracking
+  let currentTimezone = null; // Store user's IANA timezone (e.g. "Europe/Bucharest")
   let currentTurn = 1; // Track conversation turns for loop detection (NEW)
   
   // Track last transcript text to detect and deduplicate overlapping chunks from Gemini
@@ -1085,9 +1083,6 @@ wss.on('connection', async (ws, req) => {
         }
         state.set('hasSentGeneratingSignal', false);
 
-        // Trigger background summarization for completed turn (tool memory)
-        toolMemorySummarizer.enqueueSummarization(clientId)
-          .catch(err => console.warn(`[${clientId}] [ToolMemory] Summarization failed:`, err));
 
         // Start new turn for loop detection and metrics (NEW)
         currentTurn++;
@@ -1317,6 +1312,7 @@ wss.on('connection', async (ws, req) => {
         case 'start':
           console.log(`[${clientId}] Starting Gemini Live session for user: ${data.userId || 'anonymous'}`);
           currentUserId = data.userId || null;
+          currentTimezone = data.timezone || null;
           
           // Check global budget if userId is provided
           if (data.userId) {
@@ -1354,7 +1350,7 @@ wss.on('connection', async (ws, req) => {
 
           try {
             // Build system instruction with tool documentation from registry
-            const systemInstruction = buildSystemInstruction(toolRegistry);
+            const systemInstruction = buildSystemInstruction(toolRegistry, 'voice');
 
             // Prepare session config with audio input/output enabled
             const config = {

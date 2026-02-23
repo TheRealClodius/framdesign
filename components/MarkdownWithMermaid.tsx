@@ -6,6 +6,8 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 import type { Components } from "react-markdown";
+import { parseAssetUrl, normalizeAssetPath, refreshAssetUrl } from '@/lib/utils/asset-url';
+import { isStableAssetRef, resolveAssetSrc } from '@/lib/utils/asset-resolver';
 
 // Lazy load MermaidRenderer to avoid SSR issues
 const MermaidRenderer = dynamic(() => import("./MermaidRenderer"), {
@@ -44,111 +46,56 @@ const ImageModal = dynamic(() => import("./ImageModal"), {
   loading: () => null, // Don't show loading state for modal
 });
 
-// Extract blob_id and extension from GCS signed URL (shared utility)
-function extractBlobIdFromGcsUrl(url: string): { blob_id: string; extension: string } | null {
-  try {
-    if (!url.includes('storage.googleapis.com') || !url.includes('/assets/')) return null;
-    const urlObj = new URL(url);
-    const pathname = urlObj.pathname;
-    const assetsIndex = pathname.indexOf('/assets/');
-    if (assetsIndex === -1) return null;
-    const assetPath = pathname.substring(assetsIndex + '/assets/'.length);
-    const lastDotIndex = assetPath.lastIndexOf('.');
-    if (lastDotIndex === -1) return null;
-    const blobId = assetPath.substring(0, lastDotIndex);
-    const extension = assetPath.substring(lastDotIndex + 1);
-    return (blobId && extension) ? { blob_id: blobId, extension } : null;
-  } catch {
-    return null;
-  }
-}
-
-// Extract blob_id and extension from local /kb-assets paths
-function extractBlobIdFromLocalAssetPath(path: string): { blob_id: string; extension: string } | null {
-  try {
-    let pathname = path;
-    if (path.startsWith("http://") || path.startsWith("https://")) {
-      pathname = new URL(path).pathname;
-    }
-    const assetsIndex = pathname.indexOf('/kb-assets/');
-    if (assetsIndex === -1) return null;
-    const assetPath = pathname.substring(assetsIndex + '/kb-assets/'.length);
-    const lastDotIndex = assetPath.lastIndexOf('.');
-    if (lastDotIndex === -1) return null;
-    const blobId = assetPath.substring(0, lastDotIndex);
-    const extension = assetPath.substring(lastDotIndex + 1);
-    return (blobId && extension) ? { blob_id: blobId, extension } : null;
-  } catch {
-    return null;
-  }
-}
-
-// Refresh expired GCS signed URL (shared utility)
-async function refreshGcsUrl(blobId: string, extension: string): Promise<string | null> {
-  try {
-    const response = await fetch('/api/refresh-asset-url', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ blob_id: blobId, extension }),
-    });
-    if (!response.ok) return null;
-    const data = await response.json();
-    return data.url || null;
-  } catch {
-    return null;
-  }
-}
-
-// Video component with error handling and URL refresh
+// Video component with error handling and stable asset ref resolution
 function VideoWithError({ src, children, controls, ...props }: { src?: string; children?: React.ReactNode; controls?: boolean; [key: string]: any }) {
   const [videoError, setVideoError] = useState(false);
-  const [currentSrc, setCurrentSrc] = useState<string | undefined>(src);
+  const [resolvedSrc, setResolvedSrc] = useState<string | undefined>(undefined);
   const hasControls = controls !== undefined ? controls : true;
 
-  // Log initial src
+  // Resolve stable asset refs to signed URLs; HTTP URLs pass through directly
   useEffect(() => {
-    console.log('[VideoWithError] Component mounted/updated with src:', src);
-  }, [src]);
+    if (!src) {
+      setResolvedSrc(undefined);
+      return;
+    }
 
-  // Update currentSrc when src prop changes
-  useEffect(() => {
-    setCurrentSrc(src);
+    if (isStableAssetRef(src)) {
+      let cancelled = false;
+      setResolvedSrc(undefined);
+      setVideoError(false);
+      resolveAssetSrc(src).then((url) => {
+        if (!cancelled) setResolvedSrc(url);
+      });
+      return () => { cancelled = true; };
+    }
+
+    setResolvedSrc(src);
     setVideoError(false);
   }, [src]);
-  
+
   const handleVideoError = useCallback(async (e: React.SyntheticEvent<HTMLVideoElement>) => {
     const video = e.currentTarget;
     const currentSrcValue = video.src;
     const hasTriedRefresh = video.getAttribute("data-refresh-attempted") === "true";
 
-    console.log('[VideoWithError] Video error triggered');
-    console.log('  currentSrc state:', currentSrc);
-    console.log('  video.src:', currentSrcValue);
-    console.log('  original src prop:', src);
-
-    // Try to extract GCS URL from either the video element or the original src prop
-    const urlToCheck = currentSrcValue || src || '';
-    
     // Try refreshing the signed URL from blob storage before failing
+    const urlToCheck = currentSrcValue || src || '';
     if (!hasTriedRefresh && urlToCheck) {
-      const blobInfo = extractBlobIdFromGcsUrl(urlToCheck) || extractBlobIdFromLocalAssetPath(urlToCheck);
+      const blobInfo = parseAssetUrl(urlToCheck);
       if (blobInfo) {
         video.setAttribute("data-refresh-attempted", "true");
-        const freshUrl = await refreshGcsUrl(blobInfo.blob_id, blobInfo.extension);
+        const freshUrl = await refreshAssetUrl(blobInfo.blobId, blobInfo.extension);
         if (freshUrl) {
-          console.log('[VideoWithError] Refreshed signed URL:', freshUrl);
-          setCurrentSrc(freshUrl);
+          setResolvedSrc(freshUrl);
           setVideoError(false);
           return;
         }
       }
     }
 
-    // All fallbacks exhausted, show error
-    console.log('[VideoWithError] All fallbacks exhausted, showing error');
     setVideoError(true);
-  }, [src, currentSrc]);
-  
+  }, [src]);
+
   return (
     <span className="block my-4 rounded-lg border border-gray-200 overflow-hidden bg-black">
       {videoError ? (
@@ -171,9 +118,19 @@ function VideoWithError({ src, children, controls, ...props }: { src?: string; c
           <span className="block text-sm text-gray-400 font-medium">Video unavailable</span>
           <span className="block text-xs text-gray-500 mt-2">The video could not be loaded. It may have expired or been removed.</span>
         </span>
+      ) : !resolvedSrc ? (
+        <span className="block flex items-center justify-center p-8 min-h-[100px]">
+          <span className="flex items-center space-x-2 text-gray-400 text-sm">
+            <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <span>Loading video...</span>
+          </span>
+        </span>
       ) : (
         <video
-          src={currentSrc}
+          src={resolvedSrc}
           controls={hasControls}
           className="w-full max-w-[600px] max-h-96 object-contain"
           onError={handleVideoError}
@@ -186,17 +143,17 @@ function VideoWithError({ src, children, controls, ...props }: { src?: string; c
   );
 }
 
-// Image component with loading state and error handling
-function ChatImage({ 
-  src, 
-  alt, 
-  setModalImage, 
-  failedImages, 
+// Image component with loading state, stable asset ref resolution, and error handling
+function ChatImage({
+  src,
+  alt,
+  setModalImage,
+  failedImages,
   setFailedImages,
-  ...props 
-}: { 
-  src?: any; 
-  alt?: string; 
+  ...props
+}: {
+  src?: any;
+  alt?: string;
   setModalImage: (image: { src: string; alt: string } | null) => void;
   failedImages: Set<string>;
   setFailedImages: React.Dispatch<React.SetStateAction<Set<string>>>;
@@ -204,60 +161,57 @@ function ChatImage({
 }) {
   const [isLoading, setIsLoading] = useState(true);
 
-  // Normalize image path
-  const normalizeImagePath = (path: string | undefined): string => {
-    if (!path) return "";
-    if (path.startsWith("http://") || path.startsWith("https://")) return path;
-    const hasEncodedChars = path.includes("%");
-    try {
-      let pathToEncode = path;
-      if (hasEncodedChars) {
-        try {
-          let decoded = path;
-          let previousDecoded = path;
-          for (let i = 0; i < 3; i++) {
-            try {
-              decoded = decodeURIComponent(previousDecoded);
-              if (decoded === previousDecoded) break;
-              previousDecoded = decoded;
-            } catch { break; }
-          }
-          if (decoded !== path && !decoded.includes("%")) pathToEncode = decoded;
-        } catch { pathToEncode = path; }
-      }
-      const parts = pathToEncode.split("/");
-      const encodedParts = parts.map((part, index) => {
-        if (index === 0 && part === "") return "";
-        if (pathToEncode.includes("/kb-assets/") && index === parts.length - 1 && part.includes("_")) {
-          part = part.replace(/_/g, " ");
-        }
-        if (part.includes("%")) {
-          try {
-            const decoded = decodeURIComponent(part);
-            if (decoded !== part) {
-              const fixed = decoded.replace(/_/g, " ");
-              return encodeURIComponent(fixed);
-            }
-          } catch { return part; }
-        }
-        return encodeURIComponent(part);
-      });
-      let normalized = encodedParts.join("/");
-      if (pathToEncode.startsWith("/") && !normalized.startsWith("/")) normalized = "/" + normalized;
-      return normalized;
-    } catch { return path; }
-  };
-
   let normalizedSrc: string;
   if (src instanceof Blob) {
     normalizedSrc = URL.createObjectURL(src);
   } else if (typeof src === 'string' || src === undefined) {
-    normalizedSrc = normalizeImagePath(src);
+    normalizedSrc = normalizeAssetPath(src || '');
   } else {
     normalizedSrc = "";
   }
 
-  const imageHasFailed = failedImages.has(normalizedSrc);
+  // Resolve stable /kb-assets/ refs to signed URLs before rendering <img>
+  // HTTP URLs and blob URLs are set directly (backward compat)
+  const [resolvedSrc, setResolvedSrc] = useState<string | null>(null);
+  const [resolutionFailed, setResolutionFailed] = useState(false);
+
+  useEffect(() => {
+    if (!normalizedSrc) {
+      setResolvedSrc(null);
+      return;
+    }
+
+    if (isStableAssetRef(normalizedSrc)) {
+      let cancelled = false;
+      setResolvedSrc(null);
+      setResolutionFailed(false);
+      setIsLoading(true);
+      resolveAssetSrc(normalizedSrc).then((url) => {
+        if (cancelled) return;
+        // If resolution returned the original ref (failure), mark as failed
+        if (isStableAssetRef(url)) {
+          setResolutionFailed(true);
+          setIsLoading(false);
+        } else {
+          setResolvedSrc(url);
+        }
+      });
+      return () => { cancelled = true; };
+    }
+
+    // HTTP URLs / blob URLs — render directly
+    setResolvedSrc(normalizedSrc);
+    setResolutionFailed(false);
+  }, [normalizedSrc]);
+
+  // Track resolved URL for click handler (modal opens with the signed URL)
+  const [currentSrc, setCurrentSrc] = useState<string | null>(null);
+  useEffect(() => {
+    if (resolvedSrc) setCurrentSrc(resolvedSrc);
+  }, [resolvedSrc]);
+
+  // Key failed images on stable ref (normalizedSrc), not resolved URL
+  const imageHasFailed = failedImages.has(normalizedSrc) || resolutionFailed;
 
   if (imageHasFailed) {
     return (
@@ -276,7 +230,7 @@ function ChatImage({
   }
 
   // Check if the image is a GIF
-  const isGif = normalizedSrc.toLowerCase().endsWith('.gif') || 
+  const isGif = normalizedSrc.toLowerCase().endsWith('.gif') ||
                  normalizedSrc.toLowerCase().includes('.gif?') ||
                  normalizedSrc.toLowerCase().includes('.gif#');
   const loadingText = isGif ? "Grabbing motion file..." : "Grabbing image...";
@@ -294,54 +248,61 @@ function ChatImage({
           </span>
         </span>
       )}
-      <img
-        src={normalizedSrc}
-        alt={alt}
-        className={`max-w-[600px] max-h-96 rounded-lg border border-gray-200 object-contain cursor-pointer hover:opacity-90 transition-opacity ${isLoading ? 'opacity-0' : 'opacity-100'}`}
-        loading="lazy"
-        onLoad={() => setIsLoading(false)}
-        onClick={() => normalizedSrc && setModalImage({ src: normalizedSrc, alt: alt || "" })}
-        onError={async (e) => {
-          const img = e.target as HTMLImageElement;
-          const currentSrc = img.src;
-          const hasTriedRefresh = img.getAttribute("data-refresh-attempted") === "true";
+      {/* Only render <img> once we have a resolved signed URL — prevents error cascade during streaming */}
+      {resolvedSrc && (
+        <>
+          {/* eslint-disable-next-line @next/next/no-img-element -- onError handler needs direct DOM access for signed URL refresh (img.src = freshUrl) */}
+          <img
+            src={resolvedSrc}
+            alt={alt}
+            className={`max-w-[600px] max-h-96 rounded-lg border border-gray-200 object-contain cursor-pointer hover:opacity-90 transition-opacity ${isLoading ? 'opacity-0' : 'opacity-100'}`}
+            loading="lazy"
+            onLoad={() => setIsLoading(false)}
+            onClick={() => currentSrc && setModalImage({ src: currentSrc, alt: alt || "" })}
+            onError={async (e) => {
+              const img = e.target as HTMLImageElement;
+              const imgCurrentSrc = img.src;
+              const hasTriedRefresh = img.getAttribute("data-refresh-attempted") === "true";
 
-          if (!hasTriedRefresh) {
-            const blobInfo = extractBlobIdFromGcsUrl(currentSrc) || extractBlobIdFromLocalAssetPath(currentSrc);
-            if (blobInfo) {
-              img.setAttribute("data-refresh-attempted", "true");
-              const freshUrl = await refreshGcsUrl(blobInfo.blob_id, blobInfo.extension);
-              if (freshUrl) {
-                img.src = freshUrl;
-                return;
+              if (!hasTriedRefresh) {
+                const blobInfo = parseAssetUrl(imgCurrentSrc);
+                if (blobInfo) {
+                  img.setAttribute("data-refresh-attempted", "true");
+                  const freshUrl = await refreshAssetUrl(blobInfo.blobId, blobInfo.extension);
+                  if (freshUrl) {
+                    img.src = freshUrl;
+                    setCurrentSrc(freshUrl);
+                    return;
+                  }
+                }
               }
-            }
-          }
 
-          setFailedImages((prev) => new Set(prev).add(normalizedSrc));
-          setIsLoading(false);
-        }}
-        {...props}
-      />
-      {!isLoading && (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            normalizedSrc && setModalImage({ src: normalizedSrc, alt: alt || "" });
-          }}
-          className="absolute top-2 right-2 p-1.5 bg-black/50 hover:bg-black/70 rounded text-white opacity-0 group-hover:opacity-100 transition-opacity"
-          aria-label="Expand image"
-          title="Expand to fullscreen"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="15 3 21 3 21 9"></polyline>
-            <polyline points="9 21 3 21 3 15"></polyline>
-            <line x1="21" y1="3" x2="14" y2="10"></line>
-            <line x1="3" y1="21" x2="10" y2="14"></line>
-          </svg>
-        </button>
+              setFailedImages((prev) => new Set(prev).add(normalizedSrc));
+              setIsLoading(false);
+            }}
+            {...props}
+          />
+          {!isLoading && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                currentSrc && setModalImage({ src: currentSrc, alt: alt || "" });
+              }}
+              className="absolute top-2 right-2 p-1.5 bg-black/50 hover:bg-black/70 rounded text-white opacity-0 group-hover:opacity-100 transition-opacity"
+              aria-label="Expand image"
+              title="Expand to fullscreen"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="15 3 21 3 21 9"></polyline>
+                <polyline points="9 21 3 21 3 15"></polyline>
+                <line x1="21" y1="3" x2="14" y2="10"></line>
+                <line x1="3" y1="21" x2="10" y2="14"></line>
+              </svg>
+            </button>
+          )}
+        </>
       )}
     </span>
   );

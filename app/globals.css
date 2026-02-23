@@ -3,6 +3,8 @@
 :root {
   --background: #000000;
   --foreground: #ffffff;
+  --mermaid-bg: rgba(26, 26, 26, 0.95);
+  --mermaid-border: #333333;
 }
 
 @theme inline {
@@ -15,14 +17,13 @@
 }
 
 html {
-  background-color: #000000 !important;
+  background-color: var(--background);
   -webkit-tap-highlight-color: transparent;
   overflow-x: hidden;
 }
 
 body {
-  background: var(--background) !important;
-  background-color: #000000 !important;
+  background-color: var(--background) !important;
   color: var(--foreground);
   font-family: var(--font-mono);
   -webkit-background-size: 100% 100%;
@@ -33,7 +34,7 @@ body {
 
 /* Prevent iOS Safari video background issues */
 video {
-  background-color: #000000 !important;
+  background-color: var(--background);
   -webkit-background-size: cover;
   background-size: cover;
 }
@@ -61,20 +62,20 @@ h1, h2, h3, h4, h5, h6 {
     min-height: 100vh;
     min-height: 100svh;
   }
-  
+
   .hero-video-container {
-    height: 100% !important;
+    height: 100%;
   }
-  
+
   .safe-area-spacer {
-    display: block !important;
-    min-height: 60px !important;
-    height: env(safe-area-inset-bottom, 60px) !important;
-    width: 100% !important;
-    background-color: #000000 !important;
+    display: block;
+    min-height: 60px;
+    height: env(safe-area-inset-bottom, 60px);
+    width: 100%;
+    background-color: var(--background);
   }
-  
-  /* Footer safe area padding */
+
+  /* Footer safe area padding — !important needed to override Tailwind utility */
   .footer-safe-area {
     padding-bottom: calc(2.25rem + env(safe-area-inset-bottom, 0px)) !important;
   }
@@ -94,14 +95,14 @@ h1, h2, h3, h4, h5, h6 {
       border-bottom-right-radius: 20px;
       overflow: hidden;
     }
-    
-    /* Prevent iOS Safari auto-zoom on input focus by setting font-size to 16px minimum */
+
+    /* Prevent iOS Safari auto-zoom on input focus — !important needed to override component styles */
     input,
     textarea,
     select {
       font-size: 16px !important;
     }
-    
+
     /* Keep placeholder text size consistent */
     input::placeholder,
     textarea::placeholder {
@@ -110,31 +111,31 @@ h1, h2, h3, h4, h5, h6 {
   }
 }
 
-/* Mermaid Diagram Styles */
+/* Mermaid Diagram Styles — using CSS custom properties for consistency */
 .mermaid-diagram,
 .mermaid-diagram[data-mermaid-diagram="true"],
 .markdown-content .mermaid-diagram,
 .markdown-content .mermaid-diagram[data-mermaid-diagram="true"],
 div.mermaid-diagram,
 div[data-mermaid-diagram="true"] {
-  background-color: rgba(26, 26, 26, 0.95) !important;
-  background: rgba(26, 26, 26, 0.95) !important;
-  border-radius: 8px !important;
-  border: 1px solid #333333 !important;
-  overflow: hidden !important;
+  background-color: var(--mermaid-bg);
+  background: var(--mermaid-bg);
+  border-radius: 8px;
+  border: 1px solid var(--mermaid-border);
+  overflow: hidden;
 }
 
 .mermaid-diagram img {
   display: block;
   margin: 0 auto;
-  background-color: transparent !important;
-  background: transparent !important;
+  background-color: transparent;
+  background: transparent;
 }
 
 /* Ensure nested divs don't override parent background */
 .mermaid-diagram > div {
-  background-color: transparent !important;
-  background: transparent !important;
+  background-color: transparent;
+  background: transparent;
 }
 
 /* Force dark background on mobile with maximum specificity */
@@ -146,26 +147,26 @@ div[data-mermaid-diagram="true"] {
   div.mermaid-diagram,
   div[data-mermaid-diagram="true"],
   div.mermaid-diagram[data-mermaid-diagram="true"] {
-    background-color: rgba(26, 26, 26, 0.95) !important;
-    background: rgba(26, 26, 26, 0.95) !important;
-    border-radius: 8px !important;
-    width: 100% !important;
-    max-width: 100% !important;
+    background-color: var(--mermaid-bg);
+    background: var(--mermaid-bg);
+    border-radius: 8px;
+    width: 100%;
+    max-width: 100%;
   }
-  
+
   .mermaid-diagram > div,
   .mermaid-diagram[data-mermaid-diagram="true"] > div {
-    background-color: transparent !important;
-    background: transparent !important;
-    width: 100% !important;
+    background-color: transparent;
+    background: transparent;
+    width: 100%;
   }
-  
+
   .mermaid-diagram img,
   .mermaid-diagram[data-mermaid-diagram="true"] img {
-    background-color: transparent !important;
-    background: transparent !important;
-    width: 100% !important;
-    max-width: 100% !important;
+    background-color: transparent;
+    background: transparent;
+    width: 100%;
+    max-width: 100%;
   }
 }
 
@@ -243,10 +244,10 @@ div[data-mermaid-diagram="true"] {
   width: 100%;
   max-width: 100%;
   overflow-x: auto;
-  background-color: rgba(26, 26, 26, 0.95) !important;
-  border-radius: 8px !important;
-  border: 1px solid #333333 !important;
-  overflow: hidden !important;
+  background-color: var(--mermaid-bg);
+  border-radius: 8px;
+  border: 1px solid var(--mermaid-border);
+  overflow: hidden;
 }
 
 /* Scrollbar styling for diagram overflow */

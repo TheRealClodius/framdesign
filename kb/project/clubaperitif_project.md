@@ -24,6 +24,7 @@ brand_elements:
   object: the key (membership artifact)
   pattern: geometric compositions
   colors: warm gradients (orange, coral), black, white
+status: ongoing
 ---
 
 ## Overview

@@ -1,392 +1,181 @@
+/**
+ * Simplified tool memory store
+ * Keeps last N tool calls per session, FIFO eviction
+ */
+
 import { calculateArgsSimilarity } from './utils/similarity.js';
 
-/**
- * ToolMemoryStore - Session-scoped in-memory storage for tool execution records
- *
- * Features:
- * - Store tool execution records with full responses for entire session
- * - Sliding window: keep last 50 calls, auto-summarize older calls (summaries auto-injected in context)
- * - Query interface for past executions (full responses always available via call_id)
- * - Duplicate detection via similarity matching
- */
+const MAX_CALLS_PER_SESSION = 50;
+const SESSION_TTL_MS = 60 * 60 * 1000; // 1 hour
+
 class ToolMemoryStore {
   constructor() {
-    this.sessionMemory = new Map(); // sessionId -> SessionMemory
-    this.RECENT_COUNT = 10; // Keep full responses for recent calls
-    this.SUMMARY_COUNT = 40; // Keep summaries for older calls
-    this.MAX_AGE_MS = 60 * 60 * 1000; // 1 hour
-    this.SESSION_TTL_MS = 60 * 60 * 1000; // 1 hour idle timeout
+    this.sessions = new Map(); // sessionId -> { calls: [], lastAccess: timestamp }
   }
 
   /**
-   * Gets or creates a session memory object
-   * @param {string} sessionId - Session identifier
-   * @returns {object} - SessionMemory object
+   * Get or create session
    */
-  getOrCreateSession(sessionId) {
-    this.cleanupExpiredSessions();
-    if (!this.sessionMemory.has(sessionId)) {
-      this.sessionMemory.set(sessionId, {
-        sessionId,
-        startTime: Date.now(),
-        lastAccess: Date.now(),
-        toolCalls: [],
-        slidingWindow: {
-          recentCount: this.RECENT_COUNT,
-          summaryCount: this.SUMMARY_COUNT
-        }
-      });
+  getSession(sessionId) {
+    this.cleanup(); // Lazy cleanup on access
+
+    if (!this.sessions.has(sessionId)) {
+      this.sessions.set(sessionId, { calls: [], lastAccess: Date.now() });
     }
-    const session = this.sessionMemory.get(sessionId);
+
+    const session = this.sessions.get(sessionId);
     session.lastAccess = Date.now();
     return session;
   }
 
   /**
-   * Update session lastAccess timestamp
+   * Record a tool call
    */
-  touchSession(sessionId) {
-    const session = this.sessionMemory.get(sessionId);
-    if (session) {
-      session.lastAccess = Date.now();
-    }
-  }
+  recordToolCall(sessionId, call) {
+    const session = this.getSession(sessionId);
 
-  /**
-   * Clean up sessions that have been idle past SESSION_TTL_MS
-   */
-  cleanupExpiredSessions() {
-    const now = Date.now();
-    for (const [sessionId, session] of this.sessionMemory.entries()) {
-      const lastAccess = session.lastAccess || session.startTime;
-      if (now - lastAccess > this.SESSION_TTL_MS) {
-        this.sessionMemory.delete(sessionId);
-      }
-    }
-  }
-
-  /**
-   * Records a tool execution
-   * @param {string} sessionId - Session identifier
-   * @param {object} record - Tool call record
-   * @returns {void}
-   */
-  recordToolCall(sessionId, record) {
-    this.cleanupExpiredSessions();
-    const session = this.getOrCreateSession(sessionId);
-
-    // Validate required fields
-    if (!record.id || !record.toolId) {
-      console.error('[ToolMemory] Invalid record: missing id or toolId', record);
-      return;
-    }
-
-    // Add to session
-    session.toolCalls.push({
-      ...record,
-      timestamp: record.timestamp || Date.now()
+    session.calls.push({
+      id: call.id || `call-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      toolId: call.toolId,
+      args: call.args,
+      timestamp: call.timestamp || Date.now(),
+      duration: call.duration,
+      fullResponse: call.fullResponse,
+      ok: call.ok,
+      error: call.error
     });
-    this.touchSession(sessionId);
 
-    console.log(`[ToolMemory] Recorded call: ${record.toolId} (${record.id})`);
-
-    // Apply window policy to manage memory
-    this.applyWindowPolicy(sessionId);
+    // FIFO eviction
+    while (session.calls.length > MAX_CALLS_PER_SESSION) {
+      session.calls.shift();
+    }
   }
 
   /**
-   * Queries tool calls with optional filters
-   * @param {string} sessionId - Session identifier
-   * @param {object} [filters] - Query filters
-   * @param {string} [filters.toolId] - Filter by specific tool ID
-   * @param {string} [filters.timeRange] - 'last_turn' | 'last_3_turns' | 'all'
-   * @param {boolean} [filters.includeErrors] - Include failed calls
-   * @returns {Array} - Array of matching tool call records
+   * Get recent calls for a session
    */
-  queryToolCalls(sessionId, filters = {}) {
-    this.cleanupExpiredSessions();
-    const session = this.sessionMemory.get(sessionId);
-    if (!session) {
-      return [];
-    }
-    this.touchSession(sessionId);
+  getRecentCalls(sessionId, limit = 10) {
+    const session = this.sessions.get(sessionId);
+    if (!session) return [];
 
-    let results = [...session.toolCalls];
-
-    // Filter by tool ID
-    if (filters.toolId) {
-      results = results.filter(call => call.toolId === filters.toolId);
-    }
-
-    // Filter by success (exclude errors unless requested)
-    if (!filters.includeErrors) {
-      results = results.filter(call => call.ok);
-    }
-
-    // Filter by time range
-    if (filters.timeRange) {
-      const currentTurn = this.getCurrentTurn(sessionId);
-
-      switch (filters.timeRange) {
-        case 'last_turn':
-          results = results.filter(call => call.turn === currentTurn);
-          break;
-        case 'last_3_turns':
-          results = results.filter(call => call.turn >= currentTurn - 2);
-          break;
-        case 'all':
-        default:
-          // No filtering
-          break;
-      }
-    }
-
-    // Sort by timestamp (most recent first)
-    results.sort((a, b) => b.timestamp - a.timestamp);
-
-    return results;
+    return session.calls.slice(-limit);
   }
 
   /**
-   * Gets the full response for a specific call
-   * @param {string} sessionId - Session identifier
-   * @param {string} callId - Call ID
-   * @returns {object|null} - Full tool response or null
+   * Get full response for a specific call
    */
   getFullResponse(sessionId, callId) {
-    const session = this.sessionMemory.get(sessionId);
-    if (!session) {
-      return null;
-    }
+    const session = this.sessions.get(sessionId);
+    if (!session) return null;
 
-    const call = session.toolCalls.find(c => c.id === callId);
-    if (!call) {
-      return null;
-    }
-
-    // If full response is still available, return it
-    if (call.fullResponse) {
-      return call.fullResponse;
-    }
-
-    // Otherwise, only summary is available
-    console.log(`[ToolMemory] Full response not available for ${callId}, only summary exists`);
-    return null;
+    const call = session.calls.find(c => c.id === callId);
+    return call?.fullResponse || null;
   }
 
   /**
-   * Finds a similar past call for deduplication
-   * @param {string} sessionId - Session identifier
-   * @param {string} toolId - Tool ID to search
-   * @param {object} args - Tool arguments
-   * @param {number} threshold - Similarity threshold (default 0.85)
-   * @returns {object|null} - Similar call record or null
+   * Get calls by tool ID
    */
-  findSimilarCall(sessionId, toolId, args, threshold = 0.85) {
-    const session = this.sessionMemory.get(sessionId);
-    if (!session) {
-      return null;
+  getCallsByTool(sessionId, toolId, limit = 10) {
+    const session = this.sessions.get(sessionId);
+    if (!session) return [];
+
+    return session.calls
+      .filter(c => c.toolId === toolId)
+      .slice(-limit);
+  }
+
+  /**
+   * Clean up expired sessions
+   */
+  cleanup() {
+    const now = Date.now();
+    for (const [sessionId, session] of this.sessions) {
+      if (now - session.lastAccess > SESSION_TTL_MS) {
+        this.sessions.delete(sessionId);
+      }
+    }
+  }
+
+  /**
+   * Get session statistics
+   */
+  getStats(sessionId) {
+    const session = this.sessions.get(sessionId);
+    if (!session) return null;
+
+    const calls = session.calls;
+    const toolCounts = {};
+
+    for (const call of calls) {
+      toolCounts[call.toolId] = (toolCounts[call.toolId] || 0) + 1;
     }
 
-    // Only check calls with the same tool ID
-    const sameToolCalls = session.toolCalls.filter(call =>
-      call.toolId === toolId && call.ok
-    );
+    return {
+      totalCalls: calls.length,
+      toolBreakdown: toolCounts,
+      oldestCall: calls[0]?.timestamp,
+      newestCall: calls[calls.length - 1]?.timestamp
+    };
+  }
 
-    for (const call of sameToolCalls) {
-      const similarity = calculateArgsSimilarity(call.args, args);
+  /**
+   * Query tool calls with filters (compatibility method)
+   */
+  queryToolCalls(sessionId, options = {}) {
+    const session = this.sessions.get(sessionId);
+    if (!session) return [];
 
+    let calls = [...session.calls];
+
+    // Filter by toolId if specified
+    if (options.toolId) {
+      calls = calls.filter(c => c.toolId === options.toolId);
+    }
+
+    // Filter by turn if specified
+    if (options.turn !== undefined) {
+      calls = calls.filter(c => c.turn === options.turn);
+    }
+
+    // Apply limit
+    const limit = options.limit || 10;
+    return calls.slice(-limit);
+  }
+
+  /**
+   * Clear a session (compatibility method)
+   */
+  clearSession(sessionId) {
+    this.sessions.delete(sessionId);
+  }
+
+  /**
+   * Find a similar past call for deduplication
+   * @param {string} sessionId - Session identifier
+   * @param {string} toolId - Tool ID to match
+   * @param {object} args - Arguments to compare
+   * @param {number} threshold - Minimum similarity threshold (0-1)
+   * @returns {object|null} - Matching call or null
+   */
+  findSimilarCall(sessionId, toolId, args, threshold = 0.85) {
+    const session = this.sessions.get(sessionId);
+    if (!session) return null;
+
+    // Filter to matching tool, most recent first
+    const matchingCalls = session.calls
+      .filter(c => c.toolId === toolId && c.ok !== false)
+      .reverse();
+
+    for (const call of matchingCalls) {
+      const similarity = calculateArgsSimilarity(args, call.args);
       if (similarity >= threshold) {
-        console.log(`[ToolMemory] Found similar call: ${call.id} (similarity: ${similarity.toFixed(2)})`);
         return call;
       }
     }
 
     return null;
   }
-
-  /**
-   * Applies the sliding window policy
-   * - Keep last 50 calls with full responses in storage
-   * - Generate summaries for calls beyond position 10 (for context injection)
-   * - Drop calls older than total window (50) or expired (1 hour)
-   * @param {string} sessionId - Session identifier
-   * @returns {void}
-   */
-  applyWindowPolicy(sessionId) {
-    const session = this.sessionMemory.get(sessionId);
-    if (!session) {
-      return;
-    }
-
-    const calls = session.toolCalls;
-    if (calls.length === 0) {
-      this.sessionMemory.delete(sessionId);
-      return;
-    }
-
-    // Sort by timestamp (newest first)
-    calls.sort((a, b) => b.timestamp - a.timestamp);
-
-    const now = Date.now();
-
-    // Process each call based on position
-    calls.forEach((call, index) => {
-      // Check age - drop if too old
-      const age = now - call.timestamp;
-      if (age > this.MAX_AGE_MS) {
-        call._markedForDeletion = true;
-        return;
-      }
-
-      // Within window (0 to RECENT_COUNT + SUMMARY_COUNT): keep full response
-      if (index < this.RECENT_COUNT + this.SUMMARY_COUNT) {
-        call._keepFull = true;
-        return;
-      }
-
-      // Beyond window (50+ calls): mark for deletion
-      call._markedForDeletion = true;
-    });
-
-    // Remove marked calls
-    session.toolCalls = calls.filter(call => !call._markedForDeletion);
-
-    // Clean up temporary flags
-    session.toolCalls.forEach(call => {
-      delete call._keepFull;
-      delete call._markedForDeletion;
-    });
-
-    if (session.toolCalls.length === 0) {
-      this.sessionMemory.delete(sessionId);
-    }
-  }
-
-  /**
-   * Gets the current turn number for a session
-   * @param {string} sessionId - Session identifier
-   * @returns {number} - Current turn number
-   */
-  getCurrentTurn(sessionId) {
-    const session = this.sessionMemory.get(sessionId);
-    if (!session || session.toolCalls.length === 0) {
-      return 1;
-    }
-
-    // Find the highest turn number
-    const maxTurn = Math.max(...session.toolCalls.map(call => call.turn || 1));
-    return maxTurn;
-  }
-
-  /**
-   * Gets calls that need summarization
-   * @param {string} sessionId - Session identifier
-   * @returns {Array} - Array of call IDs that need summarization
-   */
-  getCallsNeedingSummarization(sessionId) {
-    const session = this.sessionMemory.get(sessionId);
-    if (!session) {
-      return [];
-    }
-
-    // Find calls that don't have summaries yet but are beyond the recent window
-    const callsNeedingSummary = session.toolCalls
-      .filter((call, index) => {
-        // Sort first to get correct indices
-        const sorted = [...session.toolCalls].sort((a, b) => b.timestamp - a.timestamp);
-        const actualIndex = sorted.findIndex(c => c.id === call.id);
-
-        // Calls beyond RECENT_COUNT need summaries
-        return actualIndex >= this.RECENT_COUNT && !call.summary && call.fullResponse;
-      })
-      .map(call => ({
-        sessionId,
-        callId: call.id,
-        toolId: call.toolId,
-        args: call.args,
-        fullResponse: call.fullResponse,
-        ok: call.ok
-      }));
-
-    return callsNeedingSummary;
-  }
-
-  /**
-   * Updates the summary for a specific call
-   * @param {string} sessionId - Session identifier
-   * @param {string} callId - Call ID
-   * @param {string} summary - Generated summary
-   * @returns {void}
-   */
-  updateSummary(sessionId, callId, summary) {
-    const session = this.sessionMemory.get(sessionId);
-    if (!session) {
-      return;
-    }
-
-    const call = session.toolCalls.find(c => c.id === callId);
-    if (!call) {
-      return;
-    }
-
-    call.summary = summary;
-    console.log(`[ToolMemory] Updated summary for ${callId}`);
-
-    // Re-apply window policy to potentially clear full response
-    this.applyWindowPolicy(sessionId);
-  }
-
-  /**
-   * Clears all sessions (test helper)
-   */
-  clearAll() {
-    this.sessionMemory.clear();
-  }
-
-  /**
-   * Returns total session count (test helper)
-   */
-  getSessionCount() {
-    return this.sessionMemory.size;
-  }
-
-  /**
-   * Clears all data for a session
-   * @param {string} sessionId - Session identifier
-   * @returns {void}
-   */
-  clearSession(sessionId) {
-    if (this.sessionMemory.has(sessionId)) {
-      const session = this.sessionMemory.get(sessionId);
-      console.log(`[ToolMemory] Clearing session: ${sessionId} (${session.toolCalls.length} calls)`);
-      this.sessionMemory.delete(sessionId);
-    }
-  }
-
-  /**
-   * Gets statistics about stored data
-   * @returns {object} - Statistics object
-   */
-  getStats() {
-    const stats = {
-      totalSessions: this.sessionMemory.size,
-      sessions: []
-    };
-
-    this.sessionMemory.forEach((session, sessionId) => {
-      stats.sessions.push({
-        sessionId,
-        startTime: session.startTime,
-        totalCalls: session.toolCalls.length,
-        callsWithFullResponse: session.toolCalls.filter(c => c.fullResponse).length,
-        callsWithSummary: session.toolCalls.filter(c => c.summary).length
-      });
-    });
-
-    return stats;
-  }
 }
 
-// Singleton instance
+// Export singleton
 export const toolMemoryStore = new ToolMemoryStore();

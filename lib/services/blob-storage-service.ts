@@ -282,6 +282,68 @@ export async function fetchAssetBuffer(
 }
 
 /**
+ * Resolve blob URL with existence pre-check.
+ * Returns { url, exists } — if the asset doesn't exist in GCS,
+ * exists=false and url is empty. Caches existence results to avoid
+ * repeated GCS HEAD requests during a session.
+ *
+ * @param blobId - Stable identifier (e.g., "andrei-clodius/photo_of_andrei")
+ * @param extension - File extension (e.g., "png", "jpeg")
+ * @param expiresInDays - Signed URL TTL (default: 7)
+ * @returns { url: string; exists: boolean }
+ */
+const existenceCache = new Map<string, { exists: boolean; checkedAt: number }>();
+const EXISTENCE_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+
+export async function resolveBlobUrlSafe(
+  blobId: string,
+  extension: string,
+  expiresInDays: number = 7
+): Promise<{ url: string; exists: boolean }> {
+  if (!blobId || !extension) {
+    return { url: '', exists: false };
+  }
+
+  const existenceKey = `${blobId}:${extension}`;
+  const now = Date.now();
+
+  // Check existence cache
+  const cached = existenceCache.get(existenceKey);
+  if (cached && (now - cached.checkedAt) < EXISTENCE_CACHE_TTL_MS) {
+    if (!cached.exists) {
+      return { url: '', exists: false };
+    }
+    // Exists — resolve URL (may come from URL cache)
+    const url = await resolveBlobUrl(blobId, extension, expiresInDays);
+    return { url, exists: true };
+  }
+
+  // Check GCS
+  try {
+    const exists = await assetExists(blobId, extension);
+    existenceCache.set(existenceKey, { exists, checkedAt: now });
+
+    if (!exists) {
+      console.warn(`[BlobStorage] Asset not found in GCS: assets/${blobId}.${extension}`);
+      return { url: '', exists: false };
+    }
+
+    const url = await resolveBlobUrl(blobId, extension, expiresInDays);
+    return { url, exists: true };
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[BlobStorage] Error checking asset existence for ${blobId}:`, message);
+    // On error, still try to resolve — let downstream handle failures
+    try {
+      const url = await resolveBlobUrl(blobId, extension, expiresInDays);
+      return { url, exists: true };
+    } catch {
+      return { url: '', exists: false };
+    }
+  }
+}
+
+/**
  * Get URL cache statistics (useful for monitoring)
  * @returns Cache statistics including size, max size, and expired entry count
  */
@@ -290,6 +352,7 @@ export function getUrlCacheStats(): {
   maxSize: number;
   expiredEntries: number;
   activeEntries: number;
+  existenceCacheSize: number;
 } {
   const now = Date.now();
   let expiredCount = 0;
@@ -305,5 +368,6 @@ export function getUrlCacheStats(): {
     maxSize: MAX_CACHE_SIZE,
     expiredEntries: expiredCount,
     activeEntries: urlCache.size - expiredCount,
+    existenceCacheSize: existenceCache.size,
   };
 }

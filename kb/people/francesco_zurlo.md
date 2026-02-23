@@ -1,6 +1,7 @@
 ---
 id: person:francesco_zurlo
 type: person
+title: Francesco Zurlo
 name: Francesco Zurlo
 role: Professor and Author
 organization: Politecnico di Milano

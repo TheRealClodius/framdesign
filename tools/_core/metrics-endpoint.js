@@ -21,6 +21,7 @@
  */
 
 import { getMetricsSummary } from './metrics.js';
+import { getEventSummary, getRecentEvents } from './tool-events.js';
 
 /**
  * Handle metrics request
@@ -45,11 +46,17 @@ export function metricsHandler(request, response) {
     
     // Get metrics summary
     const summary = getMetricsSummary(options);
-    
+
+    // Get tool event data
+    const includeEvents = url.searchParams.get('events') === 'true';
+    const eventSummary = getEventSummary();
+
     // Format response
     const jsonResponse = {
       status: 'ok',
-      metrics: summary
+      metrics: summary,
+      events: eventSummary,
+      ...(includeEvents ? { recent_events: getRecentEvents({ limit: 20 }) } : {})
     };
     
     // Handle different frameworks

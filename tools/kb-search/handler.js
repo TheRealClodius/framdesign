@@ -5,53 +5,12 @@
  */
 
 import { ErrorType, ToolError } from '../_core/error-types.js';
-
-// Import blob storage service for GCS URL resolution and optional image fetch
-let resolveBlobUrl;
-let fetchAssetBuffer;
-async function loadBlobService() {
-  if (!resolveBlobUrl || !fetchAssetBuffer) {
-    try {
-      const blobModule = await import('@/lib/services/blob-storage-service');
-      resolveBlobUrl = blobModule.resolveBlobUrl || blobModule.default?.resolveBlobUrl;
-      fetchAssetBuffer = blobModule.fetchAssetBuffer || blobModule.default?.fetchAssetBuffer;
-    } catch (importError) {
-      // Fallback for Node.js runtime (voice server)
-      // Use a function to create the import path dynamically so webpack doesn't analyze it
-      try {
-        const getImportPath = (base) => `../../lib/services/${base}`;
-        const blobPath = getImportPath('blob-storage-service');
-        const blobModule = await import(/* webpackIgnore: true */ blobPath);
-        resolveBlobUrl = blobModule.resolveBlobUrl || blobModule.default?.resolveBlobUrl;
-        fetchAssetBuffer = blobModule.fetchAssetBuffer || blobModule.default?.fetchAssetBuffer;
-      } catch (fallbackError) {
-        console.warn('[kb_search] Failed to load blob storage service:', fallbackError);
-        // Will skip markdown generation for assets if service unavailable
-      }
-    }
-  }
-  return { resolveBlobUrl, fetchAssetBuffer };
-}
-
-function extractHttpStatus(error) {
-  if (!error || typeof error !== 'object') return undefined;
-  return (
-    error.status ||
-    error.statusCode ||
-    error.code ||
-    error.response?.status ||
-    error.response?.statusCode ||
-    error.data?.status ||
-    error.data?.statusCode
-  );
-}
-
-function isServiceUnavailable(error) {
-  const status = extractHttpStatus(error);
-  if (status === 503) return true;
-  const message = (error?.message || String(error || '')).toLowerCase();
-  return message.includes('service unavailable') || message.includes('503');
-}
+import {
+  extractHttpStatus,
+  isServiceUnavailable
+} from '../_core/helpers.js';
+import { emitToolEvent } from '../_core/tool-events.js';
+import { buildStableAssetRef, buildAssetMarkdown } from '../_core/asset-ref.js';
 
 /**
  * Execute kb_search tool
@@ -83,8 +42,8 @@ export async function execute(context) {
   try {
     // Dynamically import services (avoid bundling issues)
     // Use path alias for Next.js compatibility, fallback to relative for Node.js
-    let generateQueryEmbedding, searchSimilar;
-    
+    let generateQueryEmbedding, searchSimilar, countByFilter, scrollByFilter;
+
     try {
       // Try Next.js path alias first (works in Next.js webpack)
       // Use string literals to help webpack static analysis
@@ -94,6 +53,10 @@ export async function execute(context) {
         || embeddingModule.default?.generateQueryEmbedding;
       searchSimilar = vectorModule.searchSimilar
         || vectorModule.default?.searchSimilar;
+      countByFilter = vectorModule.countByFilter
+        || vectorModule.default?.countByFilter;
+      scrollByFilter = vectorModule.scrollByFilter
+        || vectorModule.default?.scrollByFilter;
     } catch (importError) {
       // Fallback for Node.js runtime (voice server)
       // Use dynamic import with template literal to avoid webpack static analysis warnings
@@ -103,17 +66,21 @@ export async function execute(context) {
         const getImportPath = (base) => `../../lib/services/${base}`;
         const embeddingPath = getImportPath('embedding-service');
         const vectorPath = getImportPath('vector-store-service');
-        
+
         // Use Promise.all to load both modules in parallel
         const [embeddingModule, vectorModule] = await Promise.all([
           import(/* webpackIgnore: true */ embeddingPath),
           import(/* webpackIgnore: true */ vectorPath)
         ]);
-        
+
         generateQueryEmbedding = embeddingModule.generateQueryEmbedding
           || embeddingModule.default?.generateQueryEmbedding;
         searchSimilar = vectorModule.searchSimilar
           || vectorModule.default?.searchSimilar;
+        countByFilter = vectorModule.countByFilter
+          || vectorModule.default?.countByFilter;
+        scrollByFilter = vectorModule.scrollByFilter
+          || vectorModule.default?.scrollByFilter;
       } catch (fallbackError) {
         // If both imports fail, throw the original error
         throw importError;
@@ -151,11 +118,16 @@ export async function execute(context) {
     
     // Map schema filter field names to Qdrant payload field names
     // Schema uses 'type' but Qdrant index is on 'entity_type'
+    // 'related_to' maps to 'related_entities' array with $contains marker
     const qdrantFilters = {};
     if (args.filters) {
       for (const [key, value] of Object.entries(args.filters)) {
         if (key === 'type') {
           qdrantFilters['entity_type'] = value;
+        } else if (key === 'related_to') {
+          // Map related_to to related_entities array field with $contains marker
+          // This signals vector-store-service to use array membership filtering
+          qdrantFilters['related_entities'] = { $contains: value };
         } else {
           qdrantFilters[key] = value;
         }
@@ -214,8 +186,21 @@ export async function execute(context) {
       };
     }
 
-    // Load blob service for asset URL resolution
-    const blobService = await loadBlobService();
+    // Load blob service for dead asset detection and image buffer fetching
+    let resolveBlobUrlSafe, fetchAssetBuffer;
+    try {
+      const blobModule = await import('@/lib/services/blob-storage-service');
+      resolveBlobUrlSafe = blobModule.resolveBlobUrlSafe || blobModule.default?.resolveBlobUrlSafe;
+      fetchAssetBuffer = blobModule.fetchAssetBuffer || blobModule.default?.fetchAssetBuffer;
+    } catch {
+      const getPath = (name) => `../../lib/services/${name}`;
+      const blobModule = await import(/* webpackIgnore: true */ getPath('blob-storage-service'));
+      resolveBlobUrlSafe = blobModule.resolveBlobUrlSafe || blobModule.default?.resolveBlobUrlSafe;
+      fetchAssetBuffer = blobModule.fetchAssetBuffer || blobModule.default?.fetchAssetBuffer;
+    }
+
+    // Track dead assets for diagnostics
+    const deadAssets = [];
     
     // Transform results to standard format
     const transformedResults = await Promise.all(rawResults.map(async (result) => {
@@ -242,47 +227,46 @@ export async function execute(context) {
         const blobId = result.metadata?.blob_id;
         const extension = result.metadata?.file_extension;
         const caption = result.metadata?.caption || result.metadata?.title || '';
-        
-        if (blobId && extension && blobService?.resolveBlobUrl) {
-          try {
-            const assetUrl = await blobService.resolveBlobUrl(blobId, extension);
+
+        if (blobId && extension) {
+          // Check if asset exists (dead asset detection)
+          let assetMissing = false;
+          if (resolveBlobUrlSafe) {
+            try {
+              const resolved = await resolveBlobUrlSafe(blobId, extension);
+              assetMissing = !resolved.exists;
+            } catch (blobError) {
+              console.warn(`[kb_search] Blob check failed for ${baseResult.id}:`, blobError.message);
+              // Optimistically emit stable ref if blob service fails
+            }
+          }
+
+          if (assetMissing) {
+            deadAssets.push({ id: baseResult.id, blob_id: blobId, extension });
+            baseResult.metadata._dead = true;
+            emitToolEvent('dead_asset', {
+              toolId: 'kb_search',
+              message: `Asset missing from GCS: ${baseResult.id}`,
+              details: { entityId: baseResult.id, blobId, extension }
+            });
+            console.warn(`[kb_search] Dead asset detected: ${baseResult.id} (blob: ${blobId}.${extension})`);
+          } else {
             const entityType = result.metadata?.entity_type || '';
-            
-            // Handle videos with HTML video tag, images/GIFs with markdown
-            let markdown;
-            if (entityType === 'video' || extension === 'mov' || extension === 'mp4' || extension === 'webm') {
-              markdown = `<video controls><source src="${assetUrl}" type="video/${extension === 'mov' ? 'quicktime' : extension}">Your browser does not support the video tag.</video>\n\n${caption ? `*${caption}*` : ''}`;
-            } else {
-              // Images and GIFs use markdown image syntax
-              markdown = `![${caption}](${assetUrl})`;
-            }
-            
-            // Add markdown to metadata
+
+            // Emit stable /kb-assets/ reference — client resolves to signed URL at render time
+            const assetRef = buildStableAssetRef(blobId, extension);
+            const markdown = buildAssetMarkdown(entityType, blobId, extension, caption);
+
             baseResult.metadata.markdown = markdown;
-            baseResult.metadata.url = assetUrl;
+            baseResult.metadata.url = assetRef;
             baseResult.metadata.blob_id = blobId;
-          } catch (blobError) {
-            console.warn(`[kb_search] Failed to resolve blob URL for ${baseResult.id}:`, blobError.message);
-            // Fallback to old path if available
-            if (result.metadata?.path) {
-              const entityType = result.metadata?.entity_type || '';
-              const path = result.metadata.path;
-              let markdown;
-              if (entityType === 'video' || path.match(/\.(mov|mp4|webm)$/i)) {
-                const ext = path.match(/\.(\w+)$/)?.[1] || 'mp4';
-                markdown = `<video controls><source src="${path}" type="video/${ext === 'mov' ? 'quicktime' : ext}">Your browser does not support the video tag.</video>\n\n${caption ? `*${caption}*` : ''}`;
-              } else {
-                markdown = `![${caption}](${path})`;
-              }
-              baseResult.metadata.markdown = markdown;
-              baseResult.metadata.url = result.metadata.path;
-            }
           }
         } else if (result.metadata?.path) {
           // Fallback to old path if blob_id not available
           const markdown = `![${caption}](${result.metadata.path})`;
           baseResult.metadata.markdown = markdown;
           baseResult.metadata.url = result.metadata.path;
+          baseResult.metadata._legacy_path = true;
         }
       }
       
@@ -308,6 +292,85 @@ export async function execute(context) {
       .sort((a, b) => b.score - a.score)
       .slice(0, topK); // Limit to requested topK entities
 
+    // When filtering by related_to, provide full asset awareness via scrollByFilter
+    // This gives the agent a complete list of matching assets (lightweight: id, type, title only)
+    let allAssets = null;
+    if (args.filters?.related_to && scrollByFilter && !isVoiceMode) {
+      try {
+        const allAssetsStart = Date.now();
+        allAssets = await scrollByFilter(qdrantFilters);
+        console.log(`[kb_search] Full asset scroll: ${allAssets.length} items in ${Date.now() - allAssetsStart}ms`);
+      } catch (scrollError) {
+        console.warn(`[kb_search] scrollByFilter failed, continuing without _allAssets:`, scrollError.message);
+      }
+    }
+
+    // Enrich top 2 non-asset results with related asset hints
+    // This lets the agent know what visuals are available without a separate search
+    const ASSET_TYPES = new Set(['photo', 'video', 'gif', 'diagram']);
+    const nonAssetResults = deduplicatedResults.filter(r => !ASSET_TYPES.has(r.type));
+    const topNonAssets = nonAssetResults.slice(0, 2);
+
+    if (!isVoiceMode && topNonAssets.length > 0 && queryEmbedding.length > 0) {
+      const assetHintStart = Date.now();
+      await Promise.all(topNonAssets.map(async (result) => {
+        try {
+          const entityId = result.id;
+          const relatedFilter = { related_entities: { $contains: entityId } };
+
+          // Get true count via countByFilter (no vector search, no cap)
+          // and a small sample via searchSimilar for preview
+          const [totalCount, sampleResults] = await Promise.all([
+            countByFilter
+              ? countByFilter(relatedFilter)
+              : Promise.resolve(null),
+            searchSimilar(queryEmbedding, 3, relatedFilter)
+          ]);
+
+          // Filter sample to only visual asset types
+          const sampleAssets = (sampleResults || []).filter(ar => {
+            const aType = ar.metadata?.entity_type || '';
+            return ASSET_TYPES.has(aType);
+          });
+
+          // Deduplicate sample by entity_id
+          const seenIds = new Set();
+          const uniqueSample = [];
+          for (const a of sampleAssets) {
+            const aId = a.metadata?.entity_id || a.id;
+            if (!seenIds.has(aId)) {
+              seenIds.add(aId);
+              uniqueSample.push(a);
+            }
+          }
+
+          // Use true count if available, otherwise fall back to sample length
+          const assetCount = totalCount != null ? totalCount : uniqueSample.length;
+
+          if (assetCount > 0 || uniqueSample.length > 0) {
+            // Collect types from sample
+            const assetTypeSet = new Set(uniqueSample.map(a => a.metadata?.entity_type));
+
+            const sample = uniqueSample.slice(0, 3).map(a => ({
+              id: a.metadata?.entity_id || a.id,
+              type: a.metadata?.entity_type || 'unknown',
+              title: a.metadata?.title || a.id
+            }));
+
+            result._assetHints = {
+              count: assetCount,
+              types: Array.from(assetTypeSet),
+              sample
+            };
+          }
+        } catch (hintError) {
+          console.warn(`[kb_search] Failed to fetch asset hints for ${result.id}:`, hintError.message);
+          // Non-critical: continue without hints
+        }
+      }));
+      console.log(`[kb_search] Asset hints enrichment took ${Date.now() - assetHintStart}ms`);
+    }
+
     const latency = Date.now() - startTime;
     const chunksSearched = rawResults.length;
     const uniqueEntities = deduplicatedResults.length;
@@ -331,9 +394,9 @@ export async function execute(context) {
       const blobId = topResult.metadata?.blob_id;
       const extension = topResult.metadata?.file_extension;
 
-      if (isVisual && blobId && extension && blobService?.fetchAssetBuffer) {
+      if (isVisual && blobId && extension && fetchAssetBuffer) {
         try {
-          const imageBuffer = await blobService.fetchAssetBuffer(blobId, extension);
+          const imageBuffer = await fetchAssetBuffer(blobId, extension);
           const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5MB cap to avoid oversized payloads
           if (imageBuffer.length > MAX_IMAGE_BYTES) {
             console.warn(`[kb_search] Skipping image data for ${topResult.id} (size ${Math.round(imageBuffer.length / 1024)}KB)`);
@@ -363,14 +426,27 @@ export async function execute(context) {
       }
     }
 
+    // Build diagnostics for observability
+    const diagnostics = {};
+    if (deadAssets.length > 0) {
+      diagnostics.dead_assets = deadAssets;
+      console.warn(`[kb_search] ${deadAssets.length} dead asset(s) detected in results`);
+    }
+    const legacyPathResults = deduplicatedResults.filter(r => r.metadata?._legacy_path);
+    if (legacyPathResults.length > 0) {
+      diagnostics.legacy_path_assets = legacyPathResults.map(r => r.id);
+    }
+
     const responseData = {
       results: deduplicatedResults,
       total_found: uniqueEntities,
       query: args.query,
       filters_applied: args.filters || null,
       clamped: topK !== originalTopK,
-      _instructions: `KB search complete. Found ${uniqueEntities} unique entities. ${imageData ? `✅ Pixel data included for top result: '${imageDataFor?.title}'.` : "❌ No pixel data included. For visual analysis, call kb_get with include_image_data: true for the specific asset ID."} To show assets, use the provided 'metadata.markdown' fields.`,
-      _timing: finalTiming
+      _allAssets: allAssets ? allAssets.slice(0, 20) : null,
+      _instructions: buildInstructions(uniqueEntities, imageData, imageDataFor, deduplicatedResults, deadAssets, allAssets),
+      _timing: finalTiming,
+      _diagnostics: Object.keys(diagnostics).length > 0 ? diagnostics : undefined
     };
 
     if (imageData) {
@@ -394,6 +470,55 @@ export async function execute(context) {
       retryable: false
     });
   }
+}
+
+/**
+ * Build the _instructions string, including asset hint guidance and dead asset warnings
+ */
+function buildInstructions(uniqueEntities, imageData, imageDataFor, results, deadAssets = [], allAssets = null) {
+  let base = `KB search complete. Found ${uniqueEntities} unique entities. `;
+  base += imageData
+    ? `✅ Pixel data included for top result: '${imageDataFor?.title}'.`
+    : "❌ No pixel data included. For visual analysis, call kb_get with include_image_data: true for the specific asset ID.";
+  base += " To show assets, use the provided 'metadata.markdown' fields.";
+
+  // Warn agent about dead assets so it doesn't share broken images
+  if (deadAssets.length > 0) {
+    const deadIds = deadAssets.map(d => d.id).join(', ');
+    base += `\n\n⚠️ DEAD ASSETS (${deadAssets.length}): The following assets are missing from storage and MUST NOT be shared with the user: ${deadIds}. Their images would appear broken.`;
+  }
+
+  // Note additional matching assets without encouraging exhaustive display
+  if (allAssets && allAssets.length > 0) {
+    const moreCount = Math.max(0, allAssets.length - results.length);
+    if (moreCount > 0) {
+      base += `\n\n${moreCount} more matching assets exist beyond these top results. If the user wants more, run another kb_search with adjusted filters — do NOT try to show all at once.`;
+    }
+  }
+
+  // Add asset hint guidance for results that have them
+  const hintsLines = [];
+  for (const r of results) {
+    if (r._assetHints && r._assetHints.count > 0) {
+      const types = r._assetHints.types.join(', ');
+      hintsLines.push(
+        `${r.title} has ${r._assetHints.count} visual asset(s) (${types}). To show them, search with filters.related_to: "${r.id}".`
+      );
+    }
+  }
+  if (hintsLines.length > 0) {
+    base += '\n\nAsset availability:\n' + hintsLines.join('\n');
+    base += '\nWhen discussing these entities, consider fetching a representative visual to enrich the narrative.';
+  }
+
+  // Add suggestion seeds from related projects found in results
+  const projectResults = results.filter(r => r.type === 'project');
+  if (projectResults.length > 1) {
+    const related = projectResults.slice(1, 3).map(r => r.title);
+    base += `\nRelated projects found: ${related.join(', ')}. These can be suggested for further exploration.`;
+  }
+
+  return base;
 }
 
 /**

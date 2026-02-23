@@ -96,8 +96,11 @@ export async function sendChatRequest(messages, timeoutExpired = false, onChunk 
           }
         }
 
+        // Strip status events (injected by server for tool call progress)
+        text = text.replace(/\n?---STATUS---\n[\s\S]*?\n---ENDSTATUS---\n?/g, '');
+
         resolve({
-          text,
+          text: text.trim(),
           observability,
           isJson: false
         });

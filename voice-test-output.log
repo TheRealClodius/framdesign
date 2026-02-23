@@ -1,0 +1,954 @@
+[dotenv@17.2.3] injecting env (10) from .env -- tip: ⚙️  enable debug logging with { debug: true }
+Loading tool registry...
+Loading tool registry...
+[Registry] Resolved registry path: /Users/andreiclodius/Documents/Projects/framdesign/tools/tool_registry.json
+[Registry] __dirname: /Users/andreiclodius/Documents/Projects/framdesign/tools/_core
+[Registry] Attempting dynamic import...
+[Registry] ✓ Loaded via dynamic import
+[Registry] Loading end_voice_session from static import map
+[Registry] Loading ignore_user from static import map
+[Registry] Loading kb_get from static import map
+[Registry] Loading kb_search from static import map
+[Registry] Loading perplexity_search from static import map
+[Registry] Loading query_tool_memory from static import map
+[Registry] Loading start_voice_session from static import map
+✓ Tool registry loaded: v1.0.203d7a61 (7 tools), git commit: 205b178 in 23ms
+✓ Loaded 7 tools: end_voice_session, ignore_user, kb_get, kb_search, perplexity_search, query_tool_memory, start_voice_session
+
+✓ Credentials found
+
+╔════════════════════════════════════════════════════════════════════════════════╗
+║                     FRAM Voice Agent Test - Non-Interactive                     ║
+║                      Using @google/genai SDK (Production Mode)                  ║
+╚════════════════════════════════════════════════════════════════════════════════╝
+
+Loaded 19 test questions
+
+Initializing AI client...
+Using Vertex AI (Project: fram-design-website, Location: us-central1)
+✓ Using service account: vertex-express@fram-design-website.iam.gserviceaccount.com
+The user provided project/location will take precedence over the API key from the environment variables.
+Establishing live session...
+
+✓ Live session established
+
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[1mQuestion 1/19: "Tell me about Fram"[0m
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+
+[1m[Step 1] Agent Response[0m
+  🎤 Sending audio: test-audio/01-tell-me-about-fram.wav
+  👂 Listening for response...
+
+  🔧 Tool call: kb_search
+     ✗ kb_search failed: Unexpected error: Cannot find package '@/lib' imported from /Users/andreiclodius/Documents/Projects/framdesign/tools/kb-search/handler.js
+[31mError: No response received[0m
+
+
+  🔧 Tool calls executed: 1
+
+  └─ [34mTool Call: kb_search[0m
+     [2mArgs IN:[0m
+      {
+        "top_k": 1,
+        "query": "Fram Design lab"
+      }
+     [2mTotal: 0.0s[0m
+     [2mArgs OUT:[0m
+      {
+        "ok": false,
+        "error": {
+          "type": "INTERNAL",
+          "message": "Unexpected error: Cannot find package '@/lib' imported from /Users/andreiclodius/Documents/Projects/framdesign/tools/kb-search/handler.js",
+          "retryable": false,
+          "idempotencyRequired": false,
+          "partialSideEffects": false,
+          "details": null,
+          "confirmation_request": null
+        },
+        "intents": [],
+        "meta": {
+          "toolId": "kb_search",
+          "duration": 3,
+          "responseSchemaVersion": "1.0.0"
+        }
+      }
+
+
+  ⏱️  Response time: 833ms
+  ⏱️  Total time: 835ms
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+  🔧 Tool call: kb_search
+     ✗ kb_search failed: Unexpected error: Cannot find package '@/lib' imported from /Users/andreiclodius/Documents/Projects/framdesign/tools/kb-search/handler.js
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[1mQuestion 2/19: "Who is Fram's owner?"[0m
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+
+[1m[Step 1] Agent Response[0m
+  🎤 Sending audio: test-audio/02-who-is-frams-owner.wav
+  👂 Listening for response...
+
+[32mFinal Response:[0m
+" product design lab, focusing"
+
+
+  ⏱️  Response time: 227ms
+  ⏱️  Total time: 228ms
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+  🔧 Tool call: kb_search
+     ✗ kb_search failed: Unexpected error: Cannot find package '@/lib' imported from /Users/andreiclodius/Documents/Projects/framdesign/tools/kb-search/handler.js
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[1mQuestion 3/19: "Give me Andrei's email"[0m
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+
+[1m[Step 1] Agent Response[0m
+  🎤 Sending audio: test-audio/03-give-me-andreis-email.wav
+  👂 Listening for response...
+
+[32mFinal Response:[0m
+" of Fram Design,"
+
+
+  ⏱️  Response time: 283ms
+  ⏱️  Total time: 284ms
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+  🔧 Tool call: kb_search
+     ✗ kb_search failed: Unexpected error: Cannot find package '@/lib' imported from /Users/andreiclodius/Documents/Projects/framdesign/tools/kb-search/handler.js
+
+  🔧 Tool call: kb_get
+[kb_get] Retrieving entity: person:andrei_clodius
+     ✗ kb_get failed: Failed to retrieve entity: Cannot find package '@/lib' imported from /Users/andreiclodius/Documents/Projects/framdesign/tools/kb-get/handler.js
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[1mQuestion 4/19: "Give me Andrei's linkedin account"[0m
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+
+[1m[Step 1] Agent Response[0m
+  🎤 Sending audio: test-audio/04-give-me-andreis-linkedin-account.wav
+  👂 Listening for response...
+
+  🔧 Tool call: kb_search
+     ✗ kb_search failed: Unexpected error: Cannot find package '@/lib' imported from /Users/andreiclodius/Documents/Projects/framdesign/tools/kb-search/handler.js
+[31mError: No response received[0m
+
+
+  🔧 Tool calls executed: 1
+
+  └─ [34mTool Call: kb_search[0m
+     [2mArgs IN:[0m
+      {
+        "top_k": 1,
+        "query": "Andrei Clodius LinkedIn"
+      }
+     [2mTotal: 0.0s[0m
+     [2mArgs OUT:[0m
+      {
+        "ok": false,
+        "error": {
+          "type": "INTERNAL",
+          "message": "Unexpected error: Cannot find package '@/lib' imported from /Users/andreiclodius/Documents/Projects/framdesign/tools/kb-search/handler.js",
+          "retryable": false,
+          "idempotencyRequired": false,
+          "partialSideEffects": false,
+          "details": null,
+          "confirmation_request": null
+        },
+        "intents": [],
+        "meta": {
+          "toolId": "kb_search",
+          "duration": 5,
+          "responseSchemaVersion": "1.0.0"
+        }
+      }
+
+
+  ⏱️  Response time: 1353ms
+  ⏱️  Total time: 1354ms
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+  🔧 Tool call: kb_get
+[kb_get] Retrieving entity: person:andrei_clodius
+     ✗ kb_get failed: Failed to retrieve entity: Cannot find package '@/lib' imported from /Users/andreiclodius/Documents/Projects/framdesign/tools/kb-get/handler.js
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[1mQuestion 5/19: "What projects has Fram worked on?"[0m
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+
+[1m[Step 1] Agent Response[0m
+  🎤 Sending audio: test-audio/05-what-projects-has-fram-worked-on.wav
+  👂 Listening for response...
+
+  🔧 Tool call: kb_search
+     ✗ kb_search failed: Unexpected error: Cannot find package '@/lib' imported from /Users/andreiclodius/Documents/Projects/framdesign/tools/kb-search/handler.js
+[31mError: No response received[0m
+
+
+  🔧 Tool calls executed: 1
+
+  └─ [34mTool Call: kb_search[0m
+     [2mArgs IN:[0m
+      {
+        "top_k": 3,
+        "query": "list of Fram Design projects",
+        "filters": {
+          "type": "project"
+        }
+      }
+     [2mTotal: 0.0s[0m
+     [2mArgs OUT:[0m
+      {
+        "ok": false,
+        "error": {
+          "type": "INTERNAL",
+          "message": "Unexpected error: Cannot find package '@/lib' imported from /Users/andreiclodius/Documents/Projects/framdesign/tools/kb-search/handler.js",
+          "retryable": false,
+          "idempotencyRequired": false,
+          "partialSideEffects": false,
+          "details": null,
+          "confirmation_request": null
+        },
+        "intents": [],
+        "meta": {
+          "toolId": "kb_search",
+          "duration": 2,
+          "responseSchemaVersion": "1.0.0"
+        }
+      }
+
+
+  ⏱️  Response time: 1532ms
+  ⏱️  Total time: 1533ms
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+  🔧 Tool call: kb_search
+     ✗ kb_search failed: Unexpected error: Cannot find package '@/lib' imported from /Users/andreiclodius/Documents/Projects/framdesign/tools/kb-search/handler.js
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[1mQuestion 6/19: "Tell me about the Vector Watch project"[0m
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+
+[1m[Step 1] Agent Response[0m
+  🎤 Sending audio: test-audio/06-tell-me-about-the-vector-watch-project.wav
+  👂 Listening for response...
+
+  🔧 Tool call: kb_search
+     ✗ kb_search failed: Unexpected error: Cannot find package '@/lib' imported from /Users/andreiclodius/Documents/Projects/framdesign/tools/kb-search/handler.js
+[31mError: No response received[0m
+
+
+  🔧 Tool calls executed: 1
+
+  └─ [34mTool Call: kb_search[0m
+     [2mArgs IN:[0m
+      {
+        "top_k": 1,
+        "query": "Vector Watch project details"
+      }
+     [2mTotal: 0.0s[0m
+     [2mArgs OUT:[0m
+      {
+        "ok": false,
+        "error": {
+          "type": "INTERNAL",
+          "message": "Unexpected error: Cannot find package '@/lib' imported from /Users/andreiclodius/Documents/Projects/framdesign/tools/kb-search/handler.js",
+          "retryable": false,
+          "idempotencyRequired": false,
+          "partialSideEffects": false,
+          "details": null,
+          "confirmation_request": null
+        },
+        "intents": [],
+        "meta": {
+          "toolId": "kb_search",
+          "duration": 2,
+          "responseSchemaVersion": "1.0.0"
+        }
+      }
+
+
+  ⏱️  Response time: 1563ms
+  ⏱️  Total time: 1565ms
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+  🔧 Tool call: kb_search
+     ✗ kb_search failed: Unexpected error: Cannot find package '@/lib' imported from /Users/andreiclodius/Documents/Projects/framdesign/tools/kb-search/handler.js
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[1mQuestion 7/19: "What's Andrei's background?"[0m
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+
+[1m[Step 1] Agent Response[0m
+  🎤 Sending audio: test-audio/07-whats-andreis-background.wav
+  👂 Listening for response...
+
+  🔧 Tool call: kb_search
+     ✗ kb_search failed: Unexpected error: Cannot find package '@/lib' imported from /Users/andreiclodius/Documents/Projects/framdesign/tools/kb-search/handler.js
+[31mError: No response received[0m
+
+
+  🔧 Tool calls executed: 1
+
+  └─ [34mTool Call: kb_search[0m
+     [2mArgs IN:[0m
+      {
+        "query": "Andrei Clodius background and experience",
+        "top_k": 1
+      }
+     [2mTotal: 0.0s[0m
+     [2mArgs OUT:[0m
+      {
+        "ok": false,
+        "error": {
+          "type": "INTERNAL",
+          "message": "Unexpected error: Cannot find package '@/lib' imported from /Users/andreiclodius/Documents/Projects/framdesign/tools/kb-search/handler.js",
+          "retryable": false,
+          "idempotencyRequired": false,
+          "partialSideEffects": false,
+          "details": null,
+          "confirmation_request": null
+        },
+        "intents": [],
+        "meta": {
+          "toolId": "kb_search",
+          "duration": 2,
+          "responseSchemaVersion": "1.0.0"
+        }
+      }
+
+
+  ⏱️  Response time: 2003ms
+  ⏱️  Total time: 2007ms
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+  🔧 Tool call: kb_get
+[kb_get] Retrieving entity: person:andrei_clodius
+     ✗ kb_get failed: Failed to retrieve entity: Cannot find package '@/lib' imported from /Users/andreiclodius/Documents/Projects/framdesign/tools/kb-get/handler.js
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[1mQuestion 8/19: "Compare Andrei's work at Fitbit and UiPath"[0m
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+
+[1m[Step 1] Agent Response[0m
+  🎤 Sending audio: test-audio/08-compare-andreis-work-at-fitbit-and-uipath.wav
+  👂 Listening for response...
+
+  🔧 Tool call: kb_search
+     ✗ kb_search failed: Unexpected error: Cannot find package '@/lib' imported from /Users/andreiclodius/Documents/Projects/framdesign/tools/kb-search/handler.js
+[31mError: No response received[0m
+
+
+  🔧 Tool calls executed: 1
+
+  └─ [34mTool Call: kb_search[0m
+     [2mArgs IN:[0m
+      {
+        "query": "Andrei Clodius Fitbit UI Path roles",
+        "top_k": 2
+      }
+     [2mTotal: 0.0s[0m
+     [2mArgs OUT:[0m
+      {
+        "ok": false,
+        "error": {
+          "type": "INTERNAL",
+          "message": "Unexpected error: Cannot find package '@/lib' imported from /Users/andreiclodius/Documents/Projects/framdesign/tools/kb-search/handler.js",
+          "retryable": false,
+          "idempotencyRequired": false,
+          "partialSideEffects": false,
+          "details": null,
+          "confirmation_request": null
+        },
+        "intents": [],
+        "meta": {
+          "toolId": "kb_search",
+          "duration": 1,
+          "responseSchemaVersion": "1.0.0"
+        }
+      }
+
+
+  ⏱️  Response time: 2407ms
+  ⏱️  Total time: 2409ms
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+  🔧 Tool call: kb_get
+[kb_get] Retrieving entity: person:andrei_clodius
+     ✗ kb_get failed: Failed to retrieve entity: Cannot find package '@/lib' imported from /Users/andreiclodius/Documents/Projects/framdesign/tools/kb-get/handler.js
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[1mQuestion 9/19: "Show me the complete details of the Vector Watch project"[0m
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+
+[1m[Step 1] Agent Response[0m
+  🎤 Sending audio: test-audio/09-show-me-the-complete-details-of-the-vector-watch-p.wav
+  👂 Listening for response...
+
+  🔧 Tool call: kb_get
+[kb_get] Retrieving entity: project:vector_watch
+     ✗ kb_get failed: Failed to retrieve entity: Cannot find package '@/lib' imported from /Users/andreiclodius/Documents/Projects/framdesign/tools/kb-get/handler.js
+[31mError: No response received[0m
+
+
+  🔧 Tool calls executed: 1
+
+  └─ [34mTool Call: kb_get[0m
+     [2mArgs IN:[0m
+      {
+        "id": "project:vector_watch"
+      }
+     [2mTotal: 0.0s[0m
+     [2mArgs OUT:[0m
+      {
+        "ok": false,
+        "error": {
+          "type": "TRANSIENT",
+          "message": "Failed to retrieve entity: Cannot find package '@/lib' imported from /Users/andreiclodius/Documents/Projects/framdesign/tools/kb-get/handler.js",
+          "retryable": true,
+          "idempotencyRequired": false,
+          "partialSideEffects": false,
+          "details": null,
+          "confirmation_request": null
+        },
+        "intents": [],
+        "meta": {
+          "toolId": "kb_get",
+          "duration": 1,
+          "responseSchemaVersion": "1.0.0"
+        }
+      }
+
+
+  ⏱️  Response time: 2226ms
+  ⏱️  Total time: 2227ms
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[1mQuestion 10/19: "Show me an image of Desktop Agent"[0m
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+
+[1m[Step 1] Agent Response[0m
+  🎤 Sending audio: test-audio/10-show-me-an-image-of-desktop-agent.wav
+  👂 Listening for response...
+
+  🔧 Tool call: kb_search
+     ✗ kb_search failed: Unexpected error: Cannot find package '@/lib' imported from /Users/andreiclodius/Documents/Projects/framdesign/tools/kb-search/handler.js
+[31mError: No response received[0m
+
+
+  🔧 Tool calls executed: 1
+
+  └─ [34mTool Call: kb_search[0m
+     [2mArgs IN:[0m
+      {
+        "filters": {
+          "related_to": "project:desktop_agent",
+          "type": "photo"
+        },
+        "query": "Desktop Agent image",
+        "top_k": 1
+      }
+     [2mTotal: 0.0s[0m
+     [2mArgs OUT:[0m
+      {
+        "ok": false,
+        "error": {
+          "type": "INTERNAL",
+          "message": "Unexpected error: Cannot find package '@/lib' imported from /Users/andreiclodius/Documents/Projects/framdesign/tools/kb-search/handler.js",
+          "retryable": false,
+          "idempotencyRequired": false,
+          "partialSideEffects": false,
+          "details": null,
+          "confirmation_request": null
+        },
+        "intents": [],
+        "meta": {
+          "toolId": "kb_search",
+          "duration": 1,
+          "responseSchemaVersion": "1.0.0"
+        }
+      }
+
+
+  ⏱️  Response time: 2762ms
+  ⏱️  Total time: 2763ms
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[1mQuestion 11/19: "Describe the image visuals"[0m
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+
+[1m[Step 1] Agent Response[0m
+  🎤 Sending audio: test-audio/11-describe-the-image-visuals.wav
+  👂 Listening for response...
+
+  🔧 Tool call: kb_search
+     ✗ kb_search failed: Unexpected error: Cannot find package '@/lib' imported from /Users/andreiclodius/Documents/Projects/framdesign/tools/kb-search/handler.js
+[31mError: No response received[0m
+
+
+  🔧 Tool calls executed: 1
+
+  └─ [34mTool Call: kb_search[0m
+     [2mArgs IN:[0m
+      {
+        "filters": {
+          "type": "photo",
+          "related_to": "project:desktop_agent"
+        },
+        "query": "Desktop Agent image",
+        "top_k": 1
+      }
+     [2mTotal: 0.0s[0m
+     [2mArgs OUT:[0m
+      {
+        "ok": false,
+        "error": {
+          "type": "INTERNAL",
+          "message": "Unexpected error: Cannot find package '@/lib' imported from /Users/andreiclodius/Documents/Projects/framdesign/tools/kb-search/handler.js",
+          "retryable": false,
+          "idempotencyRequired": false,
+          "partialSideEffects": false,
+          "details": null,
+          "confirmation_request": null
+        },
+        "intents": [],
+        "meta": {
+          "toolId": "kb_search",
+          "duration": 1,
+          "responseSchemaVersion": "1.0.0"
+        }
+      }
+
+
+  ⏱️  Response time: 2516ms
+  ⏱️  Total time: 2518ms
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[1mQuestion 12/19: "Show me any other project image"[0m
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+
+[1m[Step 1] Agent Response[0m
+  🎤 Sending audio: test-audio/12-show-me-any-other-project-image.wav
+  👂 Listening for response...
+
+  🔧 Tool call: kb_search
+     ✗ kb_search failed: Unexpected error: Cannot find package '@/lib' imported from /Users/andreiclodius/Documents/Projects/framdesign/tools/kb-search/handler.js
+[31mError: No response received[0m
+
+
+  🔧 Tool calls executed: 1
+
+  └─ [34mTool Call: kb_search[0m
+     [2mArgs IN:[0m
+      {
+        "filters": {
+          "type": "photo"
+        },
+        "top_k": 1,
+        "query": "project image"
+      }
+     [2mTotal: 0.0s[0m
+     [2mArgs OUT:[0m
+      {
+        "ok": false,
+        "error": {
+          "type": "INTERNAL",
+          "message": "Unexpected error: Cannot find package '@/lib' imported from /Users/andreiclodius/Documents/Projects/framdesign/tools/kb-search/handler.js",
+          "retryable": false,
+          "idempotencyRequired": false,
+          "partialSideEffects": false,
+          "details": null,
+          "confirmation_request": null
+        },
+        "intents": [],
+        "meta": {
+          "toolId": "kb_search",
+          "duration": 1,
+          "responseSchemaVersion": "1.0.0"
+        }
+      }
+
+
+  ⏱️  Response time: 2594ms
+  ⏱️  Total time: 2595ms
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[1mQuestion 13/19: "Describe this image"[0m
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+
+[1m[Step 1] Agent Response[0m
+  🎤 Sending audio: test-audio/13-describe-this-image.wav
+  👂 Listening for response...
+
+  🔧 Tool call: kb_search
+     ✗ kb_search failed: Unexpected error: Cannot find package '@/lib' imported from /Users/andreiclodius/Documents/Projects/framdesign/tools/kb-search/handler.js
+[31mError: No response received[0m
+
+
+  🔧 Tool calls executed: 1
+
+  └─ [34mTool Call: kb_search[0m
+     [2mArgs IN:[0m
+      {
+        "query": "project image",
+        "filters": {
+          "type": "photo"
+        },
+        "top_k": 1
+      }
+     [2mTotal: 0.0s[0m
+     [2mArgs OUT:[0m
+      {
+        "ok": false,
+        "error": {
+          "type": "INTERNAL",
+          "message": "Unexpected error: Cannot find package '@/lib' imported from /Users/andreiclodius/Documents/Projects/framdesign/tools/kb-search/handler.js",
+          "retryable": false,
+          "idempotencyRequired": false,
+          "partialSideEffects": false,
+          "details": null,
+          "confirmation_request": null
+        },
+        "intents": [],
+        "meta": {
+          "toolId": "kb_search",
+          "duration": 2,
+          "responseSchemaVersion": "1.0.0"
+        }
+      }
+
+
+  ⏱️  Response time: 2716ms
+  ⏱️  Total time: 2716ms
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[1mQuestion 14/19: "Tell me about a project that doesn't exist"[0m
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+
+[1m[Step 1] Agent Response[0m
+  🎤 Sending audio: test-audio/14-tell-me-about-a-project-that-doesnt-exist.wav
+  👂 Listening for response...
+
+[32mFinal Response:[0m
+"I cannot provide details on projects that aren't part of Fram Design's work."
+
+
+  ⏱️  Response time: 3816ms
+  ⏱️  Total time: 3817ms
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[1mQuestion 15/19: "Who is John Smith?"[0m
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+
+[1m[Step 1] Agent Response[0m
+  🎤 Sending audio: test-audio/15-who-is-john-smith.wav
+  👂 Listening for response...
+
+  🔧 Tool call: kb_search
+     ✗ kb_search failed: Unexpected error: Cannot find package '@/lib' imported from /Users/andreiclodius/Documents/Projects/framdesign/tools/kb-search/handler.js
+[31mError: No response received[0m
+
+
+  🔧 Tool calls executed: 1
+
+  └─ [34mTool Call: kb_search[0m
+     [2mArgs IN:[0m
+      {
+        "query": "John Smith",
+        "top_k": 1
+      }
+     [2mTotal: 0.0s[0m
+     [2mArgs OUT:[0m
+      {
+        "ok": false,
+        "error": {
+          "type": "INTERNAL",
+          "message": "Unexpected error: Cannot find package '@/lib' imported from /Users/andreiclodius/Documents/Projects/framdesign/tools/kb-search/handler.js",
+          "retryable": false,
+          "idempotencyRequired": false,
+          "partialSideEffects": false,
+          "details": null,
+          "confirmation_request": null
+        },
+        "intents": [],
+        "meta": {
+          "toolId": "kb_search",
+          "duration": 1,
+          "responseSchemaVersion": "1.0.0"
+        }
+      }
+
+
+  ⏱️  Response time: 3481ms
+  ⏱️  Total time: 3483ms
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[1mQuestion 16/19: "What technologies does Fram work with?"[0m
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+
+[1m[Step 1] Agent Response[0m
+  🎤 Sending audio: test-audio/16-what-technologies-does-fram-work-with.wav
+  👂 Listening for response...
+
+  🔧 Tool call: kb_search
+     ✗ kb_search failed: Unexpected error: Cannot find package '@/lib' imported from /Users/andreiclodius/Documents/Projects/framdesign/tools/kb-search/handler.js
+[31mError: No response received[0m
+
+
+  🔧 Tool calls executed: 1
+
+  └─ [34mTool Call: kb_search[0m
+     [2mArgs IN:[0m
+      {
+        "query": "Fram Design technologies used",
+        "top_k": 1
+      }
+     [2mTotal: 0.0s[0m
+     [2mArgs OUT:[0m
+      {
+        "ok": false,
+        "error": {
+          "type": "INTERNAL",
+          "message": "Unexpected error: Cannot find package '@/lib' imported from /Users/andreiclodius/Documents/Projects/framdesign/tools/kb-search/handler.js",
+          "retryable": false,
+          "idempotencyRequired": false,
+          "partialSideEffects": false,
+          "details": null,
+          "confirmation_request": null
+        },
+        "intents": [],
+        "meta": {
+          "toolId": "kb_search",
+          "duration": 1,
+          "responseSchemaVersion": "1.0.0"
+        }
+      }
+
+
+  ⏱️  Response time: 3423ms
+  ⏱️  Total time: 3424ms
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[1mQuestion 17/19: "How can I contact Fram Design?"[0m
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+
+[1m[Step 1] Agent Response[0m
+  🎤 Sending audio: test-audio/17-how-can-i-contact-fram-design.wav
+  👂 Listening for response...
+
+  🔧 Tool call: kb_search
+     ✗ kb_search failed: Unexpected error: Cannot find package '@/lib' imported from /Users/andreiclodius/Documents/Projects/framdesign/tools/kb-search/handler.js
+[31mError: No response received[0m
+
+
+  🔧 Tool calls executed: 1
+
+  └─ [34mTool Call: kb_search[0m
+     [2mArgs IN:[0m
+      {
+        "query": "contact Fram Design",
+        "top_k": 1
+      }
+     [2mTotal: 0.0s[0m
+     [2mArgs OUT:[0m
+      {
+        "ok": false,
+        "error": {
+          "type": "INTERNAL",
+          "message": "Unexpected error: Cannot find package '@/lib' imported from /Users/andreiclodius/Documents/Projects/framdesign/tools/kb-search/handler.js",
+          "retryable": false,
+          "idempotencyRequired": false,
+          "partialSideEffects": false,
+          "details": null,
+          "confirmation_request": null
+        },
+        "intents": [],
+        "meta": {
+          "toolId": "kb_search",
+          "duration": 1,
+          "responseSchemaVersion": "1.0.0"
+        }
+      }
+
+
+  ⏱️  Response time: 3540ms
+  ⏱️  Total time: 3541ms
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[1mQuestion 18/19: "What makes Fram different from other design studios?"[0m
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+
+[1m[Step 1] Agent Response[0m
+  🎤 Sending audio: test-audio/18-what-makes-fram-different-from-other-design-studio.wav
+  👂 Listening for response...
+
+  🔧 Tool call: kb_search
+     ✗ kb_search failed: Unexpected error: Cannot find package '@/lib' imported from /Users/andreiclodius/Documents/Projects/framdesign/tools/kb-search/handler.js
+[31mError: No response received[0m
+
+
+  🔧 Tool calls executed: 1
+
+  └─ [34mTool Call: kb_search[0m
+     [2mArgs IN:[0m
+      {
+        "query": "Fram Design philosophy vs other studios",
+        "top_k": 1
+      }
+     [2mTotal: 0.0s[0m
+     [2mArgs OUT:[0m
+      {
+        "ok": false,
+        "error": {
+          "type": "INTERNAL",
+          "message": "Unexpected error: Cannot find package '@/lib' imported from /Users/andreiclodius/Documents/Projects/framdesign/tools/kb-search/handler.js",
+          "retryable": false,
+          "idempotencyRequired": false,
+          "partialSideEffects": false,
+          "details": null,
+          "confirmation_request": null
+        },
+        "intents": [],
+        "meta": {
+          "toolId": "kb_search",
+          "duration": 1,
+          "responseSchemaVersion": "1.0.0"
+        }
+      }
+
+
+  ⏱️  Response time: 3739ms
+  ⏱️  Total time: 3742ms
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[1mQuestion 19/19: "What are the latest developments in AI as of 2026?"[0m
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+
+[1m[Step 1] Agent Response[0m
+  🎤 Sending audio: test-audio/19-what-are-the-latest-developments-in-ai-as-of-2026.wav
+  👂 Listening for response...
+
+  🔧 Tool call: perplexity_search
+[perplexity_search] API key check: {
+  hasMetaKey: false,
+  metaKeyLength: 0,
+  hasEnvKey: true,
+  envKeyLength: 53,
+  finalApiKeyPresent: true,
+  finalApiKeyLength: 53,
+  keyStartsWith: 'pplx',
+  keyEndsWith: 'lSR5'
+}
+[perplexity_search] Request details: {
+  url: 'https://api.perplexity.ai/chat/completions',
+  method: 'POST',
+  hasAuthHeader: true,
+  authHeaderPrefix: 'pplx-rd7...',
+  model: 'sonar',
+  queryLength: 36
+}
+     ✓ perplexity_search completed in 5466ms
+
+[32mFinal Response:[0m
+"As of 2026, key developments include autonomous AI agents, more efficient on-device AI, and generative models used in science and infrastructure. <suggestions>["What kind of AI applications are you interested in?", "Tell me more about autonomous agents."]</suggestions>"
+
+
+  🔧 Tool calls executed: 1
+
+  └─ [34mTool Call: perplexity_search[0m
+     [2mArgs IN:[0m
+      {
+        "query": "latest developments in AI as of 2026"
+      }
+     [2mTotal: 5.5s[0m
+     [2mArgs OUT:[0m
+      {
+        "answer": "**Key AI developments as of early 2026 center on agentic systems with improved memory and self-verification, on-device AI for privacy and efficiency, generative AI in science and gaming, and infrastructure advances like efficient chips and hybrid quantum-AI computing.**[1][2][3]\n\n### Agentic and Autonomous AI\nAI is shifting from isolated tools to integrated, autonomous agents capable of multi-step workflows, persistent memory, and self-verification to reduce errors.[2][6] These agents handle complex tasks like project management, software engineering, and continuous support, with models like Claude Opus 4.5 solving hour-long problems at 50% reliability—up from two-minute tasks two years prior.[7] In enterprises, focus is on \"AI that acts safely\" with governance for verification and execution.[6]\n\n### Generative AI and Scientific Applications\nGenerative models mature for drug discovery, protein folding, climate modeling, and gaming with adaptive AI characters.[1][3] AI actively generates hypotheses, runs experiments, and collaborates in research across physics, chemistry, and biology, acting as lab assistants.[3] Specific breakthroughs include University of Michigan's AI diagnosing heart disease from 10-second EKGs (Dec 2025),[4] Google DeepMind's GenCast for efficient weather forecasting (Dec 2025),[4] and Fujitsu-Kirin's model linking gut health to brain function via food simulations (Dec 2025).[4]\n\n### On-Device and Productivity AI\nEfficient models run on smartphones and sensors for predictive maintenance, real-time translation, and personalized learning, enhancing privacy by avoiding cloud transmission.[1] AI-fueled coding accelerates software development from weeks to hours, prioritizing measurable business outcomes like reduced cycle times.[1]\n\n### Infrastructure and Hardware\nNvidia's next-gen platforms boost training performance and cut costs, alongside data center evolution and \"superfactories\" for dense, distributed computing.[1][3] Hybrid systems integrate AI with supercomputers and quantum for accurate molecular modeling, aided by logical qubits for error correction.[3][5] IBM notes quantum unlocking drug development and optimization, with robotics and physical AI gaining traction amid scaling limits.[5]\n\n### Other Notable Trends\nApple plans a reimagined AI-powered Siri debut in 2026.[4] Open-source post-training refines models for customization, democratizing AI.[2] Productivity and enterprise autonomy emphasize reliable, integrated systems over larger models.[1][2][6]",
+        "citations": [
+          "https://www.trigyn.com/insights/ai-trends-2026-new-era-ai-advancements-and-breakthroughs",
+          "https://www.infoworld.com/article/4108092/6-ai-breakthroughs-that-will-define-2026.html",
+          "https://news.microsoft.com/source/features/ai/whats-next-in-ai-7-trends-to-watch-in-2026/",
+          "https://www.crescendo.ai/news/latest-ai-news-and-updates",
+          "https://www.ibm.com/think/news/ai-tech-trends-predictions-2026",
+          "https://etedge-insights.com/technology/artificial-intelligence/10-ai-breakthroughs-that-will-define-enterprise-autonomy-by-2026/",
+          "https://www.cfr.org/articles/how-2026-could-decide-future-artificial-intelligence"
+        ],
+        "query": "latest developments in AI as of 2026",
+        "model": "sonar"
+      }
+
+
+  ⏱️  Response time: 16568ms
+  ⏱️  Total time: 16569ms
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[1mTest Summary[0m
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+Total Execution Time: 97.1s
+Questions: 19
+Responses: 19 (4 successful, 15 failed)
+
+Tool Calls:
+  • kb_search: 14 calls (avg 0.0s)
+  • kb_get: 1 call (avg 0.0s)
+  • perplexity_search: 1 call (avg 5.5s)
+
+Total Tool Calls: 16
+Average Response Time: 5.1s
+
+[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+

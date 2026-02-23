@@ -1,8 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
+import Image from "next/image";
 import ModalCloseButton from "./ModalCloseButton";
+import { parseAssetUrl, refreshAssetUrl } from "@/lib/utils/asset-url";
+import { isStableAssetRef, resolveAssetSrc } from "@/lib/utils/asset-resolver";
 
 interface ImageModalProps {
   src: string;
@@ -13,15 +16,55 @@ interface ImageModalProps {
 export default function ImageModal({ src, alt, onClose }: ImageModalProps) {
   const [isClient, setIsClient] = useState(false);
   const [imageError, setImageError] = useState(false);
+  const [currentSrc, setCurrentSrc] = useState(src);
+  const [hasTriedRefresh, setHasTriedRefresh] = useState(false);
+  const [isResolving, setIsResolving] = useState(false);
 
   useEffect(() => {
     setIsClient(true);
   }, []);
-  
-  // Reset error state when src changes
+
+  // Reset state when src changes — resolve stable refs before displaying
   useEffect(() => {
+    let cancelled = false;
     setImageError(false);
+    setHasTriedRefresh(false);
+
+    if (isStableAssetRef(src)) {
+      setIsResolving(true);
+      resolveAssetSrc(src).then((url) => {
+        if (cancelled) return;
+        // If resolution returned the original ref (failure), show error
+        if (isStableAssetRef(url)) {
+          setImageError(true);
+          setIsResolving(false);
+        } else {
+          setCurrentSrc(url);
+          setIsResolving(false);
+        }
+      });
+    } else {
+      setCurrentSrc(src);
+      setIsResolving(false);
+    }
+
+    return () => { cancelled = true; };
   }, [src]);
+
+  const handleImageError = useCallback(async () => {
+    if (!hasTriedRefresh) {
+      setHasTriedRefresh(true);
+      const blobInfo = parseAssetUrl(currentSrc);
+      if (blobInfo) {
+        const freshUrl = await refreshAssetUrl(blobInfo.blobId, blobInfo.extension);
+        if (freshUrl) {
+          setCurrentSrc(freshUrl);
+          return;
+        }
+      }
+    }
+    setImageError(true);
+  }, [currentSrc, hasTriedRefresh]);
 
   // Close on ESC
   useEffect(() => {
@@ -105,7 +148,15 @@ export default function ImageModal({ src, alt, onClose }: ImageModalProps) {
         justifyContent: "center",
         overflow: "auto"
       }}>
-        {imageError ? (
+        {isResolving ? (
+          <div className="flex items-center space-x-2 text-gray-400 text-sm">
+            <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <span>Loading image...</span>
+          </div>
+        ) : imageError ? (
           <div className="flex flex-col items-center justify-center p-12 text-center max-w-md">
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -130,21 +181,19 @@ export default function ImageModal({ src, alt, onClose }: ImageModalProps) {
             <p className="text-xs text-gray-500 mt-4">The image could not be loaded. It may have expired or been removed.</p>
           </div>
         ) : (
-          <img
-            src={src}
+          <Image
+            src={currentSrc}
             alt={alt}
-            style={{ 
-              maxWidth: "100%",
-              maxHeight: "100%",
+            fill
+            unoptimized
+            style={{
               objectFit: "contain",
               touchAction: "pan-x pan-y pinch-zoom",
               borderRadius: "0.5rem"
             }}
             onClick={(e) => e.stopPropagation()}
             onTouchEnd={(e) => e.stopPropagation()}
-            onError={() => {
-              setImageError(true);
-            }}
+            onError={handleImageError}
           />
         )}
       </div>

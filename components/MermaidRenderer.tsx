@@ -34,148 +34,50 @@ function svgToDataUrl(svg: string): string {
   return `data:image/svg+xml,${encoded}`;
 }
 
-// Sanitize Mermaid source code to fix common syntax issues
+/**
+ * Sanitize Mermaid source code
+ * Handles: markdown fences, duplicate declarations, garbage before diagram
+ */
 function sanitizeMermaidSource(source: string): string {
-  let sanitized = source.trim();
-  
-  // Remove any markdown code block markers that might have leaked in (more aggressive)
-  sanitized = sanitized.replace(/^```\s*mermaid\s*\n?/gi, '');
-  sanitized = sanitized.replace(/\n?```\s*$/g, '');
-  sanitized = sanitized.replace(/```\s*mermaid\s*/gi, ''); // Remove anywhere in the string
-  sanitized = sanitized.replace(/```/g, ''); // Remove any remaining backticks
-  
-  // Remove corrupted text patterns that might have leaked into diagram code
-  // Pattern: "mermaidtimelinetitle" or similar concatenated text (but be careful not to remove valid content)
-  // Only remove if it's clearly corrupted (no spaces, no valid syntax)
-  sanitized = sanitized.replace(/mermaid\w+(?![:\s])/gi, () => {
-    // Only remove if it's not followed by valid syntax
-    return '';
-  });
-  
-  // Fix corrupted timeline patterns more carefully
-  sanitized = sanitized.replace(/timeline\w+(?![:\s])/gi, 'timeline');
-  
-  // Remove lines that contain literal markdown markers (these shouldn't be in the diagram)
-  let lines = sanitized.split('\n');
-  sanitized = lines
-    .filter(line => {
-      const trimmed = line.trim();
-      // Remove lines that are just markdown markers or contain them incorrectly
-      if (trimmed === '```' || trimmed === '```mermaid' || trimmed.startsWith('```')) {
-        return false;
+  // Strip markdown fences
+  let s = source.replace(/^```(?:mermaid)?\s*\n?|\n?```\s*$/gi, '').trim();
+
+  const lines = s.split('\n');
+  const diagramPattern = /^(graph|flowchart|timeline|sequenceDiagram|classDiagram|stateDiagram|erDiagram|journey|gantt|pie|gitGraph|sankey)/i;
+
+  let foundDiagram = false;
+  let diagramType: string | null = null;
+
+  const result: string[] = [];
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    const match = trimmed.match(diagramPattern);
+
+    if (match) {
+      // Skip duplicate declarations of same type
+      if (diagramType && match[1].toLowerCase() === diagramType.toLowerCase()) {
+        continue;
       }
-      return true;
-    })
-    .join('\n');
-  
-  // Detect and fix duplicated/corrupted content
-  // Look for patterns where the SAME diagram type appears twice at the START of lines
-  // IMPORTANT: Only match at line start to avoid false matches like "Career Journey" matching "journey"
-  const diagramTypes = ['graph', 'flowchart', 'timeline', 'sequencediagram', 'classdiagram', 'statediagram', 'erdiagram', 'journey', 'gantt', 'pie', 'gitgraph'];
-  const diagramLines = sanitized.split('\n');
-  
-  let firstDiagramType: string | null = null;
-  let duplicateDiagramLineIndex = -1;
-  
-  for (let i = 0; i < diagramLines.length; i++) {
-    const trimmedLine = diagramLines[i].trim().toLowerCase();
-    
-    // Check if this line STARTS with a diagram type declaration
-    for (const dtype of diagramTypes) {
-      // Line must be exactly the diagram type OR diagram type followed by space/direction
-      // e.g., "timeline", "graph TD", "flowchart LR"
-      if (trimmedLine === dtype || 
-          trimmedLine.startsWith(dtype + ' ') || 
-          trimmedLine.startsWith(dtype + '\t') ||
-          (trimmedLine.startsWith(dtype) && trimmedLine.length === dtype.length)) {
-        if (firstDiagramType === null) {
-          firstDiagramType = dtype;
-        } else if (dtype === firstDiagramType) {
-          // Found a duplicate of the SAME diagram type - this is corruption
-          duplicateDiagramLineIndex = i;
-        }
-        break;
-      }
+      diagramType = match[1];
+      foundDiagram = true;
     }
-    
-    if (duplicateDiagramLineIndex >= 0) break;
+
+    // Skip lines before first diagram declaration
+    if (!foundDiagram) continue;
+
+    // Skip empty lines at the very start
+    if (result.length === 0 && !trimmed) continue;
+
+    result.push(line);
   }
-  
-  // If we found a duplicate declaration of the same type, keep only the first block
-  if (duplicateDiagramLineIndex >= 0) {
-    diagramLines.splice(duplicateDiagramLineIndex);
-    sanitized = diagramLines.join('\n').trim();
+
+  // Clean up trailing empty lines
+  while (result.length > 0 && !result[result.length - 1].trim()) {
+    result.pop();
   }
-  
-  // Split into lines for minimal processing
-  // IMPORTANT: Do NOT aggressively filter lines - complex diagrams have many similar-looking lines
-  lines = sanitized.split('\n');
-  const processedLines: string[] = [];
-  
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    let trimmedLine = line.trim();
-    
-    // Skip completely empty lines (but keep single empty lines for readability)
-    if (!trimmedLine) {
-      if (processedLines.length > 0 && processedLines[processedLines.length - 1] !== '') {
-        processedLines.push('');
-      }
-      continue;
-    }
-    
-    // Remove lines that contain markdown markers (should have been removed already, but double-check)
-    if (trimmedLine.includes('```') || trimmedLine === '```mermaid') {
-      continue;
-    }
-    
-    // Remove standalone separator lines (just dashes, equals, or arrows - NOT valid Mermaid)
-    if (/^[-=]{5,}$/.test(trimmedLine)) {
-      continue;
-    }
-    
-    // DON'T remove standalone words - they might be valid node labels!
-    // Only remove lines that are clearly corrupted (contain invalid characters or patterns)
-    // Pattern: lines that look like corrupted concatenated text (no spaces, all lowercase/uppercase mix)
-    if (/^[a-z]+[A-Z][a-z]+[A-Z]/.test(trimmedLine) && !trimmedLine.match(/[\[\]{}()]/) && !trimmedLine.match(/-->/)) {
-      // This looks like corrupted concatenated text (e.g., "mermaidtimelinetitle")
-      continue;
-    }
-    
-    // Clean up timeline-specific syntax issues
-    // Fix malformed timeline title syntax
-    if (trimmedLine.match(/^timeline\s+title/i) && !trimmedLine.match(/^timeline\s+title\s+:/i)) {
-      trimmedLine = trimmedLine.replace(/^timeline\s+title\s*/i, 'title ');
-    }
-    
-    // Keep ALL other lines - don't try to "fix" or filter them
-    // Let Mermaid's parser handle the validation
-    processedLines.push(trimmedLine);
-  }
-  
-  // Join lines back together
-  sanitized = processedLines.join('\n');
-  
-  // Clean up multiple consecutive empty lines (max 2)
-  sanitized = sanitized.replace(/\n{3,}/g, '\n\n');
-  
-  // MINIMAL "sub" node fixes - only target very specific problematic patterns
-  // IMPORTANT: Do NOT aggressively replace "sub" as it breaks "subgraph" syntax
-  
-  // Only fix standalone "sub" nodes that would render as empty boxes
-  // Pattern: A line that is exactly "sub" by itself (a node with no label)
-  sanitized = sanitized.replace(/^sub$/gm, 'Subsystem');
-  
-  // Pattern: sub[] or sub[""] - empty node labels
-  sanitized = sanitized.replace(/\bsub\s*\[\s*\]/gi, 'Subsystem[Subsystem]');
-  sanitized = sanitized.replace(/\bsub\s*\[\s*["']\s*["']\s*\]/gi, 'Subsystem[Subsystem]');
-  
-  // Debug log to help diagnose rendering issues
-  if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
-    console.log('[MermaidRenderer] Sanitized source preview:', sanitized.substring(0, 500));
-  }
-  
-  return sanitized.trim();
+
+  return result.join('\n');
 }
 
 // Mermaid initialization state (singleton)

@@ -23,13 +23,14 @@
     "test:coverage": "NODE_OPTIONS='--experimental-vm-modules' jest --coverage",
     "test:agent": "node scripts/text-agent-test.js",
     "test:voice": "tsx scripts/voice-agent-test.js",
-    "generate:audio": "node scripts/generate-test-audio.js"
+    "generate:audio": "node scripts/generate-test-audio.js",
+    "kb:audit": "npx tsx scripts/kb-audit.ts",
+    "kb:audit:fast": "npx tsx scripts/kb-audit.ts --skip-gcs --skip-qdrant"
   },
   "dependencies": {
     "@fontsource/google-sans-code": "^5.2.3",
     "@fontsource/google-sans-flex": "^5.2.1",
     "@google-cloud/storage": "^7.18.0",
-    "@google-cloud/text-to-speech": "^5.8.0",
     "@google/genai": "^1.35.0",
     "@hookform/resolvers": "^5.2.2",
     "@next/third-parties": "^16.1.1",
@@ -41,8 +42,6 @@
     "gray-matter": "^4.0.3",
     "mermaid": "^11.12.2",
     "next": "16.1.1",
-    "next-intl": "^4.7.0",
-    "openai": "^6.15.0",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-hook-form": "^7.69.0",
@@ -55,7 +54,7 @@
     "zod": "^4.2.1"
   },
   "devDependencies": {
-    "@swc/helpers": "^0.5.18",
+    "@google-cloud/text-to-speech": "^6.4.0",
     "@tailwindcss/postcss": "^4",
     "@types/jest": "^29.5.14",
     "@types/node": "^22",

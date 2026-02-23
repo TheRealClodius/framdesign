@@ -2,176 +2,130 @@
 
 /**
  * CHAT SECTION COMPONENT
- * 
+ *
  * This component renders the chat interface section of the website, featuring:
  * - Interactive chat interface with user and assistant messages
  * - Streaming response support with real-time updates
  * - Markdown and Mermaid diagram rendering for assistant responses
  * - Timeout/blocking functionality for inappropriate user behavior
- * - Auto-scrolling message container
+ * - Auto-scrolling message container with dynamic scroll padding
  * - Responsive design with mobile and desktop layouts
- * 
+ * - Floating overlays for header and prompt (no sticky/fixed positioning)
+ * - Multi-state action button (VOICE / SEND / STOP / END)
+ *
  * Location: components/ChatInterface.tsx
  * Used in: app/[locale]/page.tsx (main landing page, below hero section)
  * API Endpoint: /api/chat (handles chat requests and streaming responses)
- * 
- * HEIGHT SYSTEM EXPLANATION:
- * 
- * The height is controlled through a cascading flexbox system:
- * 
+ *
+ * LAYOUT SYSTEM EXPLANATION:
+ *
+ * The chat uses a relative container with absolute-positioned overlays.
+ * No sticky headers, no form wrappers -- everything floats over a single
+ * scroll area whose padding keeps content from hiding behind the overlays.
+ *
  * NESTING STRUCTURE (Desktop):
- * ┌─────────────────────────────────────────────────┐
- * │ page.tsx: form-container (md:h-[100vh])         │ ← 100vh viewport height
- * │   ┌───────────────────────────────────────────┐ │
- * │   │ ChatInterface section (md:flex-1)        │ │ ← Takes remaining space
- * │   │   ┌────────────────────────────────────┐ │ │
- * │   │   │ HEADER (line 983)                  │ │ │ ← Fixed height
- * │   │   │ - "FRAM ASSISTANT" + Clear button  │ │ │   mb-10 (2.5rem)
- * │   │   │ - flex-shrink-0                     │ │ │   flex-shrink-0
- * │   │   └────────────────────────────────────┘ │ │
- * │   │   ┌────────────────────────────────────┐ │ │
- * │   │   │ Messages Wrapper (md:flex-1)      │ │ │ ← Flexible, fills space
- * │   │   │   ┌──────────────────────────────┐ │ │ │
- * │   │   │   │ Messages Container           │ │ │ │ ← Scrollable area
- * │   │   │   │ (md:flex-1, overflow-y-auto) │ │ │ │   md:flex-1
- * │   │   │   └──────────────────────────────┘ │ │ │
- * │   │   │   ┌──────────────────────────────┐ │ │ │
- * │   │   │   │ PROMPT BOX (line 1068)       │ │ │ │ ← Fixed height
- * │   │   │   │ - Textarea form              │ │ │ │   flex-shrink-0
- * │   │   │   │ - Auto-grows (max-h-[120px]) │ │ │ │   Auto height
- * │   │   │   │ - Voice controls below        │ │ │ │
- * │   │   │   └──────────────────────────────┘ │ │ │
- * │   │   └────────────────────────────────────┘ │ │
- * │   └───────────────────────────────────────────┘ │
- * │   ┌───────────────────────────────────────────┐ │
- * │   │ FOOTER (page.tsx line 26)                 │ │ ← Fixed height
- * │   │ - Copyright text                          │ │   pt-8 pb-9
- * │   │ - flex-shrink-0                           │ │   flex-shrink-0
- * │   └───────────────────────────────────────────┘ │
- * └─────────────────────────────────────────────────┘
- * 
- * DETAILED HEIGHT BREAKDOWN:
- * 
- * 1. PARENT CONTAINER (page.tsx line 23):
+ * ┌──────────────────────────────────────────────────────┐
+ * │ page.tsx: form-container (md:h-[100vh])              │ ← viewport height
+ * │   ┌────────────────────────────────────────────────┐ │
+ * │   │ ChatInterface <section> (md:flex-1)            │ │ ← fills space
+ * │   │   ┌──────────────────────────────────────────┐ │ │
+ * │   │   │ RELATIVE CONTAINER (flex-1 min-h-0)      │ │ │ ← positioning ctx
+ * │   │   │                                          │ │ │
+ * │   │   │   ┌── absolute inset-0 ───────────────┐ │ │ │
+ * │   │   │   │ SCROLL AREA (overflow-y-auto)     │ │ │ │ ← full-bleed scroll
+ * │   │   │   │   paddingTop: 3.5rem              │ │ │ │   (dynamic paddings)
+ * │   │   │   │   paddingBottom: dynamic          │ │ │ │
+ * │   │   │   │   ┌────────────────────────────┐  │ │ │ │
+ * │   │   │   │   │ Messages (space-y-6)       │  │ │ │ │
+ * │   │   │   │   └────────────────────────────┘  │ │ │ │
+ * │   │   │   └───────────────────────────────────┘ │ │ │
+ * │   │   │                                          │ │ │
+ * │   │   │   ┌── absolute top-3 right-0 z-20 ───┐ │ │ │
+ * │   │   │   │ FLOATING HEADER                   │ │ │ │ ← no background
+ * │   │   │   │ "+ Fresh Conversation" button     │ │ │ │   pointer-events-none
+ * │   │   │   └──────────────────────────────────┘ │ │ │   (button auto only)
+ * │   │   │                                          │ │ │
+ * │   │   │   ┌── chat-fade-top ──────────────────┐ │ │ │
+ * │   │   │   │ TOP FADE GRADIENT                 │ │ │ │ ← CSS class overlay
+ * │   │   │   └──────────────────────────────────┘ │ │ │
+ * │   │   │                                          │ │ │
+ * │   │   │   ┌── chat-fade-bottom ───────────────┐ │ │ │
+ * │   │   │   │ BOTTOM FADE GRADIENT              │ │ │ │ ← CSS class overlay
+ * │   │   │   └──────────────────────────────────┘ │ │ │
+ * │   │   │                                          │ │ │
+ * │   │   │   ┌── absolute bottom-14 z-20 ───────┐ │ │ │
+ * │   │   │   │ FLOATING PROMPT OVERLAY           │ │ │ │ ← bordered container
+ * │   │   │   │ ┌──────────────────────────────┐  │ │ │ │
+ * │   │   │   │ │ Bordered prompt container    │  │ │ │ │   max-w-[500px]
+ * │   │   │   │ │  - Textarea (max-h-[120px])  │  │ │ │ │   rounded-lg border
+ * │   │   │   │ │  - Multi-state button chin   │  │ │ │ │
+ * │   │   │   │ │    VOICE / SEND / STOP / END │  │ │ │ │
+ * │   │   │   │ └──────────────────────────────┘  │ │ │ │
+ * │   │   │   │ (or blocked-state variant)        │ │ │ │
+ * │   │   │   └──────────────────────────────────┘ │ │ │
+ * │   │   └──────────────────────────────────────────┘ │ │
+ * │   └────────────────────────────────────────────────┘ │
+ * │   ┌────────────────────────────────────────────────┐ │
+ * │   │ FOOTER (page.tsx)                              │ │ ← flex-shrink-0
+ * │   │ - Copyright text                               │ │   pt-8 pb-9
+ * │   └────────────────────────────────────────────────┘ │
+ * └──────────────────────────────────────────────────────┘
+ *
+ * DETAILED BREAKDOWN:
+ *
+ * 1. PARENT CONTAINER (page.tsx):
  *    - Mobile: No fixed height (content-driven)
- *    - Desktop: `md:h-[100vh]` - Sets container to 100% of viewport height
- *    - Desktop: `md:flex md:flex-col` - Enables flexbox column layout
- * 
- * 2. CHAT SECTION (line 982):
+ *    - Desktop: `md:h-[100vh]` with `md:flex md:flex-col`
+ *
+ * 2. CHAT SECTION (<section>):
  *    - Mobile: `h-fit` - Height fits content naturally
- *    - Desktop: `md:flex-1` - Takes up remaining space in parent flex container
- *    - Desktop: `md:flex md:flex-col` - Becomes flex container for children
- *    - Desktop: `md:min-h-0` - Critical! Allows flex children to shrink below content size
- *    - Padding: `pt-12 pb-9` (top: 3rem, bottom: 2.25rem)
- * 
- * 3. HEADER (line 983):
- *    - Contains: "FRAM ASSISTANT" text + Clear button
- *    - Height: Content height (text + button)
- *    - Spacing: `mb-10` (margin-bottom: 2.5rem)
- *    - Behavior: `flex-shrink-0` - Never shrinks, maintains fixed height
- *    - To edit header height: Change `mb-10` or add explicit height class
- * 
- * 4. MESSAGES WRAPPER (line 994):
- *    - Mobile: `h-[600px]` - Fixed 600px height
- *    - Desktop: `md:flex-1` - Fills available space in chat section
- *    - Desktop: `md:min-h-0` - Allows proper scrolling behavior
- *    - Contains: Messages container + Prompt box + Voice controls
- * 
- * 5. MESSAGES CONTAINER (line 995):
- *    - Mobile: `h-[600px]` - Fixed 600px height with scroll
- *    - Desktop: `md:flex-1` - Fills available space
- *    - Desktop: `md:min-h-0` - Enables overflow scrolling
- *    - Has `overflow-y-auto` for scrollable content
- *    - Spacing: `mb-2` (margin-bottom: 0.5rem)
- * 
- * 6. PROMPT BOX (line 1068):
- *    - Contains: Textarea + Send button + Voice controls
- *    - Height: Auto-growing textarea (max-h-[120px])
- *    - Behavior: `flex-shrink-0` - Never shrinks, maintains content height
- *    - Spacing: Voice controls have `mt-4` (margin-top: 1rem)
- *    - To edit prompt box height: Change textarea `max-h-[120px]` or add padding
- * 
- * 7. FOOTER (page.tsx line 26):
- *    - Contains: Copyright text
- *    - Height: Content height + padding
- *    - Padding: `pt-8 pb-9` (top: 2rem, bottom: 2.25rem)
- *    - Behavior: `flex-shrink-0` - Never shrinks, maintains fixed height
- *    - To edit footer height: Change `pt-8 pb-9` padding values
- * 
- * KEY CONCEPT: `min-h-0` is essential for flexbox scrolling!
- * Without it, flex items default to `min-height: auto`, which prevents them
- * from shrinking below their content size, breaking the scroll behavior.
- * 
- * HOW TO EDIT HEIGHTS:
- * - Header height: Change `mb-10` on line 983, or add explicit height class
- * - Prompt box height: Change textarea `max-h-[120px]` on line 1081
- * - Footer height: Change `pt-8 pb-9` on page.tsx line 26
- * - Messages area: Automatically fills remaining space via flex-1
- * 
- * BOTTOM SECTION NESTING EXPLANATION (Desktop):
- * 
- * The "bottom section" consists of TWO separate parts:
- * 
- * PART 1: Inside ChatInterface (lines 1131-1257)
- * ┌─────────────────────────────────────────────┐
- * │ Messages Wrapper (line 1057)                │ ← md:flex-1 (flexible)
- * │   ┌───────────────────────────────────────┐ │
- * │   │ Messages Container (line 1058)        │ │ ← md:flex-1 (scrollable)
- * │   │ [Scrollable messages area]            │ │
- * │   └───────────────────────────────────────┘ │
- * │   ┌───────────────────────────────────────┐ │
- * │   │ PROMPT BOX (line 1131)               │ │ ← flex-shrink-0
- * │   │ - Form wrapper                       │ │   (fixed height)
- * │   │   - Textarea (max-h-[120px])         │ │
- * │   │   - Send button                      │ │
- * │   └───────────────────────────────────────┘ │
- * │   ┌───────────────────────────────────────┐ │
- * │   │ VOICE CONTROLS (line 1159)          │ │ ← mt-4 spacing
- * │   │ - Voice error display (conditional)  │ │   (content-driven)
- * │   │ - Audio disabled notice (conditional)│ │
- * │   │ - Voice button                      │ │
- * │   └───────────────────────────────────────┘ │
- * └─────────────────────────────────────────────┘
- * 
- * PART 2: Outside ChatInterface (page.tsx line 26)
- * ┌─────────────────────────────────────────────┐
- * │ FOOTER (page.tsx line 26)                  │ ← flex-shrink-0
- * │ - Copyright text                           │   pt-8 pb-9
- * │ - Sibling to ChatInterface                 │   (fixed height)
- * └─────────────────────────────────────────────┘
- * 
- * CURRENT STRUCTURE:
- * - Messages Wrapper uses `md:flex-1` - fills available space
- * - Messages Container uses `md:flex-1` - scrollable, fills space
- * - Prompt Box uses `flex-shrink-0` - fixed height (content-driven)
- * - Voice Controls use `mt-4` - spacing, content-driven height
- * - Footer uses `flex-shrink-0 pt-8 pb-9` - fixed height
- * 
- * TO MODIFY ENTIRE BOTTOM SECTION HEIGHT ON DESKTOP:
- * 
- * Option 1: Wrap prompt box + voice controls in a container
- *   - Add a wrapper div around lines 1131-1257
- *   - Give it `md:h-[XXX]` (e.g., `md:h-32` for 128px)
- *   - This controls prompt box + voice controls together
- *   - Footer height is separate (modify in page.tsx)
- * 
- * Option 2: Set explicit heights on individual components
- *   - Prompt box: Add `md:h-[XXX]` to form (line 1131)
- *   - Voice controls: Add `md:h-[XXX]` to voice controls div (line 1159)
- *   - Footer: Change `pt-8 pb-9` in page.tsx (line 26)
- * 
- * Option 3: Control via Messages Wrapper
- *   - The Messages Wrapper (line 1057) uses `md:flex-1`
- *   - You could add `md:max-h-[XXX]` to limit its max height
- *   - This would indirectly control bottom section space
- * 
- * RECOMMENDED APPROACH:
- * To control the entire bottom section (prompt + voice + footer):
- * 1. Wrap prompt box + voice controls: Add wrapper with `md:h-[XXX]`
- * 2. Set footer height: Modify `pt-8 pb-9` in page.tsx
- * 3. Total bottom height = wrapper height + footer height
+ *    - Desktop: `md:flex-1 md:flex md:flex-col md:min-h-0`
+ *    - Padding: `pt-12 md:pt-0 pb-0`
+ *
+ * 3. RELATIVE CONTAINER:
+ *    - `relative flex-1 min-h-0 h-[600px] md:h-auto`
+ *    - Establishes the positioning context for all absolute children
+ *    - Mobile: fixed 600px height; Desktop: fills available flex space
+ *
+ * 4. SCROLL AREA (absolute inset-0):
+ *    - `absolute inset-0 overflow-y-auto overflow-x-hidden`
+ *    - paddingTop: 3.5rem (space for floating header)
+ *    - paddingBottom: dynamically computed from promptContainerRef height
+ *      (updated via useEffect whenever input or prompt container resizes)
+ *    - Contains all chat messages in a `space-y-6` wrapper
+ *
+ * 5. FLOATING HEADER (absolute top-3 right-0 z-20):
+ *    - "+ Fresh Conversation" button, right-aligned
+ *    - No background, no backdrop-blur -- text only
+ *    - Parent is `pointer-events-none`, button is `pointer-events-auto`
+ *
+ * 6. FADE GRADIENTS:
+ *    - `.chat-fade-top` / `.chat-fade-bottom` CSS classes
+ *    - Light variants: `.chat-fade-top-light` / `.chat-fade-bottom-light`
+ *    - Purely decorative; they sit above the scroll area (no pointer-events)
+ *
+ * 7. FLOATING PROMPT OVERLAY (absolute bottom-14 z-20):
+ *    - Bordered container: `max-w-[500px] mx-auto rounded-lg border p-3`
+ *    - Contains textarea + multi-state button in a "chin" row
+ *    - Multi-state button logic (single <button>, label changes):
+ *        input.trim()  => "SEND"  (submits message)
+ *        isLoading      => "STOP"  (cancels generation)
+ *        isVoiceMode    => "END"   (ends voice session)
+ *        default        => "VOICE" (starts voice session)
+ *    - Blocked state shows a different variant with blocked/budget message
+ *    - Voice error and audio-disabled notices float above the container
+ *    - promptContainerRef tracks height for dynamic scroll padding
+ *
+ * 8. FOOTER (page.tsx):
+ *    - Copyright text, `flex-shrink-0 pt-8 pb-9`
+ *
+ * KEY CONCEPTS:
+ * - `min-h-0` on flex containers is essential for scrolling inside flex layouts.
+ * - Scroll padding is dynamically computed so messages never hide behind the
+ *   floating prompt overlay, even as the textarea grows (max-h-[120px]).
+ * - The fade gradients use CSS classes defined in globals, not inline styles.
  */
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import MarkdownWithMermaid from "./MarkdownWithMermaid";
 import {
   generateMessageId,
@@ -557,6 +511,14 @@ export default function ChatInterface() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const promptContainerRef = useRef<HTMLDivElement>(null);
+
+  // Detect user's IANA timezone once (e.g. "Europe/Bucharest")
+  const userTimezone = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []);
+
+  // Keep a ref to latest messages to avoid stale closures in async handlers
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
 
   // Suggestion image hover state
   const [hoveredSuggestion, setHoveredSuggestion] = useState<{
@@ -709,7 +671,13 @@ export default function ChatInterface() {
       textareaRef.current.style.height = "auto";
       textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
     }
-  }, [input]);
+    // Update scroll area bottom padding when prompt height changes
+    if (promptContainerRef.current && messagesContainerRef.current) {
+      const promptHeight = promptContainerRef.current.offsetHeight;
+      // bottom-14 (3.5rem ≈ 56px) inset + prompt height + 16px breathing room
+      messagesContainerRef.current.style.paddingBottom = `${promptHeight + 56 + 16}px`;
+    }
+  }, [input, timeoutUntil, budgetExhausted]);
 
   // Preload audio elements on mount for better mobile compatibility
   useEffect(() => {
@@ -1186,6 +1154,7 @@ export default function ChatInterface() {
         });
       }
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- Handlers use functional state updaters and refs, so [] deps is intentional and correct
   }, []);
 
   // Monitor timeout expiration
@@ -1233,10 +1202,11 @@ export default function ChatInterface() {
         let streamedContent = "";
 
       await streamChatResponse(
-        { 
-          messages: requestMessages, 
+        {
+          messages: requestMessages,
           timeoutExpired: false,
-          userId: getUserId()
+          userId: getUserId(),
+          timezone: userTimezone
         },
           (chunk) => {
             streamedContent += chunk;
@@ -1336,10 +1306,11 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
       let fixedContent = "";
 
       await streamChatResponse(
-        { 
-          messages: fixMessages, 
+        {
+          messages: fixMessages,
           timeoutExpired: false,
-          userId: getUserId()
+          userId: getUserId(),
+          timezone: userTimezone
         },
         (chunk) => {
           fixedContent += chunk;
@@ -1411,10 +1382,6 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
       return;
     }
 
-    // Unlock audio context during user interaction (required for mobile)
-    // This ensures sounds play if agent starts voice session in response
-    unlockAudio();
-
     const userMessage = input.trim();
     setInput("");
     setMessages((prev) => [...prev, { id: generateMessageId(), role: "user", content: userMessage, timestamp: Date.now() }]);
@@ -1453,7 +1420,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
 
       try {
         const response = await streamChatResponse(
-          { messages: requestMessages, timeoutExpired: expired || false },
+          { messages: requestMessages, timeoutExpired: expired || false, timezone: userTimezone },
           (chunk) => {
             if (!streamCompleted) {
               streamedContent += chunk;
@@ -1510,18 +1477,18 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
             shouldStartNewTurn.current = true;
             console.log('🔴 FLAG SET: Agent starting voice mode (streaming) - shouldStartNewTurn = TRUE');
             
-            // Prepare conversation history for context injection
-            const conversationHistory = messages.map(m => ({
+            // Use messagesRef for latest state in async context
+            const conversationHistory = messagesRef.current.map(m => ({
               role: m.role,
               content: m.content
             }));
-            
+
             // Start voice session with pending request if specified
             const pendingRequest = response.pendingRequest || null;
             if (pendingRequest) {
               console.log(`📌 Voice session starting with pending request: "${pendingRequest}"`);
             }
-            await voiceService.start(conversationHistory, pendingRequest, getUserId());
+            await voiceService.start(conversationHistory, pendingRequest, getUserId(), userTimezone);
             // Session started event will update state
           } catch (error) {
             console.error('Error starting voice session:', error);
@@ -1600,10 +1567,11 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
         }
 
         // Fallback to JSON request
-        const data = await sendChatRequest({ 
-          messages: requestMessages, 
+        const data = await sendChatRequest({
+          messages: requestMessages,
           timeoutExpired: expired || false,
-          userId: getUserId()
+          userId: getUserId(),
+          timezone: userTimezone
         });
 
         // Check if Fram decided to timeout the user
@@ -1627,18 +1595,18 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
             shouldStartNewTurn.current = true;
             console.log('🔴 FLAG SET: Agent starting voice mode (JSON) - shouldStartNewTurn = TRUE');
             
-            // Prepare conversation history for context injection
-            const conversationHistory = messages.map(m => ({
+            // Use messagesRef for latest state in async context
+            const conversationHistory = messagesRef.current.map(m => ({
               role: m.role,
               content: m.content
             }));
-            
+
             // Start voice session with pending request if specified
             const pendingRequest = data.pendingRequest || null;
             if (pendingRequest) {
               console.log(`📌 Voice session starting with pending request: "${pendingRequest}"`);
             }
-            await voiceService.start(conversationHistory, pendingRequest, getUserId());
+            await voiceService.start(conversationHistory, pendingRequest, getUserId(), userTimezone);
             // Session started event will update state
           } catch (error) {
             console.error('Error starting voice session:', error);
@@ -1663,7 +1631,10 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
     } catch (error) {
       console.error("Chat error:", error);
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      
+
+      // Restore user input so they don't lose their message on error
+      setInput(userMessage);
+
       setMessages((prev) => [
         ...prev,
         { id: generateMessageId(), role: "assistant", content: `ERROR: ${errorMessage}. PLEASE TRY AGAIN.` }
@@ -1711,30 +1682,19 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
   };
 
   return (
-    <section className={`w-full max-w-[28rem] md:max-w-[950px] mx-auto px-4 pt-12 md:pt-0 pb-0 md:pb-0 h-fit md:flex-1 md:flex md:flex-col md:min-h-0 overflow-x-hidden transition-colors duration-300 ${isDark ? 'bg-gray-900' : 'bg-white'}`}>
-      {/* Messages wrapper - extends to top on desktop */}
-      <div className="flex flex-col h-[600px] md:flex-1 md:min-h-0 font-mono text-[0.875rem]">
-        <div ref={messagesContainerRef} className={`h-[600px] md:flex-1 md:min-h-0 overflow-y-auto overflow-x-hidden mb-2 scrollbar-boxy ${isDark ? 'scrollbar-dark' : ''}`}>
-          {/* Header - sticky at top of scroll area */}
-          <div className={`mb-10 md:mb-0 sticky top-0 z-10 backdrop-blur-sm md:py-6 md:-mx-4 md:px-4 text-center flex-shrink-0 flex items-center justify-center gap-4 transition-colors duration-300 ${isDark ? 'bg-gray-900/80' : 'bg-white/80'}`}>
-            <p className={`text-[0.75rem] font-mono tracking-wider transition-colors duration-300 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>FRAM ASSISTANT</p>
-            <button
-              onClick={handleClearChat}
-              className={`text-[0.7rem] font-mono uppercase tracking-wider transition-colors underline ${isDark ? 'text-gray-500 hover:text-gray-300' : 'text-gray-400 hover:text-gray-600'}`}
-              title="Clear chat history"
-            >
-              Clear
-            </button>
-          </div>
-          
+    <section className={`w-full max-w-[28rem] md:max-w-[950px] mx-auto pt-0 pb-0 md:pb-0 h-fit md:h-[100vh] md:flex md:flex-col md:min-h-0 overflow-x-hidden transition-colors duration-300 ${isDark ? 'bg-gray-900' : 'bg-white'}`}>
+      {/* Relative container for absolute-positioned overlays */}
+      <div className="relative flex-1 min-h-0 h-[110vh] md:h-auto font-mono text-[0.875rem]">
+        {/* Scroll area */}
+        <div ref={messagesContainerRef} className={`absolute inset-0 overflow-y-auto overflow-x-hidden pt-36 scrollbar-boxy ${isDark ? 'scrollbar-dark' : ''}`}>
           {/* Messages content */}
-          <div className="space-y-6">
+          <div className="space-y-6 px-4">
           {messages.map((message, index) => {
             // Skip rendering empty streaming assistant messages - they'll be shown via loading indicator
             if (message.role === "assistant" && message.streaming && !message.content.trim()) {
               return null;
             }
-            
+
             return (
               <div
                 key={message.id || index}
@@ -1864,6 +1824,39 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
                                     });
                                   }
                                 }}
+                                onFocus={async (e) => {
+                                  if (isLoading || isVoiceMode || isBlocked) return;
+                                  const buttonRect = e.currentTarget.getBoundingClientRect();
+                                  activeHoverKeyRef.current = suggestion;
+                                  let imageInfo = suggestionImageCache.current.get(suggestion);
+                                  if (!imageInfo) {
+                                    try {
+                                      imageInfo = await getSuggestionImage(suggestion);
+                                      suggestionImageCache.current.set(suggestion, imageInfo ?? null);
+                                      if (imageInfo) {
+                                        const img = new Image();
+                                        img.src = imageInfo.url;
+                                      }
+                                    } catch {
+                                      suggestionImageCache.current.set(suggestion, null);
+                                      return;
+                                    }
+                                  }
+                                  if (activeHoverKeyRef.current === suggestion && imageInfo) {
+                                    setHoveredSuggestion({
+                                      index: idx,
+                                      imagePath: imageInfo.url,
+                                      alt: imageInfo.alt,
+                                      buttonRect
+                                    });
+                                  }
+                                }}
+                                onBlur={() => {
+                                  if (activeHoverKeyRef.current === suggestion) {
+                                    activeHoverKeyRef.current = null;
+                                  }
+                                  setHoveredSuggestion(null);
+                                }}
                                 onMouseLeave={() => {
                                   if (activeHoverKeyRef.current === suggestion) {
                                     activeHoverKeyRef.current = null;
@@ -1890,7 +1883,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
             );
           })}
           {isLoading && (
-             <div className="flex justify-start">
+             <div className="flex justify-start" role="status" aria-live="polite">
                <div className="max-w-[85%] text-left">
                  <p className={`uppercase text-[0.75rem] mb-1 tracking-wider transition-colors duration-300 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>FRAM</p>
                  {loadingStatus ? (
@@ -1911,64 +1904,60 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
           </div>
         </div>
 
+        {/* Top fade gradient */}
+        <div className="pointer-events-none absolute top-0 left-0 right-0 z-10 h-12" style={{ background: `linear-gradient(to bottom, ${isDark ? 'rgb(17 24 39)' : 'rgb(255 255 255)'}, ${isDark ? 'rgb(17 24 39 / 0)' : 'rgb(255 255 255 / 0)'})` }} />
+
+        {/* Bottom fade gradient */}
+        <div className="pointer-events-none absolute bottom-0 left-0 right-0 z-10 h-[120px]" style={{ background: `linear-gradient(to top, ${isDark ? 'rgb(17 24 39)' : 'rgb(255 255 255)'}, ${isDark ? 'rgb(17 24 39 / 0)' : 'rgb(255 255 255 / 0)'})` }} />
+
+        {/* Floating header — right-aligned, suggestion-style box */}
+        <div className="absolute top-25 right-2 z-20 pointer-events-none">
+          <button
+            onClick={handleClearChat}
+            className={`pointer-events-auto text-[0.75rem] font-mono uppercase tracking-wider transition-colors px-3 py-1.5 border rounded shadow-md ${isDark ? 'text-gray-400 hover:text-gray-100 border-gray-600 hover:border-gray-400 bg-gray-950 shadow-black/40' : 'text-gray-400 hover:text-black border-gray-300 hover:border-black bg-gray-50 shadow-gray-400/50'}`}
+          >
+            + Fresh Conversation
+          </button>
+        </div>
+
+        {/* Floating prompt area */}
         {isBlocked ? (
-          <div className={`py-4 flex-shrink-0 transition-colors duration-300 ${isDark ? 'border-t border-gray-700' : 'border-t border-gray-200'}`}>
-            <p className={`text-[0.8rem] leading-relaxed mb-4 transition-colors duration-300 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-              {budgetExhausted ? BUDGET_EXHAUSTED_MESSAGE : BLOCKED_MESSAGE}
-            </p>
-            {budgetExhausted && (
-              <div className="flex justify-start">
-                <a
-                  href="mailto:andrei@fram.design?subject=Partner%20Account%20Request&body=Hi%20Andrei%2C%0A%0AI've%20reached%20my%20conversation%20limit%20with%20Fram%20and%20would%20like%20to%20upgrade%20to%20a%20partner%20account.%0A%0AThanks!"
-                  className={`text-[0.75rem] font-mono uppercase tracking-wider transition-colors px-3 py-1.5 border rounded ${isDark ? 'text-gray-400 hover:text-gray-100 border-gray-600 hover:border-gray-400' : 'text-gray-400 hover:text-black border-gray-300 hover:border-black'}`}
-                >
-                  Send Email
-                </a>
-              </div>
-            )}
-            {process.env.NODE_ENV === 'development' && !budgetExhausted && (
-              <div className="text-center">
-                <button
-                  onClick={resetTimeout}
-                  className={`text-[0.7rem] uppercase tracking-wider underline transition-colors duration-300 ${isDark ? 'text-gray-500 hover:text-gray-300' : 'text-gray-400 hover:text-gray-600'}`}
-                >
-                  Reset timeout (dev)
-                </button>
-              </div>
-            )}
+          <div ref={promptContainerRef} className="absolute bottom-14 left-0 right-0 z-20 px-2">
+            <div className={`max-w-[500px] mx-auto w-full rounded-lg border p-4 transition-colors duration-300 ${
+              isDark
+                ? 'bg-gray-950 border-gray-700'
+                : 'bg-gray-50 border-gray-300'
+            }`}>
+              <p className={`text-[0.8rem] leading-relaxed mb-4 transition-colors duration-300 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                {budgetExhausted ? BUDGET_EXHAUSTED_MESSAGE : BLOCKED_MESSAGE}
+              </p>
+              {budgetExhausted && (
+                <div className="flex justify-start">
+                  <a
+                    href="mailto:andrei@fram.design?subject=Partner%20Account%20Request&body=Hi%20Andrei%2C%0A%0AI've%20reached%20my%20conversation%20limit%20with%20Fram%20and%20would%20like%20to%20upgrade%20to%20a%20partner%20account.%0A%0AThanks!"
+                    className={`text-[0.75rem] font-mono uppercase tracking-wider transition-colors px-3 py-1.5 border rounded ${isDark ? 'text-gray-400 hover:text-gray-100 border-gray-600 hover:border-gray-400' : 'text-gray-400 hover:text-black border-gray-300 hover:border-black'}`}
+                  >
+                    Send Email
+                  </a>
+                </div>
+              )}
+              {process.env.NODE_ENV === 'development' && !budgetExhausted && (
+                <div className="text-center">
+                  <button
+                    onClick={resetTimeout}
+                    className={`text-[0.7rem] uppercase tracking-wider underline transition-colors duration-300 ${isDark ? 'text-gray-500 hover:text-gray-300' : 'text-gray-400 hover:text-gray-600'}`}
+                  >
+                    Reset timeout (dev)
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         ) : (
-          <div className="flex-shrink-0">
-            <form onSubmit={handleSubmit} className="relative max-w-[500px] mx-auto w-full">
-              <textarea
-                ref={textareaRef}
-                rows={1}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSubmit();
-                  }
-                }}
-                disabled={isVoiceMode}
-                className={`w-full bg-transparent py-2 pr-12 focus:outline-none transition-colors rounded-none resize-none overflow-y-auto max-h-[120px] disabled:opacity-50 disabled:cursor-not-allowed ${isDark ? 'border-b border-gray-600 focus:border-gray-400 placeholder:text-gray-600 text-gray-100' : 'border-b border-gray-300 focus:border-black placeholder:text-gray-300 text-black'}`}
-                placeholder={isVoiceMode ? "Voice mode active..." : "Type your message..."}
-              />
-              <button
-                type="submit"
-                disabled={isLoading || isVoiceMode || !input.trim()}
-                className={`absolute right-0 top-2 text-[0.75rem] uppercase tracking-wider transition-colors ${isDark ? 'text-gray-100 disabled:text-gray-600 hover:text-gray-300' : 'text-black disabled:text-gray-300 hover:text-gray-600'}`}
-              >
-                Send
-              </button>
-            </form>
-            
-            {/* Voice Mode Controls */}
-            <div className="flex flex-col mt-4 space-y-2">
-            {/* Voice Error Display */}
+          <div ref={promptContainerRef} className="absolute bottom-14 left-0 right-0 z-20 px-2">
+            {/* Voice Error Display — above prompt container */}
             {voiceError && (
-              <div className={`w-full max-w-[500px] mx-auto px-4 py-2 rounded text-[0.75rem] font-mono ${
+              <div className={`max-w-[500px] mx-auto mb-2 px-4 py-2 rounded text-[0.75rem] font-mono ${
                 isReconnecting
                   ? isDark
                     ? 'bg-yellow-900/30 border border-yellow-700/50 text-yellow-300'
@@ -1984,118 +1973,152 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
               </div>
             )}
 
-            {/* Audio Playback Disabled Notice */}
+            {/* Audio Playback Disabled Notice — above prompt container */}
             {audioPlaybackDisabled && isVoiceMode && (
-              <div className={`w-full max-w-[500px] mx-auto px-4 py-2 rounded text-[0.75rem] font-mono ${isDark ? 'bg-yellow-900/30 border border-yellow-700/50 text-yellow-300' : 'bg-yellow-50 border border-yellow-200 text-yellow-700'}`}>
+              <div className={`max-w-[500px] mx-auto mb-2 px-4 py-2 rounded text-[0.75rem] font-mono ${isDark ? 'bg-yellow-900/30 border border-yellow-700/50 text-yellow-300' : 'bg-yellow-50 border border-yellow-200 text-yellow-700'}`}>
                 <p className="uppercase text-[0.7rem] mb-1 tracking-wider">Audio Disabled</p>
                 <div>Audio playback unavailable. Transcripts will still be displayed.</div>
               </div>
             )}
-            
-            {/* Voice Button Container */}
-            <div className="max-w-[500px] mx-auto w-full flex justify-end">
-              <button
-              onClick={async () => {
-                // Unlock audio context during user interaction (required for mobile)
-                await unlockAudio();
-                
-                if (isVoiceMode) {
-                  // End voice mode
-                  try {
-                    if (!hasShownEndCallSummary.current) {
-                      hasShownEndCallSummary.current = true;
-                      const endCallMessage = buildEndCallMessage(voiceSessionStartTime.current);
-                      setMessages((prev) => [
-                        ...prev,
-                        { id: generateMessageId(), role: "assistant", content: endCallMessage }
-                      ]);
-                    }
-                    
-                    // Play end sound effect
-                    playSoundEffect('/sounds/end.mp3');
-                    
-                    // Reset session start time
-                    voiceSessionStartTime.current = null;
-                    
-                    await voiceService.stop();
-                    // Transcripts will be integrated via the 'complete' event handler
-                  } catch (error) {
-                    console.error('Error stopping voice session:', error);
-                    setIsVoiceMode(false);
-                    setIsVoiceLoading(false);
-                  } finally {
-                    // Reset session start time
-                    voiceSessionStartTime.current = null;
+
+            {/* Bordered prompt container */}
+            <div className={`max-w-[500px] mx-auto w-full rounded-lg border p-3 shadow-md transition-colors duration-300 ${
+              isDark
+                ? 'bg-gray-950 border-gray-700 shadow-black/40 focus-within:border-blue-500'
+                : 'bg-gray-50 border-gray-300 shadow-gray-400/50 focus-within:border-blue-500'
+            }`}>
+              {/* Textarea */}
+              <textarea
+                ref={textareaRef}
+                rows={1}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSubmit();
                   }
-                } else {
-                  // Start voice mode
-                  try {
-                    setIsVoiceLoading(true);
-                    
-                    // User manually starting voice - next transcript should be a new message
-                    shouldStartNewTurn.current = true;
-                    console.log('🔴 FLAG SET: User starting voice mode - shouldStartNewTurn = TRUE');
-                    
-                    // Prepare conversation history for context injection
-                    const conversationHistory = messages.map(m => ({
-                      role: m.role,
-                      content: m.content
-                    }));
-                    
-                    // Start voice session
-                    await voiceService.start(conversationHistory);
-                    // Session started event will update state
-                  } catch (error) {
-                    console.error('Error starting voice session:', error);
-                    setIsVoiceLoading(false);
-                    setIsVoiceMode(false);
-                    
-                    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-                    let userFriendlyMessage = errorMessage;
-                    
-                    // Provide specific guidance based on error type
-                    if (errorMessage.includes('permission') || errorMessage.includes('denied')) {
-                      userFriendlyMessage = 'Microphone permission denied. Please grant microphone access in your browser settings and try again.';
-                    } else if (errorMessage.includes('WebSocket') || errorMessage.includes('connection')) {
-                      userFriendlyMessage = 'Could not connect to voice server. Please check your internet connection and try again.';
-                    } else if (errorMessage.includes('Invalid WebSocket URL')) {
-                      userFriendlyMessage = 'Voice server not configured. Please contact support.';
-                    }
-                    
-                    setMessages((prev) => [
-                      ...prev,
-                      { 
-                        id: generateMessageId(), 
-                        role: "assistant", 
-                        content: `VOICE ERROR: ${userFriendlyMessage}. YOU CAN CONTINUE USING TEXT CHAT.` 
+                }}
+                disabled={isVoiceMode}
+                aria-label="Chat message input"
+                className={`w-full bg-transparent focus:outline-none resize-none overflow-y-auto max-h-[120px] text-[0.875rem] ${
+                  isDark
+                    ? 'placeholder:text-gray-600 text-gray-100'
+                    : 'placeholder:text-gray-400 text-black'
+                }`}
+                placeholder={isVoiceMode ? "Voice mode active..." : "Type your message..."}
+              />
+
+              {/* Chin — right-aligned multi-state button */}
+              <div className="flex justify-end mt-2">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (isLoading) {
+                      // Stop state — cancel generation (no abort controller yet, fallback to clearing loading state)
+                      setIsLoading(false);
+                      setLoadingStatus(null);
+                    } else if (input.trim()) {
+                      // Send state — submit message
+                      handleSubmit();
+                    } else {
+                      // Voice state — toggle voice
+                      await unlockAudio();
+
+                      if (isVoiceMode) {
+                        // End voice mode
+                        try {
+                          if (!hasShownEndCallSummary.current) {
+                            hasShownEndCallSummary.current = true;
+                            const endCallMessage = buildEndCallMessage(voiceSessionStartTime.current);
+                            setMessages((prev) => [
+                              ...prev,
+                              { id: generateMessageId(), role: "assistant", content: endCallMessage }
+                            ]);
+                          }
+
+                          playSoundEffect('/sounds/end.mp3');
+                          voiceSessionStartTime.current = null;
+
+                          await voiceService.stop();
+                        } catch (error) {
+                          console.error('Error stopping voice session:', error);
+                          setIsVoiceMode(false);
+                          setIsVoiceLoading(false);
+                        } finally {
+                          voiceSessionStartTime.current = null;
+                        }
+                      } else {
+                        // Start voice mode
+                        try {
+                          setIsVoiceLoading(true);
+
+                          shouldStartNewTurn.current = true;
+                          console.log('🔴 FLAG SET: User starting voice mode - shouldStartNewTurn = TRUE');
+
+                          const conversationHistory = messagesRef.current.map(m => ({
+                            role: m.role,
+                            content: m.content
+                          }));
+
+                          await voiceService.start(conversationHistory, null, undefined, userTimezone);
+                        } catch (error) {
+                          console.error('Error starting voice session:', error);
+                          setIsVoiceLoading(false);
+                          setIsVoiceMode(false);
+
+                          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+                          let userFriendlyMessage = errorMessage;
+
+                          if (errorMessage.includes('permission') || errorMessage.includes('denied')) {
+                            userFriendlyMessage = 'Microphone permission denied. Please grant microphone access in your browser settings and try again.';
+                          } else if (errorMessage.includes('WebSocket') || errorMessage.includes('connection')) {
+                            userFriendlyMessage = 'Could not connect to voice server. Please check your internet connection and try again.';
+                          } else if (errorMessage.includes('Invalid WebSocket URL')) {
+                            userFriendlyMessage = 'Voice server not configured. Please contact support.';
+                          }
+
+                          setMessages((prev) => [
+                            ...prev,
+                            {
+                              id: generateMessageId(),
+                              role: "assistant",
+                              content: `VOICE ERROR: ${userFriendlyMessage}. YOU CAN CONTINUE USING TEXT CHAT.`
+                            }
+                          ]);
+                        }
                       }
-                    ]);
-                  }
-                }
-              }}
-              disabled={isVoiceLoading || isLoading}
-              className={`text-[0.75rem] uppercase tracking-wider transition-colors ${
-                isVoiceMode
-                  ? isDark
-                    ? "text-red-400 hover:text-red-300"
-                    : "text-red-600 hover:text-red-700"
-                  : isDark
-                    ? "text-gray-100 hover:text-gray-300"
-                    : "text-black hover:text-gray-600"
-              } ${isVoiceLoading || isLoading ? "opacity-50 cursor-not-allowed" : ""}`}
-            >
-              {isVoiceLoading ? (
-                "Starting..."
-              ) : isVoiceMode ? (
-                "END"
-              ) : (
-                "VOICE"
-              )}
-              </button>
-            </div>
+                    }
+                  }}
+                  disabled={isVoiceLoading}
+                  className={`relative text-[0.75rem] font-mono uppercase tracking-wider transition-colors h-5 flex items-center after:absolute after:-inset-3 after:content-[''] ${
+                    isLoading
+                      ? isDark ? 'text-red-400 hover:text-red-300' : 'text-red-600 hover:text-red-700'
+                      : input.trim()
+                        ? isDark ? 'text-gray-100 hover:text-gray-300' : 'text-black hover:text-gray-600'
+                        : isVoiceMode
+                          ? isDark ? 'text-red-400 hover:text-red-300' : 'text-red-600 hover:text-red-700'
+                          : isDark ? 'text-gray-100 hover:text-gray-300' : 'text-black hover:text-gray-600'
+                  } ${isVoiceLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  aria-label={isLoading ? 'Stop generating' : input.trim() ? 'Send message' : isVoiceMode ? 'End voice' : 'Start voice'}
+                >
+                  {isLoading ? 'STOP' : input.trim() ? 'SEND' : isVoiceLoading ? 'STARTING...' : isVoiceMode ? 'END' : (
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+                      <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                      <line x1="12" x2="12" y1="19" y2="22" />
+                    </svg>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         )}
+
+        {/* Copyright — centered between prompt bottom edge and container bottom */}
+        <div className={`absolute bottom-5 left-0 right-0 z-10 text-center text-[10px] font-mono pointer-events-none transition-colors duration-300 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+          <p>&copy; {new Date().getFullYear()} FRAM DESIGN. All rights reserved.</p>
+        </div>
       </div>
 
       {/* Suggestion image hover popup */}

@@ -28,6 +28,7 @@ import {
   recordRegistryLoadTime,
   recordResponseMetrics
 } from './metrics.js';
+import { emitToolEvent } from './tool-events.js';
 import { toolMemoryStore } from './tool-memory-store.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -257,15 +258,17 @@ class ToolRegistry {
    * Returns pre-computed schemas from build step (NO runtime conversion)
    *
    * @param {string} provider - 'openai' or 'geminiNative'
+   * @param {string|null} mode - Filter by allowedModes ('text', 'voice', or null for all)
    * @returns {Array} - Array of provider-specific tool schemas
    */
-  getProviderSchemas(provider = 'openai') {
+  getProviderSchemas(provider = 'openai', mode = null) {
     if (provider !== 'openai' && provider !== 'geminiNative') {
       throw new Error(`Unsupported provider: ${provider}`);
     }
 
     const schemas = [];
     for (const tool of this.tools.values()) {
+      if (mode && !tool.allowedModes.includes(mode)) continue;
       if (tool.providerSchemas && tool.providerSchemas[provider]) {
         schemas.push(tool.providerSchemas[provider]);
       }
@@ -442,7 +445,13 @@ class ToolRegistry {
         originalArgs: executionContext.args,
         errors: validator.errors
       });
-      
+
+      emitToolEvent('validation_failure', {
+        toolId,
+        message: `Invalid parameters: ${errors}`,
+        details: { filteredArgs, validationErrors: validator.errors }
+      });
+
       recordToolExecution(toolId, duration, false);
       recordError(toolId, ErrorType.VALIDATION);
       return createResponse(toolId, false, {
@@ -539,6 +548,11 @@ class ToolRegistry {
       // Check for budget violation
       if (result.meta.duration > tool.latencyBudgetMs) {
         recordBudgetViolation(toolId, result.meta.duration, tool.latencyBudgetMs);
+        emitToolEvent('budget_violation', {
+          toolId,
+          message: `Latency ${result.meta.duration}ms exceeded budget ${tool.latencyBudgetMs}ms`,
+          details: { duration: result.meta.duration, budget: tool.latencyBudgetMs }
+        });
       }
 
       return result;
@@ -549,6 +563,17 @@ class ToolRegistry {
       // Handler threw an exception
       if (error instanceof ToolError) {
         // Expected domain error
+        emitToolEvent('tool_error', {
+          toolId,
+          message: error.message,
+          details: {
+            errorType: error.type,
+            retryable: error.retryable,
+            duration,
+            handlerDetails: error.details
+          }
+        });
+
         const errorResponse = createResponse(toolId, false, {
           type: error.type,
           message: error.message,
@@ -558,26 +583,37 @@ class ToolRegistry {
           details: error.details,
           confirmation_request: error.confirmation_request
         }, startTime);
-        
+
         // Record metrics
         recordToolExecution(toolId, duration, false);
         recordError(toolId, error.type);
-        
+
         return errorResponse;
       } else {
         // Unexpected error
         console.error(`[Registry] Unexpected error in handler ${toolId}:`, error);
+        emitToolEvent('tool_error', {
+          toolId,
+          message: `Unexpected: ${error.message}`,
+          details: {
+            errorType: ErrorType.INTERNAL,
+            retryable: false,
+            duration,
+            stack: error.stack?.split('\n').slice(0, 3).join('\n')
+          }
+        });
+
         const errorResponse = createResponse(toolId, false, {
           type: ErrorType.INTERNAL,
           message: `Unexpected error: ${error.message}`,
           retryable: false,
           partialSideEffects: true // Conservative assumption
         }, startTime);
-        
+
         // Record metrics
         recordToolExecution(toolId, duration, false);
         recordError(toolId, ErrorType.INTERNAL);
-        
+
         return errorResponse;
       }
     }

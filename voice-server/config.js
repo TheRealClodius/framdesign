@@ -12,13 +12,19 @@ const FRAM_BASE_PROMPT = loadVoicePrompt();
 /**
  * Build full system instruction with tool documentation
  * Tool docs are pulled from registry and appended to base prompt
+ * Filters tools by mode and prefers voice-specific guides when available
  *
  * @param {ToolRegistry} toolRegistry - Tool registry instance
+ * @param {string} mode - Mode filter ('text' or 'voice')
  * @returns {string} - Complete system instruction
  */
-export function buildSystemInstruction(toolRegistry) {
+export function buildSystemInstruction(toolRegistry, mode = 'voice') {
   const toolDocs = Array.from(toolRegistry.tools.values())
-    .map(tool => `## ${tool.toolId}\n${tool.documentation}`)
+    .filter(tool => tool.allowedModes.includes(mode))
+    .map(tool => {
+      const doc = (mode === 'voice' && tool.voiceDocumentation) ? tool.voiceDocumentation : tool.documentation;
+      return `## ${tool.toolId}\n${doc}`;
+    })
     .join('\n\n');
 
   return `${FRAM_BASE_PROMPT}\n\n# Available Tools\n\n${toolDocs}`;

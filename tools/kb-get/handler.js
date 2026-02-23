@@ -6,33 +6,12 @@
  */
 
 import { ErrorType, ToolError } from '../_core/error-types.js';
-
-// Import blob storage service for GCS URL resolution
-let resolveBlobUrl;
-let fetchAssetBuffer;
-async function loadBlobService() {
-  if (!resolveBlobUrl || !fetchAssetBuffer) {
-    try {
-      const blobModule = await import('@/lib/services/blob-storage-service');
-      resolveBlobUrl = blobModule.resolveBlobUrl || blobModule.default?.resolveBlobUrl;
-      fetchAssetBuffer = blobModule.fetchAssetBuffer || blobModule.default?.fetchAssetBuffer;
-    } catch (importError) {
-      // Fallback for Node.js runtime (voice server)
-      // Use a function to create the import path dynamically so webpack doesn't analyze it
-      try {
-        const getImportPath = (base) => `../../lib/services/${base}`;
-        const blobPath = getImportPath('blob-storage-service');
-        const blobModule = await import(/* webpackIgnore: true */ blobPath);
-        resolveBlobUrl = blobModule.resolveBlobUrl || blobModule.default?.resolveBlobUrl;
-        fetchAssetBuffer = blobModule.fetchAssetBuffer || blobModule.default?.fetchAssetBuffer;
-      } catch (fallbackError) {
-        console.warn('[kb_get] Failed to load blob storage service:', fallbackError);
-        // Will throw error when trying to use it for assets
-      }
-    }
-  }
-  return { resolveBlobUrl, fetchAssetBuffer };
-}
+import {
+  extractHttpStatus,
+  isServiceUnavailable
+} from '../_core/helpers.js';
+import { emitToolEvent } from '../_core/tool-events.js';
+import { buildStableAssetRef, buildAssetMarkdown } from '../_core/asset-ref.js';
 
 function normalizeEntityId(rawId) {
   if (typeof rawId !== 'string') return rawId;
@@ -41,26 +20,6 @@ function normalizeEntityId(rawId) {
     return rawId.toLowerCase();
   }
   return `${type.toLowerCase()}:${name.toLowerCase()}`;
-}
-
-function extractHttpStatus(error) {
-  if (!error || typeof error !== 'object') return undefined;
-  return (
-    error.status ||
-    error.statusCode ||
-    error.code ||
-    error.response?.status ||
-    error.response?.statusCode ||
-    error.data?.status ||
-    error.data?.statusCode
-  );
-}
-
-function isServiceUnavailable(error) {
-  const status = extractHttpStatus(error);
-  if (status === 503) return true;
-  const message = (error?.message || String(error || '')).toLowerCase();
-  return message.includes('service unavailable') || message.includes('503');
 }
 
 /**
@@ -177,79 +136,88 @@ export async function execute(context) {
       const blobId = metadata.blob_id;
       const extension = metadata.file_extension;
 
-      // Resolve blob_id to GCS URL if available
+      // Build stable asset reference (short /kb-assets/ path instead of signed URL)
+      // Client resolves to signed GCS URL at render time
       let assetUrl = '';
       let markdown = '';
       let imageData = null; // For multimodal analysis
       let imageDataFetchError = null; // Track why image data wasn't fetched
 
       if (blobId && extension) {
+        // Check if asset exists in GCS (dead asset detection)
+        let assetMissing = false;
+        let fetchAssetBuffer = null;
+
         try {
-          const blobService = await loadBlobService();
-          if (!blobService.resolveBlobUrl) {
-            throw new Error('Blob storage service not available');
+          let resolveBlobUrlSafe;
+          try {
+            const blobModule = await import('@/lib/services/blob-storage-service');
+            resolveBlobUrlSafe = blobModule.resolveBlobUrlSafe || blobModule.default?.resolveBlobUrlSafe;
+            fetchAssetBuffer = blobModule.fetchAssetBuffer || blobModule.default?.fetchAssetBuffer;
+          } catch {
+            const getPath = (name) => `../../lib/services/${name}`;
+            const blobModule = await import(/* webpackIgnore: true */ getPath('blob-storage-service'));
+            resolveBlobUrlSafe = blobModule.resolveBlobUrlSafe || blobModule.default?.resolveBlobUrlSafe;
+            fetchAssetBuffer = blobModule.fetchAssetBuffer || blobModule.default?.fetchAssetBuffer;
           }
-          assetUrl = await blobService.resolveBlobUrl(blobId, extension);
-          const caption = metadata.caption || metadata.title || '';
 
-          // Handle videos with HTML video tag, images/GIFs with markdown
-          if (entityType === 'video' || extension === 'mov' || extension === 'mp4' || extension === 'webm') {
-            markdown = `<video controls><source src="${assetUrl}" type="video/${extension === 'mov' ? 'quicktime' : extension}">Your browser does not support the video tag.</video>\n\n${caption ? `*${caption}*` : ''}`;
-          } else {
-            // Images and GIFs use markdown image syntax
-            markdown = `![${caption}](${assetUrl})`;
-
-            // For visual assets (photo, diagram, gif), fetch image data ONLY if requested for multimodal analysis
-            // This avoids oversized payloads and expensive token costs when pixels aren't needed
-            if (includeImageData && ['photo', 'diagram', 'gif'].includes(entityType)) {
-              console.log(`[kb_get] Attempting image data fetch for ${entityId}`, {
-                blobId,
-                extension,
-                entityType
-              });
-
-              try {
-                if (!blobService.fetchAssetBuffer) {
-                  imageDataFetchError = 'fetchAssetBuffer service not available';
-                  throw new Error(imageDataFetchError);
-                }
-                const imageBuffer = await blobService.fetchAssetBuffer(blobId, extension);
-
-                // Determine MIME type from extension
-                const mimeTypeMap = {
-                  'png': 'image/png',
-                  'jpg': 'image/jpeg',
-                  'jpeg': 'image/jpeg',
-                  'gif': 'image/gif',
-                  'webp': 'image/webp'
-                };
-                const mimeType = mimeTypeMap[extension.toLowerCase()] || 'image/png';
-
-                imageData = {
-                  mimeType,
-                  data: imageBuffer.toString('base64')
-                };
-
-                console.log(`[kb_get] Fetched image data for ${entityId} (${Math.round(imageBuffer.length / 1024)}KB)`);
-              } catch (imageError) {
-                imageDataFetchError = imageError.message;
-                console.warn(`[kb_get] Failed to fetch image buffer for ${entityId}:`, imageError.message);
-                // Continue without image data - metadata is still useful
-              }
-            }
+          if (resolveBlobUrlSafe) {
+            const resolved = await resolveBlobUrlSafe(blobId, extension);
+            assetMissing = !resolved.exists;
           }
         } catch (blobError) {
-          console.warn(`[kb_get] Failed to resolve blob URL for ${entityId}:`, blobError.message);
-          // Fallback to old path if available
-          if (metadata.path) {
-            assetUrl = metadata.path;
-            const caption = metadata.caption || metadata.title || '';
-            // Handle videos with HTML video tag, images/GIFs with markdown
-            if (entityType === 'video' || metadata.path?.match(/\.(mov|mp4|webm)$/i)) {
-              const ext = metadata.path.match(/\.(\w+)$/)?.[1] || 'mp4';
-              markdown = `<video controls><source src="${assetUrl}" type="video/${ext === 'mov' ? 'quicktime' : ext}">Your browser does not support the video tag.</video>\n\n${caption ? `*${caption}*` : ''}`;
-            } else {
-              markdown = `![${caption}](${assetUrl})`;
+          // Blob service unavailable — emit stable ref optimistically
+          console.warn(`[kb_get] Blob service check failed for ${entityId}:`, blobError.message);
+        }
+
+        if (assetMissing) {
+          emitToolEvent('dead_asset', {
+            toolId: 'kb_get',
+            message: `Asset missing from GCS: ${entityId}`,
+            details: { entityId, blobId, extension }
+          });
+          console.warn(`[kb_get] Dead asset detected: ${entityId} (blob: ${blobId}.${extension})`);
+          imageDataFetchError = `Asset file missing from storage: assets/${blobId}.${extension}`;
+          markdown = '';
+          assetUrl = '';
+        } else {
+          const caption = metadata.caption || metadata.title || '';
+          assetUrl = buildStableAssetRef(blobId, extension);
+          markdown = buildAssetMarkdown(entityType, blobId, extension, caption);
+
+          // For visual assets, fetch image data ONLY if requested for multimodal analysis
+          if (includeImageData && ['photo', 'diagram', 'gif'].includes(entityType)) {
+            console.log(`[kb_get] Attempting image data fetch for ${entityId}`, {
+              blobId,
+              extension,
+              entityType
+            });
+
+            try {
+              if (!fetchAssetBuffer) {
+                imageDataFetchError = 'fetchAssetBuffer service not available';
+                throw new Error(imageDataFetchError);
+              }
+              const imageBuffer = await fetchAssetBuffer(blobId, extension);
+
+              const mimeTypeMap = {
+                'png': 'image/png',
+                'jpg': 'image/jpeg',
+                'jpeg': 'image/jpeg',
+                'gif': 'image/gif',
+                'webp': 'image/webp'
+              };
+              const mimeType = mimeTypeMap[extension.toLowerCase()] || 'image/png';
+
+              imageData = {
+                mimeType,
+                data: imageBuffer.toString('base64')
+              };
+
+              console.log(`[kb_get] Fetched image data for ${entityId} (${Math.round(imageBuffer.length / 1024)}KB)`);
+            } catch (imageError) {
+              imageDataFetchError = imageError.message;
+              console.warn(`[kb_get] Failed to fetch image buffer for ${entityId}:`, imageError.message);
             }
           }
         }
@@ -268,6 +236,9 @@ export async function execute(context) {
         }
       }
 
+      // Detect if asset is dead (missing from storage)
+      const isDead = !assetUrl && blobId && extension;
+
       return {
         ok: true,
         data: {
@@ -284,9 +255,10 @@ export async function execute(context) {
           related_entities: tryParseJSON(metadata.related_entities) || [],
           tags: tryParseJSON(metadata.tags) || [],
           metadata: extractRelevantMetadata(metadata),
-          _instructions: buildImageInstructions(entityId, entityType, imageData, includeImageData, imageDataFetchError, blobId, extension, markdown),
+          _instructions: buildImageInstructions(entityId, entityType, imageData, includeImageData, imageDataFetchError, blobId, extension, markdown, isDead),
           _timing: finalTiming,
-          _imageData: imageData // Image data for multimodal analysis (internal, excluded from display)
+          _imageData: imageData, // Image data for multimodal analysis (internal, excluded from display)
+          _diagnostics: isDead ? { dead_asset: true, blob_id: blobId, extension } : undefined
         },
         meta: {
           _timing: finalTiming
@@ -383,7 +355,12 @@ function tryParseJSON(jsonString) {
  * Build detailed instructions for asset retrieval results
  * Includes specific failure reasons when image data couldn't be fetched
  */
-function buildImageInstructions(entityId, entityType, imageData, includeImageData, imageDataFetchError, blobId, extension, markdown) {
+function buildImageInstructions(entityId, entityType, imageData, includeImageData, imageDataFetchError, blobId, extension, markdown, isDead = false) {
+  // Dead asset: warn the agent immediately
+  if (isDead) {
+    return `⚠️ DEAD ASSET: "${entityId}" exists in the knowledge base index but the actual file is missing from storage (blob: assets/${blobId}.${extension}). DO NOT share an image link for this asset — it will appear broken. You may still reference the asset's title and description from the metadata.`;
+  }
+
   let imageDataStatus = '';
 
   if (imageData) {
@@ -402,7 +379,7 @@ function buildImageInstructions(entityId, entityType, imageData, includeImageDat
     imageDataStatus = `❌ Pixel data requested but NOT included. Reason: ${reasonText}. To retry, call kb_get with include_image_data: true for ID: '${entityId}'.`;
   } else {
     // User didn't request image data
-    imageDataStatus = `❌ Pixel data not requested. For visual analysis (colors, labels, details), call kb_get with include_image_data: true for ID: '${entityId}'.`;
+    imageDataStatus = `❌ Pixel data not requested. You CANNOT see this image. Do NOT describe colors, layout, or visual details — only describe what the metadata text tells you. To actually see the image, call kb_get with include_image_data: true for ID: '${entityId}'.`;
   }
 
   return `Asset metadata retrieved. ${imageDataStatus} To display the asset, include this markdown: ${markdown}`;

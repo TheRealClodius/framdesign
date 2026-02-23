@@ -2,6 +2,15 @@ import type { NextConfig } from "next";
 import path from "path";
 
 const nextConfig: NextConfig = {
+  // Configure Next.js Image optimization for remote image sources
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'storage.googleapis.com',
+      },
+    ],
+  },
   // Explicitly set the workspace root to avoid Next.js detecting multiple lockfiles
   outputFileTracingRoot: path.join(__dirname),
   // Include tool registry file in serverless function output
