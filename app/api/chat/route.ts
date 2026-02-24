@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { GoogleGenAI, type Content, type Part, type FunctionCall, type FunctionResponse } from "@google/genai";
+import { GoogleGenAI, HarmCategory, HarmBlockThreshold, type Content, type Part, type FunctionCall, type FunctionResponse } from "@google/genai";
 import { FRAM_SYSTEM_PROMPT } from "@/lib/config";
 import { createHash } from "crypto";
 import { handleServerError, isRetryableError, isCacheError } from "@/lib/errors";
@@ -42,7 +42,18 @@ type GeminiConfig = {
   tools?: Array<{ functionDeclarations: ProviderSchema[] }>;
   cachedContent?: string;
   systemInstruction?: string;
+  safetySettings?: Array<{ category: HarmCategory; threshold: HarmBlockThreshold }>;
 };
+
+/** Relaxed safety settings — this is a design knowledge base, not user-generated content.
+ *  BLOCK_ONLY_HIGH prevents false positives on designer/founder names (PII detection). */
+const GEMINI_SAFETY_SETTINGS: GeminiConfig["safetySettings"] = [
+  { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
+  { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
+  { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
+  { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
+  { category: HarmCategory.HARM_CATEGORY_CIVIC_INTEGRITY, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
+];
 
 type ContentPart = Part;
 type ContentMessage = {
@@ -1289,6 +1300,9 @@ export async function POST(request: Request) {
     // This helps the agent understand the year context when resuming from a summary
     let includeYearOnNextUserMessage = summary !== null;
 
+    // Track asset viewing context from card clicks (hoisted for use in streaming)
+    let cardViewingContext: { assetId: string; blobId: string; ext: string; desc: string } | null = null;
+
     for (let i = 0; i < rawMessages.length; i++) {
       const msg = rawMessages[i];
 
@@ -1305,6 +1319,16 @@ export async function POST(request: Request) {
       if (msg.role === 'assistant') {
         content = stripSuggestionsFromContent(content);
       }
+
+      // Extract [viewing: ...] asset context from user messages (card clicks)
+      if (msg.role === 'user') {
+        const viewingMatch = content.match(/\s*\[viewing:\s*asset_id=([^,]+),\s*blob_id=([^,]+),\s*ext=([^,]+),\s*desc="([^"]+)"\]/);
+        if (viewingMatch) {
+          cardViewingContext = { assetId: viewingMatch[1], blobId: viewingMatch[2], ext: viewingMatch[3], desc: viewingMatch[4] };
+          content = content.replace(viewingMatch[0], '');
+        }
+      }
+
       // For user messages with timestamps, prepend the formatted timestamp
       // Include year on first message after summary for unambiguous year context
       if (msg.role === 'user' && msg.timestamp) {
@@ -1344,6 +1368,18 @@ export async function POST(request: Request) {
         });
       }
       
+      // Inject asset viewing context as a system hint before the user message
+      if (cardViewingContext && msg.role === 'user') {
+        recentMessages.push({
+          role: "user",
+          parts: [{ text: `[SYSTEM CONTEXT: The user clicked on a card showing "${cardViewingContext.desc}" (asset ID: "${cardViewingContext.assetId}"). The image will be displayed automatically. Focus your response on this project and the specific work shown in the image.]` }],
+        });
+        recentMessages.push({
+          role: "model",
+          parts: [{ text: "ACKNOWLEDGED. I will focus on this project and the work shown." }],
+        });
+      }
+
       // Only add message if it has content
       if (parts.length > 0) {
         recentMessages.push({
@@ -1650,7 +1686,9 @@ export async function POST(request: Request) {
 
       // When using cached content, tools must be included in the cache, not in the request
       // So we conditionally include tools based on whether we're using cached content
-      const config: GeminiConfig = {};
+      const config: GeminiConfig = {
+        safetySettings: GEMINI_SAFETY_SETTINGS,
+      };
 
       // Add cached content reference if available
       // Only add if cachedContent is truthy and not empty
@@ -1692,15 +1730,16 @@ export async function POST(request: Request) {
           // Retry without cache
           const fallbackConfig: GeminiConfig = {
             tools: [{ functionDeclarations: providerSchemas }],
-            systemInstruction: FRAM_SYSTEM_PROMPT
+            systemInstruction: FRAM_SYSTEM_PROMPT,
+            safetySettings: GEMINI_SAFETY_SETTINGS,
           };
-          
+
           const result = await ai.models.generateContentStream({
             model: "gemini-2.5-flash",
             contents: contentsToSend,
             config: fallbackConfig
           });
-          
+
           console.log("Gemini API stream created (fallback without cache)");
           return result;
         }
@@ -1750,6 +1789,10 @@ export async function POST(request: Request) {
         
         if (finishReason && finishReason !== 'STOP') {
           console.log(`[Gemini API] Chunk finishReason: ${finishReason}`);
+        }
+
+        if (typed.promptFeedback) {
+          console.warn(`[Gemini API] promptFeedback received:`, JSON.stringify(typed.promptFeedback));
         }
 
         for (const part of candidates) {
@@ -2193,7 +2236,9 @@ export async function POST(request: Request) {
         // Make a new API call with the tool result
         debugLog(`Preparing follow-up stream for tool: ${toolName}`);
         const followUpStream = await retryWithBackoff(async () => {
-          const config: GeminiConfig = {};
+          const config: GeminiConfig = {
+            safetySettings: GEMINI_SAFETY_SETTINGS,
+          };
 
           // Use cached content if available
           if (cachedContent && cachedContent.trim()) {
@@ -2229,9 +2274,10 @@ export async function POST(request: Request) {
                // Retry without cache
                const fallbackConfig: GeminiConfig = {
                  tools: [{ functionDeclarations: providerSchemas }],
-                 systemInstruction: FRAM_SYSTEM_PROMPT
+                 systemInstruction: FRAM_SYSTEM_PROMPT,
+                 safetySettings: GEMINI_SAFETY_SETTINGS,
                };
-               
+
                return await ai.models.generateContentStream({
                  model: "gemini-2.5-flash",
                  contents: updatedContents,
@@ -2270,6 +2316,19 @@ export async function POST(request: Request) {
                   contextTokensAdded: number;
                   totalChainStepMs: number;
                 }> = [];
+
+                // Prepend card image markdown on the first chain iteration
+                if (cardViewingContext && chainCount === 0) {
+                  const isVideo = ['mov', 'mp4', 'webm'].includes(cardViewingContext.ext);
+                  const assetRef = `/kb-assets/${cardViewingContext.blobId}.${cardViewingContext.ext}`;
+                  const imageMarkdown = isVideo
+                    ? `<video controls><source src="${assetRef}" type="video/${cardViewingContext.ext === 'mov' ? 'quicktime' : cardViewingContext.ext}">Your browser does not support the video tag.</video>\n\n*${cardViewingContext.desc}*\n\n`
+                    : `![${cardViewingContext.desc}](${assetRef})\n\n`;
+                  const encoded = encoder.encode(imageMarkdown);
+                  totalBytesSent += encoded.length;
+                  accumulatedFullText += imageMarkdown;
+                  controller.enqueue(encoded);
+                }
 
                 // Loop to handle chained function calls
                 while (chainCount < MAX_CHAIN_LENGTH) {
@@ -2631,7 +2690,9 @@ export async function POST(request: Request) {
                     // Make another API call with the new tool result
                     const followUpStartTime = Date.now();
                     currentStream = await retryWithBackoff(async () => {
-                      const config: GeminiConfig = {};
+                      const config: GeminiConfig = {
+                        safetySettings: GEMINI_SAFETY_SETTINGS,
+                      };
 
                       // Check if we can use or create a cache for this chained call
                       // This is critical for performance when tool results are large
@@ -2662,9 +2723,10 @@ export async function POST(request: Request) {
                           // Retry without cache
                           const fallbackConfig: GeminiConfig = {
                             tools: [{ functionDeclarations: providerSchemas }],
-                            systemInstruction: FRAM_SYSTEM_PROMPT
+                            systemInstruction: FRAM_SYSTEM_PROMPT,
+                            safetySettings: GEMINI_SAFETY_SETTINGS,
                           };
-                          
+
                           return await ai.models.generateContentStream({
                             model: "gemini-2.5-flash",
                             contents: currentContents,
@@ -2692,7 +2754,8 @@ export async function POST(request: Request) {
                     try {
                       const retryConfig: GeminiConfig = {
                         tools: [{ functionDeclarations: providerSchemas }],
-                        systemInstruction: FRAM_SYSTEM_PROMPT
+                        systemInstruction: FRAM_SYSTEM_PROMPT,
+                        safetySettings: GEMINI_SAFETY_SETTINGS,
                       };
                       const retryStream = await ai.models.generateContentStream({
                         model: "gemini-2.5-flash",
@@ -2917,6 +2980,19 @@ export async function POST(request: Request) {
             };
 
             try {
+              // Prepend card image markdown if the user clicked an asset card
+              if (cardViewingContext) {
+                const isVideo = ['mov', 'mp4', 'webm'].includes(cardViewingContext.ext);
+                const assetRef = `/kb-assets/${cardViewingContext.blobId}.${cardViewingContext.ext}`;
+                const imageMarkdown = isVideo
+                  ? `<video controls><source src="${assetRef}" type="video/${cardViewingContext.ext === 'mov' ? 'quicktime' : cardViewingContext.ext}">Your browser does not support the video tag.</video>\n\n*${cardViewingContext.desc}*\n\n`
+                  : `![${cardViewingContext.desc}](${assetRef})\n\n`;
+                const encoded = encoder.encode(imageMarkdown);
+                bytesSent += encoded.length;
+                accumulatedFullText += imageMarkdown;
+                controller.enqueue(encoded);
+              }
+
               // Flush buffered chunks first
               for (const chunk of bufferedChunks) {
                 enqueueTextFromChunk(chunk);
@@ -3123,7 +3199,9 @@ export async function POST(request: Request) {
 
                     // Make follow-up API call
                     const lateFollowUpStream = await retryWithBackoff(async () => {
-                      const config: GeminiConfig = {};
+                      const config: GeminiConfig = {
+                        safetySettings: GEMINI_SAFETY_SETTINGS,
+                      };
                       if (cachedContent?.trim()) {
                         config.cachedContent = cachedContent;
                       } else {
@@ -3185,6 +3263,13 @@ export async function POST(request: Request) {
               // This handles cases where a stale/invalid cache caused Gemini to
               // return an empty or thinking-only response
               if (!accumulatedFullText.trim()) {
+                // Check if any buffered chunk contained a safety block via promptFeedback
+                for (const chunk of bufferedChunks) {
+                  const bf = (chunk as { promptFeedback?: { blockReason?: string; safetyRatings?: unknown[] } }).promptFeedback;
+                  if (bf) {
+                    console.warn(`[Empty Response] Safety block detected — blockReason: ${bf.blockReason || 'unknown'}, ratings: ${JSON.stringify(bf.safetyRatings || [])}`);
+                  }
+                }
                 console.warn(`[Empty Response] No text produced. chunksProcessed=${chunksProcessed}, bytesSent=${bytesSent}, lateFunctionCall=${lateFunctionCall ? (lateFunctionCall as {name: string}).name : 'none'}, bufferedChunks=${bufferedChunks.length}`);
                 console.warn(`[Empty Response] Retrying Gemini API call without cache...`);
 
@@ -3192,7 +3277,8 @@ export async function POST(request: Request) {
                   // Force non-cached retry with explicit system prompt and tools
                   const retryConfig: GeminiConfig = {
                     tools: [{ functionDeclarations: providerSchemas }],
-                    systemInstruction: FRAM_SYSTEM_PROMPT
+                    systemInstruction: FRAM_SYSTEM_PROMPT,
+                    safetySettings: GEMINI_SAFETY_SETTINGS,
                   };
 
                   const retryStream = await ai.models.generateContentStream({

@@ -6,10 +6,10 @@
  *
  * HOW TO ADD A NEW PROJECT:
  *
- * 1. Add project name to PROJECTS array in components/ChatInterface.tsx (line ~474-481)
+ * 1. Add project name to PROJECTS array below
  * 2. Add assets to kb/assets/manifest.json with related_entities matching the entity ID below
- * 3. Add mapping below (project name → entity ID)
- * 4. Done! Images will automatically appear on hover
+ * 3. Add mapping in PROJECT_ENTITY_MAP (project name → entity ID)
+ * 4. Done! Images will automatically appear on hover and in the empty state cards
  *
  * EXAMPLE:
  * If adding "New AI Tool" project:
@@ -17,6 +17,23 @@
  * - In manifest.json: "related_entities": ["project:new_ai_tool"]
  * - Below: "New AI Tool": "project:new_ai_tool"
  */
+
+/**
+ * Projects available for empty state cards and "Tell me about..." suggestions.
+ * Ordering matters: PROJECTS[0] is used as SSR fallback to avoid hydration mismatch.
+ */
+export const PROJECTS = [
+  "UiPath Autopilot",
+  "Vector Watch",
+  "Fitbit OS",
+  "Clipboard AI",
+  "Desktop Agent",
+  "Semantic Space",
+  "UrbanAir",
+  "UiPath Studio Mobile",
+  "That",
+  "Strategie del Design",
+];
 
 /**
  * Maps display names (from PROJECTS array) to knowledge base entity IDs
@@ -27,7 +44,7 @@ export const PROJECT_ENTITY_MAP: Record<string, string> = {
   "Clipboard AI": "project:clipboard_ai_uipath",
   "Desktop Agent": "project:desktop_agent_uipath",
   "Semantic Space": "project:semantic_space",
-  "Fitbit OS": "project:fitbit_os",
+  "Fitbit OS": "project:fitbit_OS",
   "UrbanAir": "project:urbanair",
   "UiPath Studio Mobile": "project:uipath_studio_mobile",
   "That": "project:that_language_app",

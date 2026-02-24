@@ -11,7 +11,7 @@ based_in:
   offices:
     - city: Bucharest
       country: Romania
-      address: Palatul Universul
+      address: Palatul Universului
     - city: Rome
       country: Italy
       address: Near Circo Massimo

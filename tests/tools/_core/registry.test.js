@@ -3,19 +3,19 @@
  */
 
 import { jest, describe, test, expect, beforeEach } from '@jest/globals';
-import { readFileSync } from 'fs';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
 import { ToolRegistry } from '../../../tools/_core/registry.js';
 import { ErrorType, ToolError } from '../../../tools/_core/error-types.js';
 import { validateToolResponse } from '../../../tools/_core/tool-response.js';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-
-// Mock fs module
+// Mock fs module - must use jest.fn() in factory, access via require after hoisting
 jest.mock('fs', () => ({
-  readFileSync: jest.fn()
+  readFileSync: jest.fn(),
+  existsSync: jest.fn(() => true),
+  watch: jest.fn()
 }));
+
+// Get reference to the mocked readFileSync (require works in Jest's CJS transform)
+const { readFileSync: mockedReadFileSync } = require('fs');
 
 describe('ToolRegistry', () => {
   let registry;
@@ -66,7 +66,7 @@ describe('ToolRegistry', () => {
         meta: {}
       });
 
-      readFileSync.mockReturnValue(JSON.stringify(mockRegistry));
+      mockedReadFileSync.mockReturnValue(JSON.stringify(mockRegistry));
 
       // Mock dynamic import
       const originalImport = global.import;
@@ -110,7 +110,7 @@ describe('ToolRegistry', () => {
         ]
       };
 
-      readFileSync.mockReturnValue(JSON.stringify(mockRegistry));
+      mockedReadFileSync.mockReturnValue(JSON.stringify(mockRegistry));
 
       const originalImport = global.import;
       global.import = jest.fn().mockResolvedValue({});
@@ -143,7 +143,7 @@ describe('ToolRegistry', () => {
         ]
       };
 
-      readFileSync.mockReturnValue(JSON.stringify(mockRegistry));
+      mockedReadFileSync.mockReturnValue(JSON.stringify(mockRegistry));
       const originalImport = global.import;
       global.import = jest.fn().mockResolvedValue({
         execute: jest.fn()
@@ -190,7 +190,7 @@ describe('ToolRegistry', () => {
         ]
       };
 
-      readFileSync.mockReturnValue(JSON.stringify(mockRegistry));
+      mockedReadFileSync.mockReturnValue(JSON.stringify(mockRegistry));
       const originalImport = global.import;
       global.import = jest.fn().mockResolvedValue({
         execute: jest.fn()
@@ -226,7 +226,7 @@ describe('ToolRegistry', () => {
         ]
       };
 
-      readFileSync.mockReturnValue(JSON.stringify(mockRegistry));
+      mockedReadFileSync.mockReturnValue(JSON.stringify(mockRegistry));
       const originalImport = global.import;
       global.import = jest.fn().mockResolvedValue({
         execute: jest.fn()
@@ -269,7 +269,7 @@ describe('ToolRegistry', () => {
         ]
       };
 
-      readFileSync.mockReturnValue(JSON.stringify(mockRegistry));
+      mockedReadFileSync.mockReturnValue(JSON.stringify(mockRegistry));
       const originalImport = global.import;
       global.import = jest.fn().mockResolvedValue({
         execute: jest.fn()
@@ -326,7 +326,7 @@ describe('ToolRegistry', () => {
         ]
       };
 
-      readFileSync.mockReturnValue(JSON.stringify(mockRegistry));
+      mockedReadFileSync.mockReturnValue(JSON.stringify(mockRegistry));
       const originalImport = global.import;
       global.import = jest.fn().mockResolvedValue({
         execute: mockHandler
@@ -472,7 +472,7 @@ describe('ToolRegistry', () => {
         ]
       };
 
-      readFileSync.mockReturnValue(JSON.stringify(mockRegistry));
+      mockedReadFileSync.mockReturnValue(JSON.stringify(mockRegistry));
       const originalImport = global.import;
       global.import = jest.fn().mockResolvedValue({
         execute: jest.fn()
@@ -517,7 +517,7 @@ describe('ToolRegistry', () => {
         ]
       };
 
-      readFileSync.mockReturnValue(JSON.stringify(mockRegistry));
+      mockedReadFileSync.mockReturnValue(JSON.stringify(mockRegistry));
       const originalImport = global.import;
       global.import = jest.fn().mockResolvedValue({
         execute: jest.fn()
@@ -545,7 +545,7 @@ describe('ToolRegistry', () => {
         tools: []
       };
 
-      readFileSync.mockReturnValue(JSON.stringify(mockRegistry));
+      mockedReadFileSync.mockReturnValue(JSON.stringify(mockRegistry));
       const originalImport = global.import;
       global.import = jest.fn().mockResolvedValue({
         execute: jest.fn()

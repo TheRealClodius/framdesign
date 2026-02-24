@@ -7,6 +7,19 @@
 
 import { PROJECT_ENTITY_MAP, ASSET_TYPE_PRIORITY } from './project-config';
 
+/** Reverse map: entity ID → display name (built once from PROJECT_ENTITY_MAP) */
+const ENTITY_TO_NAME: Record<string, string> = {};
+for (const [name, entityId] of Object.entries(PROJECT_ENTITY_MAP)) {
+  ENTITY_TO_NAME[entityId] = name;
+}
+
+/** Derive a display name from an entity ID like "project:clara_lamp" → "Clara Lamp" */
+function entityIdToDisplayName(entityId: string): string {
+  if (ENTITY_TO_NAME[entityId]) return ENTITY_TO_NAME[entityId];
+  const slug = entityId.replace(/^project:/, '');
+  return slug.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+}
+
 /**
  * Asset structure from manifest.json
  */
@@ -177,6 +190,39 @@ export async function getProjectImagePath(projectName: string): Promise<string |
   return signedUrl;
 }
 
+/**
+ * Get project card asset with type metadata.
+ * Used by EmptyStateCards to render the right element (<img>, <video>, etc.)
+ *
+ * @param projectName - Display name like "Vector Watch"
+ * @returns Asset info with URL and entity type, or null if not found
+ */
+export async function getProjectCardAsset(
+  projectName: string
+): Promise<{ url: string; entityType: string; assetId: string; blobId: string; fileExtension: string; description: string } | null> {
+  const entityId = PROJECT_ENTITY_MAP[projectName];
+  if (!entityId) return null;
+
+  const manifest = await loadManifest();
+  const assets = findProjectAssets(manifest, entityId);
+  if (assets.length === 0) return null;
+
+  const asset = selectBestAsset(assets);
+  if (!asset || !asset.blob_id || !asset.file_extension) return null;
+
+  const signedUrl = await fetchSignedAssetUrl(asset.blob_id, asset.file_extension);
+  if (!signedUrl) return null;
+
+  return {
+    url: signedUrl,
+    entityType: asset.entity_type,
+    assetId: asset.id,
+    blobId: asset.blob_id,
+    fileExtension: asset.file_extension,
+    description: asset.description || asset.title,
+  };
+}
+
 async function fetchSignedAssetUrl(blobId: string, extension: string): Promise<string | null> {
   try {
     const response = await fetch('/api/refresh-asset-url', {
@@ -242,4 +288,78 @@ export async function getSuggestionImage(
     alt: asset.caption || asset.title,
     title: asset.title,
   };
+}
+
+export interface CardAsset {
+  url: string;
+  entityType: string;
+  assetId: string;
+  blobId: string;
+  fileExtension: string;
+  description: string;
+  projectName: string;
+}
+
+/**
+ * Pick `count` random assets from the full manifest pool.
+ * Prefers one asset per project for variety, then allows repeats if needed.
+ */
+export async function getRandomCardAssets(count: number): Promise<CardAsset[]> {
+  const manifest = await loadManifest();
+
+  // Filter to renderable assets (have blob_id + file_extension)
+  const renderable = manifest.assets.filter(a => a.blob_id && a.file_extension);
+  if (renderable.length === 0) return [];
+
+  // Fisher-Yates shuffle
+  const shuffled = [...renderable];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+
+  // Pick assets, preferring unique projects
+  const picked: Asset[] = [];
+  const usedProjects = new Set<string>();
+
+  // First pass: one per project
+  for (const asset of shuffled) {
+    if (picked.length >= count) break;
+    const projectEntity = asset.related_entities?.find(r => r.startsWith('project:'));
+    if (projectEntity && !usedProjects.has(projectEntity)) {
+      usedProjects.add(projectEntity);
+      picked.push(asset);
+    }
+  }
+
+  // Second pass: fill remaining from any project
+  if (picked.length < count) {
+    for (const asset of shuffled) {
+      if (picked.length >= count) break;
+      if (!picked.includes(asset)) {
+        picked.push(asset);
+      }
+    }
+  }
+
+  // Resolve signed URLs in parallel
+  const results = await Promise.all(
+    picked.map(async (asset): Promise<CardAsset | null> => {
+      const signedUrl = await fetchSignedAssetUrl(asset.blob_id!, asset.file_extension!);
+      if (!signedUrl) return null;
+
+      const projectEntity = asset.related_entities?.find(r => r.startsWith('project:')) || '';
+      return {
+        url: signedUrl,
+        entityType: asset.entity_type,
+        assetId: asset.id,
+        blobId: asset.blob_id!,
+        fileExtension: asset.file_extension!,
+        description: asset.description || asset.title,
+        projectName: entityIdToDisplayName(projectEntity),
+      };
+    })
+  );
+
+  return results.filter((r): r is CardAsset => r !== null);
 }

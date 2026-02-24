@@ -153,7 +153,9 @@ import { OverloadedError, BudgetExhaustedError } from "@/lib/errors";
 import { voiceService } from "@/lib/services/voice-service";
 import { useTheme } from "@/lib/hooks/useTheme";
 import { getSuggestionImage } from "@/lib/project-image-map";
+import { PROJECTS } from "@/lib/project-config";
 import SuggestionImagePopup from "./SuggestionImagePopup";
+import EmptyStateCards from "./EmptyStateCards";
 
 /**
  * Normalize text response from voice agent, especially fixing mermaid diagram formatting
@@ -424,23 +426,6 @@ function buildEndCallMessage(startTime: number | null): string {
 }
 
 /**
- * Projects available for the "Tell me about..." suggestion
- * Cycles randomly on each page refresh
- */
-const PROJECTS = [
-  "UiPath Autopilot",
-  "Vector Watch",
-  "Fitbit OS",
-  "Clipboard AI",
-  "Desktop Agent",
-  "Semantic Space",
-  "UrbanAir",
-  "UiPath Studio Mobile",
-  "That",
-  "Strategie del Design",
-];
-
-/**
  * Get a random project name for the suggestion
  * Uses Math.random() so it changes on each page refresh
  */
@@ -463,10 +448,10 @@ export default function ChatInterface() {
   ]);
 
   const [messages, setMessages] = useState<Message[]>([
-    { 
-      id: "initial-assistant", 
-      role: "assistant", 
-      content: "HELLO. HOW CAN I HELP YOU TODAY?",
+    {
+      id: "initial-assistant",
+      role: "assistant",
+      content: "Hello. How can I help you today?",
       suggestions: [
         "What does FRAM Design do?",
         "I have a design challenge I'm thinking through",
@@ -531,6 +516,25 @@ export default function ChatInterface() {
   // Cache for suggestion image lookups to avoid repeated async calls
   const suggestionImageCache = useRef<Map<string, { url: string; alt: string; title: string } | null>>(new Map());
   const activeHoverKeyRef = useRef<string | null>(null);
+
+  // Empty state: show floating project cards when only initial message is present
+  // Initialize false to avoid SSR hydration mismatch (server can't access localStorage).
+  // The useEffect below enables cards after mount when appropriate.
+  const isEmptyState = messages.length === 1 && messages[0].id === "initial-assistant";
+  const [showEmptyState, setShowEmptyState] = useState(false);
+
+  // Enable/disable empty state cards after mount.
+  // On mount: if isEmptyState → show cards. When conversation starts → fade out then unmount.
+  // For returning users with saved localStorage messages, the messages-loading effect
+  // fires in the same commit, so isEmptyState is already false → cards never become visible.
+  useEffect(() => {
+    if (isEmptyState) {
+      setShowEmptyState(true);
+    } else {
+      const timer = setTimeout(() => setShowEmptyState(false), 600);
+      return () => clearTimeout(timer);
+    }
+  }, [isEmptyState]);
 
   // Track if we should start a new message turn (for transcript grouping)
   // Set to true when: user interrupts, session ends, or session restarts
@@ -1178,7 +1182,7 @@ export default function ChatInterface() {
   const timeoutJustExpired = wasBlocked && !isTimeoutBlocked;
 
   // Handle clicking a conversation starter - directly submits the message
-  const handleStarterClick = (text: string, currentMessages?: Message[]) => {
+  const handleStarterClick = (text: string, currentMessages?: Message[], assetContext?: { assetId: string; blobId: string; fileExtension: string; description: string }) => {
     if (isLoading || isVoiceMode || isBlocked) return;
 
     const baseMessages = (currentMessages && currentMessages.length > 0) ? currentMessages : messages;
@@ -1191,9 +1195,14 @@ export default function ChatInterface() {
     // Trigger the chat request
     const submitStarter = async () => {
       try {
+        // Append asset context tag for the API (not shown in UI)
+        const apiContent = assetContext
+          ? `${text} [viewing: asset_id=${assetContext.assetId}, blob_id=${assetContext.blobId}, ext=${assetContext.fileExtension}, desc="${assetContext.description}"]`
+          : text;
+        const apiUserMessage = { ...newUserMessage, content: apiContent };
         const requestMessages: Message[] = [
           ...baseMessages,
-          newUserMessage
+          apiUserMessage
         ];
 
         const assistantMessageId = generateMessageId();
@@ -1664,10 +1673,10 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
       
       // Reset component state to initial message
       setMessages([
-        { 
-          id: "initial-assistant", 
-          role: "assistant", 
-          content: "HELLO. HOW CAN I HELP YOU TODAY?",
+        {
+          id: "initial-assistant",
+          role: "assistant",
+          content: "Hello. How can I help you today?",
           suggestions: conversationStarters
         }
       ]);
@@ -1682,14 +1691,28 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
   };
 
   return (
-    <section className={`w-full max-w-[28rem] md:max-w-[950px] mx-auto pt-0 pb-0 md:pb-0 h-fit md:h-[100vh] md:flex md:flex-col md:min-h-0 overflow-x-hidden transition-colors duration-300 ${isDark ? 'bg-gray-900' : 'bg-white'}`}>
+    <section className={`w-full max-w-[28rem] md:max-w-none mx-auto pt-0 pb-0 md:pb-0 h-fit md:h-[100vh] md:flex md:flex-col md:min-h-0 overflow-x-hidden transition-colors duration-300 ${isDark ? 'bg-gray-900' : 'bg-white'}`}>
       {/* Relative container for absolute-positioned overlays */}
       <div className="relative flex-1 min-h-0 h-[110vh] md:h-auto font-mono text-[0.875rem]">
         {/* Scroll area */}
         <div ref={messagesContainerRef} className={`absolute inset-0 overflow-y-auto overflow-x-hidden pt-36 scrollbar-boxy ${isDark ? 'scrollbar-dark' : ''}`}>
+          {/* Empty state: floating project cards */}
+          {showEmptyState && (
+            <EmptyStateCards
+              isDark={isDark}
+              onProjectClick={(query, assetContext) => handleStarterClick(query, undefined, assetContext)}
+              isVisible={isEmptyState}
+            />
+          )}
+
           {/* Messages content */}
-          <div className="space-y-6 px-4">
+          <div className="space-y-6 px-4 md:max-w-[950px] md:mx-auto">
           {messages.map((message, index) => {
+            // Skip initial-assistant message when empty state cards are showing
+            if (message.id === "initial-assistant" && showEmptyState) {
+              return null;
+            }
+
             // Skip rendering empty streaming assistant messages - they'll be shown via loading indicator
             if (message.role === "assistant" && message.streaming && !message.content.trim()) {
               return null;
@@ -1912,13 +1935,15 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
         <div className="pointer-events-none absolute bottom-0 left-0 right-0 z-10 h-[120px]" style={{ background: `linear-gradient(to top, ${isDark ? 'rgb(17 24 39)' : 'rgb(255 255 255)'}, ${isDark ? 'rgb(17 24 39 / 0)' : 'rgb(255 255 255 / 0)'})` }} />
 
         {/* Floating header — right-aligned, suggestion-style box */}
-        <div className="absolute top-25 right-2 z-20 pointer-events-none">
-          <button
-            onClick={handleClearChat}
-            className={`pointer-events-auto text-[0.75rem] font-mono uppercase tracking-wider transition-colors px-3 py-1.5 border rounded shadow-md ${isDark ? 'text-gray-400 hover:text-gray-100 border-gray-600 hover:border-gray-400 bg-gray-950 shadow-black/40' : 'text-gray-400 hover:text-black border-gray-300 hover:border-black bg-gray-50 shadow-gray-400/50'}`}
-          >
-            + Fresh Conversation
-          </button>
+        <div className="absolute top-25 left-0 right-0 z-20 pointer-events-none">
+          <div className="md:max-w-[950px] md:mx-auto flex justify-end pr-2">
+            <button
+              onClick={handleClearChat}
+              className={`pointer-events-auto text-[0.75rem] font-mono uppercase tracking-wider transition-colors px-3 py-1.5 border rounded shadow-md ${isDark ? 'text-gray-400 hover:text-gray-100 border-gray-600 hover:border-gray-400 bg-gray-950 shadow-black/40' : 'text-gray-400 hover:text-black border-gray-300 hover:border-black bg-gray-50 shadow-gray-400/50'}`}
+            >
+              + Fresh Conversation
+            </button>
+          </div>
         </div>
 
         {/* Floating prompt area */}
