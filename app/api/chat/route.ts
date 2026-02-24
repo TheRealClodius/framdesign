@@ -1469,7 +1469,7 @@ export async function POST(request: Request) {
             // Use existing cache immediately, don't wait for updates
             if (cached.summary) {
               contentsToSend = recentMessages;
-              cachedContent = cached.cacheName;
+              cachedContent = cached.cacheName ?? undefined;
               console.log(`✓ Cache HIT: Using existing summary cache (age: ${ageSeconds.toFixed(1)}s)`);
             } else {
               // Get system cache (no timeout - wait for completion)
