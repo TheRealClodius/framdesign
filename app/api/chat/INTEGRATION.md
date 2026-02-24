@@ -51,9 +51,9 @@ const config: GeminiConfig = cachedContent
 - Loop detection (`loopDetector`)
 - Summarization for older calls (`toolMemorySummarizer`)
 
-### 4. Auto-chaining for visual requests
+### 4. Model-driven tool chaining
 
-When the user asks to “show” a visual and `kb_search` returns a visual asset, the server auto-chains `kb_get` to fetch asset metadata (and optionally inline data). This is limited to a small chain length (max 5 total chained calls).
+The model decides when to follow up `kb_search` with `kb_get` based on prompt guidance. There is no server-side auto-chaining; Gemini uses native parallel function calling when multiple tools are needed.
 
 ## Key Characteristics
 

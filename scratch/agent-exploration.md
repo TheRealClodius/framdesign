@@ -8,7 +8,7 @@
 
 ## Notes
 - AGENTS.md currently describes 5 tools, but `tools/` contains 7 tool directories and `tool_registry.json` lists more (e.g., `perplexity_search`, `query_tool_memory`).
-- Text agent uses `gemini-2.5-flash` and does system + conversation caching (`ai.caches`) with fallback if unsupported. Uses tool memory (dedup, summarization, loop detection) and auto-chains `kb_get` after `kb_search` when user asks to show images.
+- Text agent uses `gemini-2.5-flash` and does system + conversation caching (`ai.caches`) with fallback if unsupported. Uses tool memory (dedup, summarization, loop detection). The model decides when to chain `kb_get` after `kb_search` via prompt guidance.
 - Voice server supports Vertex AI Live API auth (`VERTEXAI_PROJECT`, `GOOGLE_APPLICATION_CREDENTIALS`) and falls back to Gemini API key for non-live flows; loads tool registry at startup with hot reload in dev.
 - Tool registry is build-time artifact (`tools/tool_registry.json`) and runtime loader uses static import map for handlers in bundled environments.
 - Embeddings use `gemini-embedding-001` (text-embedding-004 shutdown noted in code). Qdrant used for vector store.

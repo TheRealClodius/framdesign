@@ -24,6 +24,7 @@
     "test:agent": "node scripts/text-agent-test.js",
     "test:voice": "tsx scripts/voice-agent-test.js",
     "generate:audio": "node scripts/generate-test-audio.js",
+    "test:e2e": "npx playwright test",
     "kb:audit": "npx tsx scripts/kb-audit.ts",
     "kb:audit:fast": "npx tsx scripts/kb-audit.ts --skip-gcs --skip-qdrant"
   },
@@ -55,6 +56,7 @@
   },
   "devDependencies": {
     "@google-cloud/text-to-speech": "^6.4.0",
+    "@playwright/test": "^1.58.2",
     "@tailwindcss/postcss": "^4",
     "@types/jest": "^29.5.14",
     "@types/node": "^22",

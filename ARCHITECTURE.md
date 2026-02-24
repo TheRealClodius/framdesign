@@ -181,21 +181,9 @@ Stream Response
     └─ Continue streaming final response
 ```
 
-### AutoChain (Text Agent Only)
+### Tool Chaining (Model-Driven)
 
-After tool execution, the text agent may automatically chain additional tool calls to enrich responses — without requiring the model to request them. This runs in three phases:
-
-1. **Phase 1 — Visual Show Request**: When `isVisualShowRequest()` detects the user wants to see an image ("show me", "let me see"), auto-fetches the best matching asset via `kb_get`. Checks `pastToolCalls` to avoid re-fetching already-shown assets and adds guidance if no new asset is available.
-
-2. **Phase 2 — Implicit Visual Enrichment**: When an asset is referenced in `kb_search` results but not explicitly requested, auto-fetches it to support the response narrative.
-
-3. **Phase 3 — Project Exploration**: When `isProjectExplorationRequest()` detects an exploratory query with project results, auto-fetches one representative asset from the top project. Deduplicates against `pastToolCalls`:
-   - Builds a set of already-fetched asset IDs from prior `kb_get` calls
-   - Prefers projects that still have unfetched assets (avoids re-enriching the same project)
-   - Selects the first unfetched asset from the chosen project
-   - Skips Phase 3 entirely if all assets across all returned projects have already been fetched
-
-All phases use loop detection (`loopDetector`) and record calls to both `toolMemoryStore` and the observability pipeline.
+The text agent relies on Gemini's native parallel function calling to chain tools. After `kb_search` returns results with asset hints, the model decides whether to call `kb_get` based on prompt guidance (see "Tool Calling Strategy" in `prompts/core.md`). This replaces the previous server-side AutoChain logic, giving the model full control over which assets to fetch and when.
 
 ### Voice Agent Chat Flow
 

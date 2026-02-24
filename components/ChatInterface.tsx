@@ -1698,6 +1698,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
             return (
               <div
                 key={message.id || index}
+                data-testid={`message-${message.role}`}
                 className={`flex ${
                   message.role === "user" ? "justify-end" : "justify-start"
                 }`}
@@ -1990,6 +1991,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
               {/* Textarea */}
               <textarea
                 ref={textareaRef}
+                data-testid="chat-input"
                 rows={1}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
