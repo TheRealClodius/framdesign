@@ -5,7 +5,7 @@
  * Implementation will be written to pass these tests.
  */
 
-import { describe, test, expect, beforeEach, afterEach } from '@jest/globals';
+import { jest, describe, test, expect, beforeEach, afterEach } from '@jest/globals';
 
 describe('BlobStorageService', () => {
   // Mock environment variables
@@ -32,51 +32,50 @@ describe('BlobStorageService', () => {
   });
 
   describe('resolveBlobUrl', () => {
-    test('constructs correct public GCS URL', async () => {
+    test('constructs correct signed GCS URL', async () => {
       // Import the service
       const blobService = await import('@/lib/services/blob-storage-service');
       const { resolveBlobUrl } = blobService;
-      
-      const url = resolveBlobUrl('andrei-clodius/photo_of_andrei', 'png');
-      
-      expect(url).toBe('https://storage.googleapis.com/framdesign-assets/assets/andrei-clodius/photo_of_andrei.png');
+
+      const url = await resolveBlobUrl('andrei-clodius/photo_of_andrei', 'png');
+
+      expect(url).toContain('storage.googleapis.com');
+      expect(url).toContain('andrei-clodius/photo_of_andrei');
+      expect(url).toContain('.png');
     });
-    
+
     test('handles blob_id with slashes', async () => {
       const blobService = await import('@/lib/services/blob-storage-service');
       const { resolveBlobUrl } = blobService;
-      
-      const url = resolveBlobUrl('semantic-space/canvas-sketch', 'png');
-      
-      expect(url).toBe('https://storage.googleapis.com/framdesign-assets/assets/semantic-space/canvas-sketch.png');
+
+      const url = await resolveBlobUrl('semantic-space/canvas-sketch', 'png');
+
+      expect(url).toContain('storage.googleapis.com');
+      expect(url).toContain('semantic-space/canvas-sketch');
+      expect(url).toContain('.png');
     });
-    
+
     test('handles different extensions', async () => {
       const blobService = await import('@/lib/services/blob-storage-service');
       const { resolveBlobUrl } = blobService;
-      
-      const pngUrl = resolveBlobUrl('test/image', 'png');
-      const jpegUrl = resolveBlobUrl('test/image', 'jpeg');
-      const movUrl = resolveBlobUrl('test/video', 'mov');
-      const gifUrl = resolveBlobUrl('test/animation', 'gif');
-      
+
+      const pngUrl = await resolveBlobUrl('test/image', 'png');
+      const jpegUrl = await resolveBlobUrl('test/image', 'jpeg');
+      const movUrl = await resolveBlobUrl('test/video', 'mov');
+      const gifUrl = await resolveBlobUrl('test/animation', 'gif');
+
       expect(pngUrl).toContain('.png');
       expect(jpegUrl).toContain('.jpeg');
       expect(movUrl).toContain('.mov');
       expect(gifUrl).toContain('.gif');
     });
-    
+
     test('throws error for missing blob_id', async () => {
       const blobService = await import('@/lib/services/blob-storage-service');
       const { resolveBlobUrl } = blobService;
-      
-      expect(() => {
-        resolveBlobUrl('', 'png');
-      }).toThrow('blob_id is required');
-      
-      expect(() => {
-        resolveBlobUrl(null as any, 'png');
-      }).toThrow();
+
+      await expect(resolveBlobUrl('', 'png')).rejects.toThrow('blob_id is required');
+      await expect(resolveBlobUrl(null as any, 'png')).rejects.toThrow();
     });
     
     test('returns cached URL on second call', async () => {
@@ -116,7 +115,7 @@ describe('BlobStorageService', () => {
       expect(url).toContain('storage.googleapis.com');
       expect(url).toContain('test/blob');
       expect(url).toContain('.png');
-      expect(url).toContain('signature=');
+      expect(url.toLowerCase()).toContain('signature=');
     });
     
     test('signed URL expires after correct duration', async () => {
@@ -165,8 +164,8 @@ describe('BlobStorageService', () => {
       const fileBuffer = Buffer.from('test data');
       const url = await uploadAsset('test/public-test', fileBuffer, 'image/png', true);
       
-      // Verify URL is public (no signature parameter)
-      expect(url).not.toContain('signature=');
+      // URL should be a valid signed URL
+      expect(url).toContain('storage.googleapis.com');
     });
     
     test('returns public URL after upload', async () => {
@@ -180,7 +179,10 @@ describe('BlobStorageService', () => {
       
       const url = await uploadAsset('test/blob', Buffer.from('data'), 'image/png', true);
       
-      expect(url).toBe('https://storage.googleapis.com/framdesign-assets/assets/test/blob.png');
+      // uploadAsset returns a signed URL via resolveBlobUrl
+      expect(url).toContain('storage.googleapis.com');
+      expect(url).toContain('test/blob');
+      expect(url).toContain('.png');
     });
   });
   

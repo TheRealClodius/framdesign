@@ -76,8 +76,8 @@ describe('Token Estimation', () => {
   test('should handle long text', () => {
     const text = 'a'.repeat(1000);
     const tokens = estimateTokens(text);
-    // tiktoken will give accurate count (typically around 250-300 tokens for 1000 'a' chars)
-    expect(tokens).toBeGreaterThan(200);
+    // tiktoken cl100k encodes repeated chars very efficiently (~125 tokens for 1000 'a's)
+    expect(tokens).toBeGreaterThan(50);
     expect(tokens).toBeLessThan(400);
   });
 
@@ -143,13 +143,14 @@ describe('Token Estimation', () => {
 
   test('should respect MAX_TOKENS limit', () => {
     const MAX_TOKENS = 30000;
-    // Create text that will exceed limit (using tiktoken's more accurate counting)
-    // For tiktoken, ~4 chars per token is still a reasonable approximation for this test
-    const veryLongText = 'a'.repeat(MAX_TOKENS * 4 + 1000);
+    // tiktoken encodes repeated chars very efficiently (~8 chars/token for repeated 'a')
+    // Use varied text to get closer to expected ratio
+    const veryLongText = Array.from({ length: MAX_TOKENS * 5 }, (_, i) =>
+      String.fromCharCode(65 + (i % 26))
+    ).join(' ');
     const tokens = estimateTokens(veryLongText);
-    
+
     expect(tokens).toBeGreaterThan(MAX_TOKENS);
-    // This test verifies we can detect when we exceed the limit
   });
 
   test('should trim summary to fit token budget', () => {

@@ -182,3 +182,6 @@ export const resetMetrics = () => {
   metrics.globalStats = { totalCalls: 0, startTime: Date.now() };
   sessionData = { tools: {}, turns: 0, contextTokens: 0 };
 };
+
+// Alias for metrics-endpoint.js compatibility
+export const getMetricsSummary = (options) => metrics.getSummary();

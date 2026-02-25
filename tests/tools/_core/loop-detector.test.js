@@ -53,11 +53,11 @@ describe('LoopDetector', () => {
     });
 
     test('should not detect loop for different arguments', () => {
-      // First call with args1
-      detector.recordCall('session1', 1, 'kb_search', { query: 'test1' }, { ok: true, data: [] });
+      // First call with args1 (non-empty results to avoid EMPTY_RESULTS_REPEATED)
+      detector.recordCall('session1', 1, 'kb_search', { query: 'test1' }, { ok: true, data: { results: [{ id: 1 }] } });
 
       // Second call with args2
-      detector.recordCall('session1', 1, 'kb_search', { query: 'test2' }, { ok: true, data: [] });
+      detector.recordCall('session1', 1, 'kb_search', { query: 'test2' }, { ok: true, data: { results: [{ id: 2 }] } });
 
       // Third call with args3 - should not detect loop (different args)
       const result = detector.detectLoop('session1', 1, 'kb_search', { query: 'test3' });
@@ -174,20 +174,24 @@ describe('LoopDetector', () => {
     });
 
     test('should keep last 5 turns per session', () => {
-      // Add 10 turns
+      // Add 10 turns (record but don't clear - clearTurn deletes the turn)
       for (let turn = 1; turn <= 10; turn++) {
         detector.recordCall('session1', turn, 'kb_search', { query: `test${turn}` }, {
           ok: true,
-          data: []
+          data: { results: [{ id: turn }] }
         });
-        detector.clearTurn('session1', turn);
       }
 
-      // Should only have turns 6-10
+      // Now clear the latest turn - triggers cleanup of old turns
+      detector.clearTurn('session1', 10);
+
+      // Should have cleaned up oldest, keeping last 5: turns 5-9
+      // (turn 10 was explicitly cleared)
       expect(detector.turnHistory.has('session1:1')).toBe(false);
-      expect(detector.turnHistory.has('session1:5')).toBe(false);
-      expect(detector.turnHistory.has('session1:6')).toBe(true);
-      expect(detector.turnHistory.has('session1:10')).toBe(true);
+      expect(detector.turnHistory.has('session1:4')).toBe(false);
+      expect(detector.turnHistory.has('session1:5')).toBe(true);
+      expect(detector.turnHistory.has('session1:9')).toBe(true);
+      expect(detector.turnHistory.has('session1:10')).toBe(false); // Explicitly cleared
     });
   });
 
@@ -248,9 +252,9 @@ describe('LoopDetector', () => {
 
   describe('argument hashing', () => {
     test('should treat different argument orders as different', () => {
-      // First call with args in one order
-      detector.recordCall('session1', 1, 'kb_search', { a: 1, b: 2 }, { ok: true, data: [] });
-      detector.recordCall('session1', 1, 'kb_search', { a: 1, b: 2 }, { ok: true, data: [] });
+      // First call with args in one order (non-empty results to avoid empty detection)
+      detector.recordCall('session1', 1, 'kb_search', { a: 1, b: 2 }, { ok: true, data: { results: [{ id: 1 }] } });
+      detector.recordCall('session1', 1, 'kb_search', { a: 1, b: 2 }, { ok: true, data: { results: [{ id: 2 }] } });
 
       // Third call with args in different order - may or may not detect (depends on JSON.stringify)
       // This test documents current behavior

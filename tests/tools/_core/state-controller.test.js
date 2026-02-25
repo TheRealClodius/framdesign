@@ -185,7 +185,7 @@ describe('applyIntent', () => {
         type: IntentType.SET_PENDING_MESSAGE
       });
       
-      expect(state.get('pendingMessage')).toBeUndefined();
+      expect(state.get('pendingMessage')).toBeNull(); // Unchanged from initial value
       expect(consoleWarnSpy).toHaveBeenCalled();
       
       consoleWarnSpy.mockRestore();

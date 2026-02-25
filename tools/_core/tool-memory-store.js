@@ -150,6 +150,20 @@ class ToolMemoryStore {
   }
 
   /**
+   * Clear all sessions
+   */
+  clearAll() {
+    this.sessions.clear();
+  }
+
+  /**
+   * Get number of active sessions
+   */
+  getSessionCount() {
+    return this.sessions.size;
+  }
+
+  /**
    * Find a similar past call for deduplication
    * @param {string} sessionId - Session identifier
    * @param {string} toolId - Tool ID to match

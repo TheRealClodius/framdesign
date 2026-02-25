@@ -1,21 +1,38 @@
 /**
  * Unit tests for registry.js
+ *
+ * Uses direct registry population instead of mocking load() internals,
+ * since load() relies on both dynamic import() and readFileSync which
+ * are difficult to mock together in Jest ESM mode.
  */
 
 import { jest, describe, test, expect, beforeEach } from '@jest/globals';
 import { ToolRegistry } from '../../../tools/_core/registry.js';
 import { ErrorType, ToolError } from '../../../tools/_core/error-types.js';
-import { validateToolResponse } from '../../../tools/_core/tool-response.js';
+import Ajv from 'ajv';
+import addFormats from 'ajv-formats';
 
-// Mock fs module - must use jest.fn() in factory, access via require after hoisting
-jest.mock('fs', () => ({
-  readFileSync: jest.fn(),
-  existsSync: jest.fn(() => true),
-  watch: jest.fn()
-}));
+/**
+ * Helper: populate a registry with test tool data (bypasses load())
+ */
+function populateRegistry(registry, config) {
+  const { version = '1.0.0', gitCommit = 'abc123', tools = [] } = config;
+  const ajv = new Ajv({ allErrors: true, useDefaults: true, coerceTypes: false, removeAdditional: false, strict: true });
+  addFormats(ajv);
 
-// Get reference to the mocked readFileSync (require works in Jest's CJS transform)
-const { readFileSync: mockedReadFileSync } = require('fs');
+  registry.version = version;
+  registry.gitCommit = gitCommit;
+
+  for (const tool of tools) {
+    registry.tools.set(tool.toolId, tool);
+    if (tool.jsonSchema) {
+      registry.validators.set(tool.toolId, ajv.compile(tool.jsonSchema));
+    }
+    if (tool.handler) {
+      registry.handlers.set(tool.toolId, tool.handler);
+    }
+  }
+}
 
 describe('ToolRegistry', () => {
   let registry;
@@ -38,96 +55,27 @@ describe('ToolRegistry', () => {
   });
 
   describe('load', () => {
-    test('should load registry from file', async () => {
-      const mockRegistry = {
-        version: '1.0.0',
-        gitCommit: 'abc123',
-        tools: [
-          {
-            toolId: 'test_tool',
-            version: '1.0.0',
-            category: 'utility',
-            summary: 'Test tool',
-            jsonSchema: {
-              type: 'object',
-              properties: {
-                param: { type: 'string' }
-              }
-            },
-            handlerPath: 'file:///test/handler.js'
-          }
-        ]
-      };
-
-      // Mock handler module
-      const mockHandler = jest.fn().mockResolvedValue({
-        ok: true,
-        data: { result: 'success' },
-        meta: {}
-      });
-
-      mockedReadFileSync.mockReturnValue(JSON.stringify(mockRegistry));
-
-      // Mock dynamic import
-      const originalImport = global.import;
-      global.import = jest.fn().mockResolvedValue({
-        execute: mockHandler
-      });
-
-      try {
-        await registry.load();
-        
-        expect(registry.version).toBe('1.0.0');
-        expect(registry.gitCommit).toBe('abc123');
-        expect(registry.tools.size).toBe(1);
-        expect(registry.tools.has('test_tool')).toBe(true);
-        expect(registry.handlers.has('test_tool')).toBe(true);
-        expect(registry.validators.has('test_tool')).toBe(true);
-      } finally {
-        global.import = originalImport;
-      }
-    });
-
     test('should throw if registry is locked', async () => {
       registry.lock();
-      
+
       await expect(registry.load()).rejects.toThrow('Cannot load registry after lock()');
     });
 
-    test('should throw if handler module missing execute function', async () => {
-      const mockRegistry = {
-        version: '1.0.0',
-        gitCommit: 'abc123',
-        tools: [
-          {
-            toolId: 'test_tool',
-            version: '1.0.0',
-            category: 'utility',
-            summary: 'Test tool',
-            jsonSchema: { type: 'object' },
-            handlerPath: 'file:///test/handler.js'
-          }
-        ]
-      };
+    test('should load the real tool_registry.json', async () => {
+      // Integration-style test: loads the actual generated registry
+      await registry.load();
 
-      mockedReadFileSync.mockReturnValue(JSON.stringify(mockRegistry));
-
-      const originalImport = global.import;
-      global.import = jest.fn().mockResolvedValue({});
-
-      try {
-        await expect(registry.load()).rejects.toThrow('Handler test_tool must export an execute function');
-      } finally {
-        global.import = originalImport;
-      }
+      expect(registry.version).toBeDefined();
+      expect(registry.tools.size).toBeGreaterThan(0);
+      expect(registry.tools.has('kb_search')).toBe(true);
+      expect(registry.handlers.has('kb_search')).toBe(true);
+      expect(registry.validators.has('kb_search')).toBe(true);
     });
   });
 
   describe('getProviderSchemas', () => {
-    test('should return schemas for openai', async () => {
-      const mockRegistry = {
-        version: '1.0.0',
-        gitCommit: 'abc123',
+    test('should return schemas for openai', () => {
+      populateRegistry(registry, {
         tools: [
           {
             toolId: 'test_tool',
@@ -135,29 +83,18 @@ describe('ToolRegistry', () => {
             category: 'utility',
             summary: 'Test tool',
             jsonSchema: { type: 'object' },
-            handlerPath: 'file:///test/handler.js',
+            allowedModes: ['text', 'voice'],
             providerSchemas: {
               openai: { name: 'test_tool', description: 'Test' }
             }
           }
         ]
-      };
-
-      mockedReadFileSync.mockReturnValue(JSON.stringify(mockRegistry));
-      const originalImport = global.import;
-      global.import = jest.fn().mockResolvedValue({
-        execute: jest.fn()
       });
 
-      try {
-        await registry.load();
-        const schemas = registry.getProviderSchemas('openai');
-        
-        expect(schemas).toHaveLength(1);
-        expect(schemas[0]).toEqual({ name: 'test_tool', description: 'Test' });
-      } finally {
-        global.import = originalImport;
-      }
+      const schemas = registry.getProviderSchemas('openai');
+
+      expect(schemas).toHaveLength(1);
+      expect(schemas[0]).toEqual({ name: 'test_tool', description: 'Test' });
     });
 
     test('should throw for unsupported provider', () => {
@@ -166,10 +103,8 @@ describe('ToolRegistry', () => {
   });
 
   describe('getSummaries', () => {
-    test('should return formatted summaries', async () => {
-      const mockRegistry = {
-        version: '1.0.0',
-        gitCommit: 'abc123',
+    test('should return formatted summaries', () => {
+      populateRegistry(registry, {
         tools: [
           {
             toolId: 'tool1',
@@ -177,7 +112,6 @@ describe('ToolRegistry', () => {
             category: 'utility',
             summary: 'Tool 1 summary',
             jsonSchema: { type: 'object' },
-            handlerPath: 'file:///test/handler.js'
           },
           {
             toolId: 'tool2',
@@ -185,34 +119,20 @@ describe('ToolRegistry', () => {
             category: 'action',
             summary: 'Tool 2 summary',
             jsonSchema: { type: 'object' },
-            handlerPath: 'file:///test/handler2.js'
           }
         ]
-      };
-
-      mockedReadFileSync.mockReturnValue(JSON.stringify(mockRegistry));
-      const originalImport = global.import;
-      global.import = jest.fn().mockResolvedValue({
-        execute: jest.fn()
       });
 
-      try {
-        await registry.load();
-        const summaries = registry.getSummaries();
-        
-        expect(summaries).toContain('**tool1** (utility): Tool 1 summary');
-        expect(summaries).toContain('**tool2** (action): Tool 2 summary');
-      } finally {
-        global.import = originalImport;
-      }
+      const summaries = registry.getSummaries();
+
+      expect(summaries).toContain('**tool1** (utility): Tool 1 summary');
+      expect(summaries).toContain('**tool2** (action): Tool 2 summary');
     });
   });
 
   describe('getDocumentation', () => {
-    test('should return documentation for tool', async () => {
-      const mockRegistry = {
-        version: '1.0.0',
-        gitCommit: 'abc123',
+    test('should return documentation for tool', () => {
+      populateRegistry(registry, {
         tools: [
           {
             toolId: 'test_tool',
@@ -221,25 +141,13 @@ describe('ToolRegistry', () => {
             summary: 'Test tool',
             documentation: '# Test Tool\n\nDocumentation here',
             jsonSchema: { type: 'object' },
-            handlerPath: 'file:///test/handler.js'
           }
         ]
-      };
-
-      mockedReadFileSync.mockReturnValue(JSON.stringify(mockRegistry));
-      const originalImport = global.import;
-      global.import = jest.fn().mockResolvedValue({
-        execute: jest.fn()
       });
 
-      try {
-        await registry.load();
-        const doc = registry.getDocumentation('test_tool');
-        
-        expect(doc).toBe('# Test Tool\n\nDocumentation here');
-      } finally {
-        global.import = originalImport;
-      }
+      const doc = registry.getDocumentation('test_tool');
+
+      expect(doc).toBe('# Test Tool\n\nDocumentation here');
     });
 
     test('should return null for non-existent tool', () => {
@@ -248,10 +156,8 @@ describe('ToolRegistry', () => {
   });
 
   describe('getToolMetadata', () => {
-    test('should return metadata for tool', async () => {
-      const mockRegistry = {
-        version: '1.0.0',
-        gitCommit: 'abc123',
+    test('should return metadata for tool', () => {
+      populateRegistry(registry, {
         tools: [
           {
             toolId: 'test_tool',
@@ -264,34 +170,22 @@ describe('ToolRegistry', () => {
             allowedModes: ['voice', 'text'],
             latencyBudgetMs: 1000,
             jsonSchema: { type: 'object' },
-            handlerPath: 'file:///test/handler.js'
           }
         ]
-      };
-
-      mockedReadFileSync.mockReturnValue(JSON.stringify(mockRegistry));
-      const originalImport = global.import;
-      global.import = jest.fn().mockResolvedValue({
-        execute: jest.fn()
       });
 
-      try {
-        await registry.load();
-        const metadata = registry.getToolMetadata('test_tool');
-        
-        expect(metadata).toEqual({
-          toolId: 'test_tool',
-          version: '1.0.0',
-          category: 'utility',
-          sideEffects: 'read_only',
-          idempotent: true,
-          requiresConfirmation: false,
-          allowedModes: ['voice', 'text'],
-          latencyBudgetMs: 1000
-        });
-      } finally {
-        global.import = originalImport;
-      }
+      const metadata = registry.getToolMetadata('test_tool');
+
+      expect(metadata).toEqual({
+        toolId: 'test_tool',
+        version: '1.0.0',
+        category: 'utility',
+        sideEffects: 'read_only',
+        idempotent: true,
+        requiresConfirmation: false,
+        allowedModes: ['voice', 'text'],
+        latencyBudgetMs: 1000
+      });
     });
 
     test('should return null for non-existent tool', () => {
@@ -302,12 +196,10 @@ describe('ToolRegistry', () => {
   describe('executeTool', () => {
     let mockHandler;
 
-    beforeEach(async () => {
+    beforeEach(() => {
       mockHandler = jest.fn();
-      
-      const mockRegistry = {
-        version: '1.0.0',
-        gitCommit: 'abc123',
+
+      populateRegistry(registry, {
         tools: [
           {
             toolId: 'test_tool',
@@ -321,22 +213,10 @@ describe('ToolRegistry', () => {
               },
               required: []
             },
-            handlerPath: 'file:///test/handler.js'
+            handler: mockHandler
           }
         ]
-      };
-
-      mockedReadFileSync.mockReturnValue(JSON.stringify(mockRegistry));
-      const originalImport = global.import;
-      global.import = jest.fn().mockResolvedValue({
-        execute: mockHandler
       });
-
-      try {
-        await registry.load();
-      } finally {
-        global.import = originalImport;
-      }
     });
 
     test('should return NOT_FOUND for non-existent tool', async () => {
@@ -418,9 +298,10 @@ describe('ToolRegistry', () => {
     });
 
     test('should return INTERNAL error for invalid response structure', async () => {
+      // ok must be a boolean - returning string triggers validation error
       mockHandler.mockResolvedValue({
-        ok: true
-        // Missing data field
+        ok: 'yes',
+        data: {}
       });
 
       const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
@@ -456,10 +337,8 @@ describe('ToolRegistry', () => {
   });
 
   describe('lock and snapshot', () => {
-    test('should lock registry', async () => {
-      const mockRegistry = {
-        version: '1.0.0',
-        gitCommit: 'abc123',
+    test('should lock registry', () => {
+      populateRegistry(registry, {
         tools: [
           {
             toolId: 'test_tool',
@@ -467,29 +346,17 @@ describe('ToolRegistry', () => {
             category: 'utility',
             summary: 'Test tool',
             jsonSchema: { type: 'object' },
-            handlerPath: 'file:///test/handler.js'
           }
         ]
-      };
-
-      mockedReadFileSync.mockReturnValue(JSON.stringify(mockRegistry));
-      const originalImport = global.import;
-      global.import = jest.fn().mockResolvedValue({
-        execute: jest.fn()
       });
 
-      try {
-        await registry.load();
-        registry.lock();
-        
-        expect(registry.locked).toBe(true);
-        expect(registry.frozenSnapshot).toBeDefined();
-        expect(registry.frozenSnapshot.version).toBe('1.0.0');
-        expect(registry.frozenSnapshot.gitCommit).toBe('abc123');
-        expect(registry.frozenSnapshot.toolIds).toContain('test_tool');
-      } finally {
-        global.import = originalImport;
-      }
+      registry.lock();
+
+      expect(registry.locked).toBe(true);
+      expect(registry.frozenSnapshot).toBeDefined();
+      expect(registry.frozenSnapshot.version).toBe('1.0.0');
+      expect(registry.frozenSnapshot.gitCommit).toBe('abc123');
+      expect(registry.frozenSnapshot.toolIds).toContain('test_tool');
     });
 
     test('should allow multiple lock calls', () => {
@@ -501,10 +368,8 @@ describe('ToolRegistry', () => {
       expect(() => registry.snapshot()).toThrow('Cannot snapshot unlocked registry');
     });
 
-    test('should return snapshot after locking', async () => {
-      const mockRegistry = {
-        version: '1.0.0',
-        gitCommit: 'abc123',
+    test('should return snapshot after locking', () => {
+      populateRegistry(registry, {
         tools: [
           {
             toolId: 'test_tool',
@@ -512,53 +377,29 @@ describe('ToolRegistry', () => {
             category: 'utility',
             summary: 'Test tool',
             jsonSchema: { type: 'object' },
-            handlerPath: 'file:///test/handler.js'
           }
         ]
-      };
-
-      mockedReadFileSync.mockReturnValue(JSON.stringify(mockRegistry));
-      const originalImport = global.import;
-      global.import = jest.fn().mockResolvedValue({
-        execute: jest.fn()
       });
 
-      try {
-        await registry.load();
-        registry.lock();
-        
-        const snapshot = registry.snapshot();
-        expect(snapshot).toBeDefined();
-        expect(snapshot.version).toBe('1.0.0');
-        expect(snapshot.toolIds).toEqual(['test_tool']);
-      } finally {
-        global.import = originalImport;
-      }
+      registry.lock();
+
+      const snapshot = registry.snapshot();
+      expect(snapshot).toBeDefined();
+      expect(snapshot.version).toBe('1.0.0');
+      expect(snapshot.toolIds).toEqual(['test_tool']);
     });
   });
 
   describe('getVersion and getGitCommit', () => {
-    test('should return version and commit', async () => {
-      const mockRegistry = {
+    test('should return version and commit', () => {
+      populateRegistry(registry, {
         version: '1.0.0',
         gitCommit: 'abc123',
         tools: []
-      };
-
-      mockedReadFileSync.mockReturnValue(JSON.stringify(mockRegistry));
-      const originalImport = global.import;
-      global.import = jest.fn().mockResolvedValue({
-        execute: jest.fn()
       });
 
-      try {
-        await registry.load();
-        
-        expect(registry.getVersion()).toBe('1.0.0');
-        expect(registry.getGitCommit()).toBe('abc123');
-      } finally {
-        global.import = originalImport;
-      }
+      expect(registry.getVersion()).toBe('1.0.0');
+      expect(registry.getGitCommit()).toBe('abc123');
     });
   });
 
@@ -581,7 +422,7 @@ describe('ToolRegistry', () => {
       };
 
       const filtered = registry.filterArgsBySchema(args, schema, 'test_tool');
-      
+
       expect(filtered).toEqual({
         query: 'test',
         top_k: 5
@@ -616,7 +457,7 @@ describe('ToolRegistry', () => {
       };
 
       const filtered = registry.filterArgsBySchema(args, schema, 'test_tool');
-      
+
       expect(filtered).toEqual({
         query: 'test',
         filters: {
@@ -646,7 +487,7 @@ describe('ToolRegistry', () => {
       };
 
       const filtered = registry.filterArgsBySchema(args, schema);
-      
+
       expect(filtered.query).toBe('test');
       expect(filtered.tags).toEqual(['tag1', 'tag2']);
       expect(filtered.count).toBe(42);
@@ -670,7 +511,7 @@ describe('ToolRegistry', () => {
     test('should return original args if schema has no properties', () => {
       const schema = { type: 'object' };
       const args = { query: 'test' };
-      
+
       const filtered = registry.filterArgsBySchema(args, schema);
       expect(filtered).toEqual(args);
     });

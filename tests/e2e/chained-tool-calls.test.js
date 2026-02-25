@@ -327,8 +327,8 @@ describe('E2E: Chained Tool Calls (Text Mode)', () => {
       retrievalTools.forEach(tool => {
         expect(tool.latencyBudgetMs).toBeDefined();
         expect(tool.latencyBudgetMs).toBeGreaterThan(0);
-        // Retrieval tools should have reasonable budgets
-        expect(tool.latencyBudgetMs).toBeLessThanOrEqual(3000);
+        // Retrieval tools should have reasonable budgets (perplexity_search calls external API, needs 5s)
+        expect(tool.latencyBudgetMs).toBeLessThanOrEqual(5000);
       });
     });
   });

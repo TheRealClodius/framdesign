@@ -19,7 +19,7 @@ describe('E2E: Performance Tests', () => {
   describe('Latency Budget Compliance', () => {
     test('should track latency budgets for all tools', async () => {
       const tools = ['end_voice_session', 'ignore_user', 'kb_search', 'start_voice_session'];
-      
+
       for (const toolId of tools) {
         const metadata = toolRegistry.getToolMetadata(toolId);
         expect(metadata).toBeTruthy();
@@ -53,7 +53,7 @@ describe('E2E: Performance Tests', () => {
       const duration = Date.now() - startTime;
 
       expect(result.ok).toBe(true);
-      expect(duration).toBeLessThan(5000); // Should complete within 5 seconds
+      expect(duration).toBeLessThan(5000);
     });
   });
 
@@ -83,7 +83,7 @@ describe('E2E: Performance Tests', () => {
       });
 
       const results = await Promise.all(executions);
-      
+
       expect(results.length).toBe(5);
       results.forEach(result => {
         expect(result.ok).toBe(true);
@@ -95,18 +95,19 @@ describe('E2E: Performance Tests', () => {
   describe('Registry Load Time', () => {
     test('should track registry load time in metrics', async () => {
       const summary = getMetricsSummary();
-      
+
       expect(summary).toBeDefined();
-      expect(summary.registryLoadTimeMs).toBeGreaterThanOrEqual(0);
-      expect(typeof summary.registryLoadTimeMs).toBe('number');
+      // Registry load is tracked as a tool execution under '_registry_load'
+      expect(summary.tools['_registry_load']).toBeDefined();
+      expect(summary.tools['_registry_load'].count).toBeGreaterThan(0);
     });
 
     test('should load registry within reasonable time', async () => {
-      // Registry should already be loaded, but we can verify it's fast
       const summary = getMetricsSummary();
-      
-      // Registry load should be under 10 seconds (usually much faster)
-      expect(summary.registryLoadTimeMs).toBeLessThan(10000);
+      const registryMetrics = summary.tools['_registry_load'];
+
+      // Registry load should be under 10 seconds
+      expect(registryMetrics.p50).toBeLessThan(10000);
     });
   });
 
@@ -117,7 +118,6 @@ describe('E2E: Performance Tests', () => {
         isActive: true
       });
 
-      // Execute a tool
       await toolRegistry.executeTool('end_voice_session', {
         clientId: 'test-metrics-123',
         geminiSession: {},
@@ -134,26 +134,23 @@ describe('E2E: Performance Tests', () => {
         }
       });
 
-      // Check metrics
       const summary = getMetricsSummary();
       expect(summary.tools).toBeDefined();
       expect(summary.tools['end_voice_session']).toBeDefined();
-      expect(summary.tools['end_voice_session'].executionCount).toBeGreaterThan(0);
+      expect(summary.tools['end_voice_session'].count).toBeGreaterThan(0);
     });
 
     test('should track latency percentiles', async () => {
       const summary = getMetricsSummary();
-      
-      // Check if any tools have metrics
+
       const toolIds = Object.keys(summary.tools);
       if (toolIds.length > 0) {
         const toolId = toolIds[0];
         const toolMetrics = summary.tools[toolId];
-        
-        expect(toolMetrics.latency).toBeDefined();
-        expect(toolMetrics.latency.p50).toBeGreaterThanOrEqual(0);
-        expect(toolMetrics.latency.p95).toBeGreaterThanOrEqual(0);
-        expect(toolMetrics.latency.p99).toBeGreaterThanOrEqual(0);
+
+        expect(toolMetrics.p50).toBeGreaterThanOrEqual(0);
+        expect(toolMetrics.p95).toBeGreaterThanOrEqual(0);
+        expect(toolMetrics.p99).toBeGreaterThanOrEqual(0);
       }
     });
   });
