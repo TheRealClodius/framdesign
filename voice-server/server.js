@@ -388,6 +388,49 @@ wss.on('connection', async (ws, req) => {
     return snippets;
   }
 
+  /**
+   * Clean tool response data before sending to Gemini.
+   * Removes internal metadata fields (_timing, _imageData, _allAssets, _diagnostics)
+   * and truncates large content to keep voice responses fast.
+   * Mirrors the cleaning done in the text agent (app/api/chat/route.ts).
+   */
+  function cleanToolResultForGemini(result, toolName) {
+    if (!result || !result.ok || !result.data) return result;
+
+    // Deep clone to avoid mutating the original (used by tool memory, markdown extraction, etc.)
+    const cleaned = JSON.parse(JSON.stringify(result));
+    const data = cleaned.data;
+
+    // Remove internal metadata fields that confuse the model
+    delete data._imageData;
+    delete data._timing;
+    delete data._allAssets;
+    delete data._diagnostics;
+
+    // Clean nested results (kb_search returns an array of results)
+    if (Array.isArray(data.results)) {
+      data.results.forEach(r => {
+        if (r.metadata) {
+          delete r.metadata._distance;
+          delete r.metadata.vector;
+        }
+      });
+    }
+
+    // Truncate large kb_get content for voice (spoken responses don't need full text)
+    if (toolName === 'kb_get' && data.content) {
+      const maxLength = 1500; // ~375 tokens — tighter for voice latency
+      if (data.content.length > maxLength) {
+        const originalLength = data.content.length;
+        data.content = data.content.substring(0, maxLength) + '\n\n... [Content truncated. Key details above.]';
+        data._truncated = true;
+        console.log(`[voice] Truncated kb_get content from ${originalLength} to ${maxLength} chars`);
+      }
+    }
+
+    return cleaned;
+  }
+
   function extractCitationsFromToolResult(result) {
     const citations = [];
     if (!result || !result.ok || !result.data) return citations;
@@ -919,11 +962,14 @@ wss.on('connection', async (ws, req) => {
           }
         }
 
-        // Send result via transport (full ToolResponse envelope)
+        // Clean result before sending to Gemini (remove internal metadata, truncate large content)
+        const cleanedResult = cleanToolResultForGemini(result, call.name);
+
+        // Send cleaned result via transport
         await transport.sendToolResult({
           id: call.id,
           name: call.name,
-          result: result
+          result: cleanedResult
         });
         
         // After sending the last tool result, notify the client for UI feedback
