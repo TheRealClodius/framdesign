@@ -138,7 +138,7 @@ Node 24 (.nvmrc). ES modules. Deployed: Vercel (text) + Railway (voice).
 Required in `.env`:
 ```
 GEMINI_API_KEY                  # Google Gemini API
-GEMINI_TEXT_MODEL                # Text agent model (default: gemini-3.1-flash-lite)
+GEMINI_TEXT_MODEL                # Text agent model (default: gemini-3.1-flash-lite-preview)
 PERPLEXITY_API_KEY              # External search
 QDRANT_CLUSTER_ENDPOINT         # Vector database URL
 QDRANT_API_KEY                  # Vector database auth
