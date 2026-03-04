@@ -13,4 +13,4 @@ import { loadTextPrompt } from './prompt-loader';
 export const FRAM_SYSTEM_PROMPT = loadTextPrompt();
 
 // Gemini model for the text agent (set via GEMINI_TEXT_MODEL env var)
-export const GEMINI_TEXT_MODEL = process.env.GEMINI_TEXT_MODEL || 'gemini-3.1-flash-lite';
+export const GEMINI_TEXT_MODEL = process.env.GEMINI_TEXT_MODEL || 'gemini-3.1-flash-lite-preview';
