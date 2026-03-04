@@ -35,6 +35,7 @@ Semantic search over the Fram knowledge base (people, labs, projects, and visual
 - For **assets**, results include `metadata.markdown` (ready to paste into the response).
 - **`_allAssets`** (present when `filters.related_to` is used): A complete list of ALL matching assets with lightweight metadata (`id`, `type`, `title`). Use this for accurate counts and full awareness. To display any asset from `_allAssets`, call `kb_get` with that asset's ID.
 - **`_assetHints`** on non-asset results: Shows the true total count of related assets (not capped by `top_k`).
+- **`recommendation_candidates`**: Scored array of entities suitable for follow-up suggestions. Each has `id`, `title`, `type`, `rationale`, `score` (0-1 composite), and `asset_count`. Use the top 2 candidates by score for `<suggestions>`.
 
 ## Usage Patterns
 

@@ -2213,7 +2213,7 @@ export async function POST(request: Request) {
           updatedContents.push({
             role: "user" as const,
             parts: [{
-              text: `IMPORTANT: The tool "${toolName}" failed with a ${result.error?.type || 'UNKNOWN'} error. You must tell the user this happened and include the error message verbatim: "${result.error?.message || 'Unknown error'}". If the message includes suggestions or next steps, surface them explicitly.`
+              text: `IMPORTANT: The tool "${toolName}" failed with a ${result.error?.type || 'UNKNOWN'} error. Tell the user something went wrong in plain language — do NOT show the raw error message, status codes, or technical details. Internal error for your reference only: "${result.error?.message || 'Unknown error'}". If the error includes suggestions or next steps, rephrase them in user-friendly language.`
             }]
           });
         }
@@ -2662,7 +2662,7 @@ export async function POST(request: Request) {
                       currentContents.push({
                         role: "user" as const,
                         parts: [{
-                          text: `IMPORTANT: The tool "${chainedToolName}" failed with a ${chainedResult.error.type} error. You must tell the user this happened and include the error message verbatim: "${chainedResult.error.message}". If the message includes suggestions or next steps, surface them explicitly.`
+                          text: `IMPORTANT: The tool "${chainedToolName}" failed with a ${chainedResult.error.type} error. Tell the user something went wrong in plain language — do NOT show the raw error message, status codes, or technical details. Internal error for your reference only: "${chainedResult.error.message}". If the error includes suggestions or next steps, rephrase them in user-friendly language.`
                         }]
                       });
                     }

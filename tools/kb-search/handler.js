@@ -443,6 +443,7 @@ export async function execute(context) {
       query: args.query,
       filters_applied: args.filters || null,
       clamped: topK !== originalTopK,
+      recommendation_candidates: buildRecommendationCandidates(deduplicatedResults),
       _allAssets: allAssets ? allAssets.slice(0, 20) : null,
       _instructions: buildInstructions(uniqueEntities, imageData, imageDataFor, deduplicatedResults, deadAssets, allAssets),
       _timing: finalTiming,
@@ -470,6 +471,54 @@ export async function execute(context) {
       retryable: false
     });
   }
+}
+
+/**
+ * Build structured recommendation candidates from search results.
+ * Each candidate has a computed score based on relevance + type diversity.
+ */
+function buildRecommendationCandidates(results) {
+  if (!results || results.length === 0) return [];
+
+  const seenTypes = new Set();
+
+  return results.map((r, index) => {
+    const relevanceScore = r.score || 0;
+    const positionFactor = 1 - (index * 0.05);
+    const typeBonus = seenTypes.has(r.type) ? 0 : 0.05;
+    seenTypes.add(r.type);
+    const assetBonus = r._assetHints?.count > 0 ? 0.03 : 0;
+
+    const compositeScore = Math.min(1, Math.max(0,
+      (relevanceScore * 0.8) + (positionFactor * 0.1) + typeBonus + assetBonus
+    ));
+
+    const rationale = buildRationale(r, index);
+
+    return {
+      id: r.id,
+      title: r.title,
+      type: r.type,
+      rationale,
+      score: Math.round(compositeScore * 1000) / 1000,
+      asset_count: r._assetHints?.count || 0,
+    };
+  });
+}
+
+/**
+ * Generate a short rationale string for why this candidate is recommended.
+ */
+function buildRationale(result, index) {
+  const parts = [];
+  if (index === 0) parts.push('top relevance match');
+  if (result._assetHints?.count > 0) {
+    parts.push(`${result._assetHints.count} visual asset(s) available`);
+  }
+  if (result.type === 'project') parts.push('project entity');
+  if (result.type === 'person') parts.push('person entity');
+  if (parts.length === 0) parts.push(`relevance score: ${result.score?.toFixed(3)}`);
+  return parts.join('; ');
 }
 
 /**
@@ -511,12 +560,8 @@ function buildInstructions(uniqueEntities, imageData, imageDataFor, results, dea
     base += '\nWhen discussing these entities, consider fetching a representative visual to enrich the narrative.';
   }
 
-  // Add suggestion seeds from related projects found in results
-  const projectResults = results.filter(r => r.type === 'project');
-  if (projectResults.length > 1) {
-    const related = projectResults.slice(1, 3).map(r => r.title);
-    base += `\nRelated projects found: ${related.join(', ')}. These can be suggested for further exploration.`;
-  }
+  // Reference structured recommendation_candidates for suggestion quality
+  base += '\nUse the `recommendation_candidates` array (sorted by composite score) to pick the 2 best follow-up suggestions. Prefer candidates with higher scores and available visual assets.';
 
   return base;
 }

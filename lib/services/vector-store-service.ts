@@ -6,22 +6,25 @@
  */
 
 import { QdrantClient } from '@qdrant/js-client-rest';
-import { createHash } from 'crypto';
+import { v5 as uuidv5 } from 'uuid';
 
 /**
- * Convert string ID to integer for Qdrant
- * Qdrant requires point IDs to be unsigned integers or UUIDs
- * We use a hash function to deterministically convert string IDs to integers
+ * Namespace UUID for Fram KB document IDs.
+ * Used with UUID v5 to produce deterministic, collision-free UUIDs from string document IDs.
+ * (Using the DNS namespace as a stable, well-known base.)
  */
-function stringIdToInteger(id: string): number {
-  // Use SHA-256 hash and take first 8 bytes as a 64-bit unsigned integer
-  // This ensures deterministic conversion while avoiding collisions
-  const hash = createHash('sha256').update(id).digest();
-  // Read first 8 bytes as BigInt, then convert to Number
-  // Use bitwise AND with 0x7FFFFFFF to ensure positive 32-bit integer
-  const hashInt = hash.readBigUInt64BE(0);
-  // Convert to 32-bit unsigned integer (Qdrant accepts up to 64-bit, but JS Number is safe for 32-bit)
-  return Number(hashInt & BigInt(0xFFFFFFFF));
+const FRAM_KB_NAMESPACE = '6ba7b810-9dad-11d1-80b4-00c04fd430c8';
+
+/**
+ * Convert string ID to deterministic UUID v5 for Qdrant.
+ * UUID v5 is generated from SHA-1 of namespace + string, producing a
+ * 128-bit ID with negligible collision probability.
+ *
+ * Replaces the previous 32-bit hash truncation which had theoretical
+ * collision risk at scale.
+ */
+function stringIdToUuid(id: string): string {
+  return uuidv5(id, FRAM_KB_NAMESPACE);
 }
 
 // Qdrant configuration (read lazily to support dotenv in scripts)
@@ -183,13 +186,13 @@ export async function upsertDocuments(
         }
       }
 
-      // Convert string ID to integer for Qdrant
+      // Convert string ID to deterministic UUID v5 for Qdrant
       // Store original string ID in payload for retrieval
-      const pointId = stringIdToInteger(doc.id);
+      const pointId = stringIdToUuid(doc.id);
       payload.original_id = doc.id; // Store original string ID in payload
 
       return {
-        id: pointId, // Point ID: integer hash of {entity_id}_chunk_{index}
+        id: pointId, // Point ID: UUID v5 derived from {entity_id}_chunk_{index}
         vector: doc.embedding, // 768-dimensional vector
         payload: payload,
       };
@@ -302,7 +305,7 @@ export async function deleteDocuments(ids: string[]): Promise<void> {
     const client = getQdrantClient();
 
     // Convert string IDs to integers for Qdrant
-    const pointIds = ids.map(stringIdToInteger);
+    const pointIds = ids.map(stringIdToUuid);
 
     // Delete points by IDs
     await client.delete(COLLECTION_NAME, {
@@ -490,6 +493,67 @@ export async function scrollByFilter(
       return [];
     }
     console.error('[vector-store] Error scrolling by filter:', error);
+    throw error;
+  }
+}
+
+/**
+ * Retrieve all chunks for a given entity_id without vector search.
+ * Uses Qdrant's scroll() API with an entity_id filter — no embedding needed.
+ *
+ * @param entityId - The entity_id to look up (e.g., "project:vector_watch")
+ * @returns Array of chunks with id, text, and metadata (empty if not found)
+ */
+export async function getByEntityId(
+  entityId: string
+): Promise<Array<{
+  id: string;
+  text: string;
+  metadata: Record<string, any>;
+}>> {
+  try {
+    const client = getQdrantClient();
+    const queryFilter = buildQdrantFilter({ entity_id: entityId });
+
+    const allChunks: Array<{ id: string; text: string; metadata: Record<string, any> }> = [];
+    let offset: string | number | Record<string, unknown> | undefined = undefined;
+
+    while (true) {
+      const result = await client.scroll(COLLECTION_NAME, {
+        limit: 100,
+        offset,
+        filter: queryFilter,
+        with_payload: true,
+        with_vector: false,
+      });
+
+      for (const point of result.points) {
+        const text = (point.payload?.text as string) || '';
+        const originalId = (point.payload?.original_id as string) || String(point.id);
+
+        const metadata: Record<string, any> = {};
+        if (point.payload) {
+          for (const [key, value] of Object.entries(point.payload)) {
+            if (key !== 'text' && key !== 'original_id') {
+              metadata[key] = value;
+            }
+          }
+        }
+
+        allChunks.push({ id: originalId, text, metadata });
+      }
+
+      if (!result.next_page_offset) break;
+      offset = result.next_page_offset;
+    }
+
+    return allChunks;
+  } catch (error: any) {
+    const errorMsg = (error.message || '').toLowerCase();
+    if (errorMsg.includes("doesn't exist") || errorMsg.includes('not found')) {
+      return [];
+    }
+    console.error('[vector-store] Error in getByEntityId:', error);
     throw error;
   }
 }
