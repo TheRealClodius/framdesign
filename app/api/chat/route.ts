@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { GoogleGenAI, HarmCategory, HarmBlockThreshold, type Content, type Part, type FunctionCall, type FunctionResponse } from "@google/genai";
-import { FRAM_SYSTEM_PROMPT } from "@/lib/config";
+import { FRAM_SYSTEM_PROMPT, GEMINI_TEXT_MODEL } from "@/lib/config";
 import { createHash } from "crypto";
 import { handleServerError, isRetryableError, isCacheError } from "@/lib/errors";
 import fs from 'fs';
@@ -379,7 +379,7 @@ ${conversationText}
 Summary:`;
 
     const result = await ai.models.generateContent({
-      model: "gemini-3.1-flash-lite",
+      model: GEMINI_TEXT_MODEL,
       contents: [{
         role: "user" as const,
         parts: [{ text: summaryPrompt }],
@@ -699,7 +699,7 @@ async function getSystemPromptCache(ai: GoogleGenAI, providerSchemas: ProviderSc
       // NOTE: Do NOT include contents with the system prompt as a user message -
       // this causes confusion when the actual user message arrives
       const cache = await ai.caches.create({
-        model: "gemini-3.1-flash-lite",
+        model: GEMINI_TEXT_MODEL,
         config: {
           systemInstruction: FRAM_SYSTEM_PROMPT,
           tools: [{ functionDeclarations: providerSchemas }],
@@ -826,7 +826,7 @@ async function getConversationCache(
 
       // Include tools in cache so we don't need to pass them when using cached content
       const cache = await ai.caches.create({
-        model: "gemini-3.1-flash-lite",
+        model: GEMINI_TEXT_MODEL,
         config: {
           systemInstruction: FRAM_SYSTEM_PROMPT,
           contents: cacheContent,
@@ -1673,7 +1673,7 @@ export async function POST(request: Request) {
     const stream = await retryWithBackoff(async () => {
       const estimatedTokens = estimateMessageTokens(contentsToSend);
       console.log("=== Gemini API Request ===");
-      console.log("Model: gemini-3.1-flash-lite (streaming)");
+      console.log(`Model: ${GEMINI_TEXT_MODEL} (streaming)`);
       console.log("Messages to send:", contentsToSend.length);
       console.log("Estimated tokens:", estimatedTokens);
       console.log("Using cached content:", cachedContent || "none");
@@ -1713,7 +1713,7 @@ export async function POST(request: Request) {
       try {
         const apiCallStart = Date.now();
         const result = await ai.models.generateContentStream({
-          model: "gemini-3.1-flash-lite",
+          model: GEMINI_TEXT_MODEL,
           contents: contentsToSend,
           config
         });
@@ -1735,7 +1735,7 @@ export async function POST(request: Request) {
           };
 
           const result = await ai.models.generateContentStream({
-            model: "gemini-3.1-flash-lite",
+            model: GEMINI_TEXT_MODEL,
             contents: contentsToSend,
             config: fallbackConfig
           });
@@ -2257,7 +2257,7 @@ export async function POST(request: Request) {
           try {
              debugLog(`Calling generateContentStream for tool: ${toolName}`);
              const result = await ai.models.generateContentStream({
-                model: "gemini-3.1-flash-lite",
+                model: GEMINI_TEXT_MODEL,
                 contents: updatedContents,
                 config
              });
@@ -2279,7 +2279,7 @@ export async function POST(request: Request) {
                };
 
                return await ai.models.generateContentStream({
-                 model: "gemini-3.1-flash-lite",
+                 model: GEMINI_TEXT_MODEL,
                  contents: updatedContents,
                  config: fallbackConfig
                });
@@ -2706,7 +2706,7 @@ export async function POST(request: Request) {
                       try {
                         const chainApiCallStart = Date.now();
                         const stream = await ai.models.generateContentStream({
-                          model: "gemini-3.1-flash-lite",
+                          model: GEMINI_TEXT_MODEL,
                           contents: currentContents,
                           config
                         });
@@ -2728,7 +2728,7 @@ export async function POST(request: Request) {
                           };
 
                           return await ai.models.generateContentStream({
-                            model: "gemini-3.1-flash-lite",
+                            model: GEMINI_TEXT_MODEL,
                             contents: currentContents,
                             config: fallbackConfig
                           });
@@ -2758,7 +2758,7 @@ export async function POST(request: Request) {
                         safetySettings: GEMINI_SAFETY_SETTINGS,
                       };
                       const retryStream = await ai.models.generateContentStream({
-                        model: "gemini-3.1-flash-lite",
+                        model: GEMINI_TEXT_MODEL,
                         contents: currentContents,
                         config: retryConfig
                       });
@@ -3210,7 +3210,7 @@ export async function POST(request: Request) {
                       }
 
                       return await ai.models.generateContentStream({
-                        model: "gemini-3.1-flash-lite",
+                        model: GEMINI_TEXT_MODEL,
                         contents: lateUpdatedContents,
                         config
                       });
@@ -3282,7 +3282,7 @@ export async function POST(request: Request) {
                   };
 
                   const retryStream = await ai.models.generateContentStream({
-                    model: "gemini-3.1-flash-lite",
+                    model: GEMINI_TEXT_MODEL,
                     contents: contentsToSend,
                     config: retryConfig
                   });
