@@ -313,11 +313,13 @@ The system always retains full tool outputs, giving agents summaries in context 
 
 - Markdown files with YAML frontmatter in `/kb`
 - Chunked and embedded to Qdrant (1000 chars, 200 overlap)
-- Semantic search via vector similarity
+- Semantic search via vector similarity (`kb_search`), direct entity retrieval via `getByEntityId()` (`kb_get`, no embedding needed)
+- Point IDs use deterministic UUID v5 for collision-free storage
 - Schemas: `person`, `lab`, `project`
 - **Current content**: 3 people, 14 projects, 100+ assets
 - Assets stored in Google Cloud Storage (GCS) with signed URLs via `/api/refresh-asset-url`
 - Complete manifest in `kb/assets/manifest.json` with blob_id mappings
+- `kb_search` returns structured `recommendation_candidates[]` with composite scoring for follow-up suggestions
 
 ## Deployment
 

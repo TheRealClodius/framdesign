@@ -1,8 +1,8 @@
 /**
  * kb_get Tool Handler
  *
- * Direct ID-based retrieval of KB documents
- * Uses a workaround: searches with large top_k and filters by entity_id
+ * Direct ID-based retrieval of KB documents.
+ * Uses Qdrant scroll with entity_id filter — no embedding needed.
  */
 
 import { ErrorType, ToolError } from '../_core/error-types.js';
@@ -44,61 +44,33 @@ export async function execute(context) {
   console.log(`[kb_get] Retrieving entity: ${entityId}`);
 
   try {
-    // Workaround: Use searchSimilar with a dummy query to get all documents,
-    // then filter by entity_id. Not efficient but works for small KBs.
-    // Use path alias for Next.js compatibility, fallback to relative for Node.js
-    let generateQueryEmbedding, searchSimilar;
-    
+    // Direct ID retrieval via Qdrant scroll — no embedding needed
+    let getByEntityId;
+
     try {
       // Try Next.js path alias first (works in Next.js webpack)
-      // Use string literals to help webpack static analysis
-      const embeddingModule = await import('@/lib/services/embedding-service');
       const vectorModule = await import('@/lib/services/vector-store-service');
-      generateQueryEmbedding = embeddingModule.generateQueryEmbedding
-        || embeddingModule.default?.generateQueryEmbedding;
-      searchSimilar = vectorModule.searchSimilar
-        || vectorModule.default?.searchSimilar;
+      getByEntityId = vectorModule.getByEntityId
+        || vectorModule.default?.getByEntityId;
     } catch (importError) {
       // Fallback for Node.js runtime (voice server)
-      // Use dynamic import with template literal to avoid webpack static analysis warnings
-      // Webpack will see this as a dynamic expression and won't try to bundle it
       try {
-        // Use a function to create the import path dynamically
         const getImportPath = (base) => `../../lib/services/${base}`;
-        const embeddingPath = getImportPath('embedding-service');
         const vectorPath = getImportPath('vector-store-service');
-        
-        // Use Promise.all to load both modules in parallel
-        const [embeddingModule, vectorModule] = await Promise.all([
-          import(/* webpackIgnore: true */ embeddingPath),
-          import(/* webpackIgnore: true */ vectorPath)
-        ]);
-        
-        generateQueryEmbedding = embeddingModule.generateQueryEmbedding
-          || embeddingModule.default?.generateQueryEmbedding;
-        searchSimilar = vectorModule.searchSimilar
-          || vectorModule.default?.searchSimilar;
+        const vectorModule = await import(/* webpackIgnore: true */ vectorPath);
+        getByEntityId = vectorModule.getByEntityId
+          || vectorModule.default?.getByEntityId;
       } catch (fallbackError) {
-        // If both imports fail, throw the original error
         throw importError;
       }
     }
 
-    // Generate a generic embedding (Qdrant accepts vectors directly)
-    const embeddingStart = Date.now();
-    const dummyEmbedding = await generateQueryEmbedding('document');
-    const embeddingDuration = Date.now() - embeddingStart;
-
-    // Get all chunks for this entity (filtered by entity_id in search)
+    // Retrieve all chunks for this entity directly by ID (no embedding needed)
     const searchStart = Date.now();
-    const allResults = await searchSimilar(
-      dummyEmbedding,
-      100,
-      { entity_id: entityId } // Filter by entity_id directly in Qdrant
-    );
+    const allResults = await getByEntityId(entityId);
     const searchDuration = Date.now() - searchStart;
 
-    // Map results to chunks (already filtered by entity_id)
+    // Map results to chunks
     const matchingChunks = allResults.map((result) => ({
       text: result.text,
       metadata: result.metadata
@@ -126,9 +98,8 @@ export async function execute(context) {
     // Add detailed timing for observability
     const finalTiming = {
       total: latency,
-      embedding: embeddingDuration,
       search: searchDuration,
-      processing: latency - (embeddingDuration + searchDuration)
+      processing: latency - searchDuration
     };
 
     if (isAsset) {

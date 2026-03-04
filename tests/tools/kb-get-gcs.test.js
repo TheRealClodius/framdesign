@@ -40,8 +40,9 @@ describe('kb_get with GCS assets', () => {
     };
 
     jest.mock('@/lib/services/vector-store-service', () => ({
-      searchSimilar: jest.fn().mockResolvedValue([
+      getByEntityId: jest.fn().mockResolvedValue([
         {
+          id: 'asset:andrei_clodius_photo_001_chunk_0',
           text: 'Portrait photograph of Andrei Clodius',
           metadata: {
             entity_id: 'asset:andrei_clodius_photo_001',
@@ -74,8 +75,9 @@ describe('kb_get with GCS assets', () => {
     };
 
     jest.mock('@/lib/services/vector-store-service', () => ({
-      searchSimilar: jest.fn().mockResolvedValue([
+      getByEntityId: jest.fn().mockResolvedValue([
         {
+          id: 'asset:test_asset_001_chunk_0',
           text: 'Test asset',
           metadata: {
             entity_id: 'asset:test_asset_001',
@@ -104,8 +106,9 @@ describe('kb_get with GCS assets', () => {
     };
 
     jest.mock('@/lib/services/vector-store-service', () => ({
-      searchSimilar: jest.fn().mockResolvedValue([
+      getByEntityId: jest.fn().mockResolvedValue([
         {
+          id: 'asset:test_asset_001_chunk_0',
           text: 'Test asset',
           metadata: {
             entity_id: 'asset:test_asset_001',
@@ -130,8 +133,9 @@ describe('kb_get with GCS assets', () => {
     };
 
     jest.mock('@/lib/services/vector-store-service', () => ({
-      searchSimilar: jest.fn().mockResolvedValue([
+      getByEntityId: jest.fn().mockResolvedValue([
         {
+          id: 'asset:missing_blob_id_chunk_0',
           text: 'Test asset',
           metadata: {
             entity_id: 'asset:missing_blob_id',
@@ -153,8 +157,9 @@ describe('kb_get with GCS assets', () => {
     };
 
     jest.mock('@/lib/services/vector-store-service', () => ({
-      searchSimilar: jest.fn().mockResolvedValue([
+      getByEntityId: jest.fn().mockResolvedValue([
         {
+          id: 'asset:test_asset_001_chunk_0',
           text: 'Test description',
           metadata: {
             entity_id: 'asset:test_asset_001',
@@ -187,8 +192,9 @@ describe('kb_get with GCS assets', () => {
     };
 
     jest.mock('@/lib/services/vector-store-service', () => ({
-      searchSimilar: jest.fn().mockResolvedValue([
+      getByEntityId: jest.fn().mockResolvedValue([
         {
+          id: 'asset:test_asset_001_chunk_0',
           text: 'Test',
           metadata: {
             entity_id: 'asset:test_asset_001',

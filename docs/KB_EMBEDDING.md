@@ -19,6 +19,7 @@ The KB embedding system converts markdown files in the `kb/` directory into vect
    - Manages Qdrant Cloud operations
    - Works in all environments (local, Vercel, Railway)
    - Handles search and retrieval
+   - Provides `getByEntityId()` for direct entity retrieval without embedding (used by `kb_get`)
 
 3. **Embedding Service** (`lib/services/embedding-service.ts`)
    - Centralized embedding generation
@@ -48,6 +49,7 @@ The KB embedding system converts markdown files in the `kb/` directory into vect
 
 4. **Storage**
    - Creates unique ID for each chunk: `{entity_id}_chunk_{index}`
+   - Point IDs use deterministic UUID v5 (derived from chunk string IDs) for collision-free storage
    - Stores in Qdrant Cloud collection `kb_documents`
    - Uses idempotent upsert (re-running script updates existing points)
 

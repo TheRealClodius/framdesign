@@ -35,6 +35,7 @@ When modifying the embedding process, use this checklist to ensure correctness.
 - [ ] Verify no duplicate IDs exist
 - [ ] Verify all KB files are embedded
 - [ ] Check for orphaned chunks
+- [ ] Confirm point IDs are UUID format in Qdrant (not 32-bit integers)
 
 ## Common Mistakes to Avoid
 
