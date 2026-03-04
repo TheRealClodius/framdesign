@@ -1,5 +1,21 @@
 # TASKS
 
+## ⚠ BEFORE ANYTHING ELSE
+
+### Re-embed KB after Connecticut hallucination fix
+
+**Branch:** `claude/fix-fram-hallucination-0qsnX`
+
+`kb/lab/fram_design.md` was updated with explicit Romania location and a disambiguation note about FRAM Filters. These changes must be pushed into Qdrant before the fix takes effect in the agent.
+
+```bash
+npx tsx scripts/Embed/embed-kb.ts
+```
+
+Then restart the dev server so the updated `prompts/core.md` is reloaded.
+
+---
+
 ## Pending
 
 ### 1. Inject user local time + timezone into agent context
