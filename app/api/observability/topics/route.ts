@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { GoogleGenAI } from '@google/genai';
-import { fetchRecentUserMessages, type ParsedLogEntry } from '@/lib/services/vercel-logs-service';
+import { getRecentMessages, type LoggedMessage } from '@/lib/services/message-log-service';
 
 interface TopicAnalysis {
   topTopics: Array<{ topic: string; count: number; examples: string[] }>;
@@ -13,7 +13,7 @@ interface TopicAnalysis {
 let cachedResult: { data: TopicAnalysis; expiresAt: number } | null = null;
 const CACHE_TTL = 30 * 60 * 1000; // 30 minutes
 
-async function analyzeTopics(messages: ParsedLogEntry[]): Promise<TopicAnalysis> {
+async function analyzeTopics(messages: LoggedMessage[]): Promise<TopicAnalysis> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error('Missing GEMINI_API_KEY');
 
@@ -72,7 +72,7 @@ export async function GET() {
       return NextResponse.json({ success: true, data: cachedResult.data, cached: true });
     }
 
-    const messages = await fetchRecentUserMessages(24);
+    const messages = getRecentMessages(24);
 
     if (messages.length === 0) {
       const empty: TopicAnalysis = {

@@ -30,6 +30,7 @@ import { loopDetector } from '@/tools/_core/loop-detector';
 import { toolMemoryDedup } from '@/tools/_core/tool-memory-dedup';
 import { hashArgs } from '@/tools/_core/utils/hash-args';
 import { estimateTokens as estimateTokensForJson } from '@/tools/_core/utils/estimate-tokens';
+import { logMessage } from '@/lib/services/message-log-service';
 
 // Type definitions
 type ProviderSchema = {
@@ -2876,16 +2877,11 @@ export async function POST(request: Request) {
                 console.log(`[Request Lifecycle] Total request time: ${totalRequestTime}ms`);
                 console.log(`[Request Lifecycle Summary] Context: ${contextPrepTime - requestStartTime}ms | Gemini TTFT: ${(firstChunkTime || bufferStart) - geminiCallStart}ms | Streaming: ${requestEndTime - (firstChunkTime || bufferStart)}ms`);
 
-                // Structured log for Vercel log analysis
+                // Log for observability
                 {
                   const userMsg = getLastUserMessageText(messages);
                   if (userMsg) {
-                    console.log(`[FRAM_MSG] ${JSON.stringify({
-                      userId: userId || 'anonymous',
-                      message: userMsg.slice(0, 200),
-                      tools: obsToolsCalled,
-                      ts: Date.now()
-                    })}`);
+                    logMessage(userId || 'anonymous', userMsg, obsToolsCalled);
                   }
                 }
 
@@ -3380,16 +3376,11 @@ export async function POST(request: Request) {
                   .catch(err => console.warn(`[Usage] Failed to record usage for ${userId}:`, err));
               }
 
-              // Structured log for Vercel log analysis
+              // Log for observability
               {
                 const userMsg = getLastUserMessageText(messages);
                 if (userMsg) {
-                  console.log(`[FRAM_MSG] ${JSON.stringify({
-                    userId: userId || 'anonymous',
-                    message: userMsg.slice(0, 200),
-                    tools: obsToolsCalled,
-                    ts: Date.now()
-                  })}`);
+                  logMessage(userId || 'anonymous', userMsg, obsToolsCalled);
                 }
               }
 
