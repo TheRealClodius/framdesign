@@ -138,8 +138,6 @@ import {
   getUserId,
   isBudgetExhausted,
   setBudgetExhausted,
-  getConversationId,
-  resetConversationId,
   type Message,
 } from "@/lib/storage";
 import {
@@ -1218,7 +1216,6 @@ export default function ChatInterface() {
           timeoutExpired: false,
           userId: getUserId(),
           timezone: userTimezone,
-          conversationId: getConversationId(),
         },
           (chunk) => {
             streamedContent += chunk;
@@ -1323,7 +1320,6 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
           timeoutExpired: false,
           userId: getUserId(),
           timezone: userTimezone,
-          conversationId: getConversationId(),
         },
         (chunk) => {
           fixedContent += chunk;
@@ -1433,7 +1429,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
 
       try {
         const response = await streamChatResponse(
-          { messages: requestMessages, timeoutExpired: expired || false, timezone: userTimezone, conversationId: getConversationId() },
+          { messages: requestMessages, timeoutExpired: expired || false, timezone: userTimezone },
           (chunk) => {
             if (!streamCompleted) {
               streamedContent += chunk;
@@ -1669,9 +1665,8 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
         }
       }
       
-      // Clear localStorage and reset conversation ID
+      // Clear localStorage
       clearChatHistory();
-      resetConversationId();
 
       // Clear voice service's conversation history to prevent bleeding
       voiceService.clearConversationHistory();

@@ -5,26 +5,19 @@ import { useRouter } from "next/navigation";
 import { useTheme } from "@/lib/hooks/useTheme";
 import AnalyticsOverview from "@/components/observability/AnalyticsOverview";
 import ContextStackViz from "@/components/observability/ContextStackViz";
-import ConversationContextView from "@/components/observability/ConversationContextView";
 
-type Tab = "analytics" | "structure";
+type Tab = "topics" | "structure";
 
 export default function ObservabilityDashboard() {
   const theme = useTheme();
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<Tab>("analytics");
-  const [selectedConvId, setSelectedConvId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<Tab>("topics");
 
   const isDark = theme === "dark";
 
   async function handleLogout() {
     await fetch("/api/observability/auth", { method: "DELETE" });
     router.push("/observability/login");
-  }
-
-  function handleConversationSelect(convId: string) {
-    setSelectedConvId(convId);
-    setActiveTab("structure");
   }
 
   return (
@@ -48,9 +41,9 @@ export default function ObservabilityDashboard() {
             {/* Tabs */}
             <nav className="flex gap-4 font-mono text-xs">
               <button
-                onClick={() => setActiveTab("analytics")}
+                onClick={() => setActiveTab("topics")}
                 className={`pb-0.5 transition-colors duration-300 ${
-                  activeTab === "analytics"
+                  activeTab === "topics"
                     ? isDark
                       ? "text-white border-b border-white"
                       : "text-black border-b border-black"
@@ -59,7 +52,7 @@ export default function ObservabilityDashboard() {
                       : "text-gray-400 hover:text-gray-600"
                 }`}
               >
-                Analytics
+                Topics & Analytics
               </button>
               <button
                 onClick={() => setActiveTab("structure")}
@@ -93,22 +86,11 @@ export default function ObservabilityDashboard() {
 
       {/* Content */}
       <main className="max-w-6xl mx-auto px-4 py-6">
-        {activeTab === "analytics" && (
-          <AnalyticsOverview
-            isDark={isDark}
-            onConversationSelect={handleConversationSelect}
-          />
+        {activeTab === "topics" && (
+          <AnalyticsOverview isDark={isDark} />
         )}
         {activeTab === "structure" && (
-          <div className="space-y-8">
-            <ContextStackViz isDark={isDark} />
-            {selectedConvId && (
-              <ConversationContextView
-                isDark={isDark}
-                conversationId={selectedConvId}
-              />
-            )}
-          </div>
+          <ContextStackViz isDark={isDark} />
         )}
       </main>
     </div>

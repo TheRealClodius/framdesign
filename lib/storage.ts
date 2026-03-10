@@ -206,23 +206,3 @@ export function clearChatHistory(): void {
   safeStorage.remove(STORAGE_KEYS.CONVERSATION);
 }
 
-/**
- * Get or generate a conversation ID for grouping messages into conversations
- */
-export function getConversationId(): string {
-  let convId = safeStorage.get(STORAGE_KEYS.CONVERSATION_ID);
-  if (!convId) {
-    convId = crypto.randomUUID();
-    safeStorage.set(STORAGE_KEYS.CONVERSATION_ID, convId);
-  }
-  return convId;
-}
-
-/**
- * Reset conversation ID (called on "Fresh Conversation")
- */
-export function resetConversationId(): string {
-  const convId = crypto.randomUUID();
-  safeStorage.set(STORAGE_KEYS.CONVERSATION_ID, convId);
-  return convId;
-}

@@ -11,7 +11,6 @@ export interface ChatRequest {
   timeoutExpired?: boolean;
   userId?: string;
   timezone?: string;
-  conversationId?: string;
 }
 
 export interface ChatResponse {
@@ -47,7 +46,6 @@ export async function streamChatResponse(
         timeoutExpired: request.timeoutExpired || false,
         userId: request.userId,
         timezone: request.timezone,
-        conversationId: request.conversationId,
       }),
     });
 

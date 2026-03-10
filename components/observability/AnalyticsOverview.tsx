@@ -1,11 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import ConversationDetail from "./ConversationDetail";
 
 interface AnalyticsOverviewProps {
   isDark: boolean;
-  onConversationSelect: (convId: string) => void;
 }
 
 interface AnalyticsData {
@@ -15,61 +13,73 @@ interface AnalyticsData {
   activeUsers: number;
 }
 
-interface ConversationItem {
-  id: string;
+interface TopicItem {
+  topic: string;
+  count: number;
+  examples: string[];
+}
+
+interface TopicsData {
+  topTopics: TopicItem[];
+  patterns: string[];
+  surprising: string[];
+  totalMessages: number;
+  analyzedAt: number;
+}
+
+interface RecentMessage {
   userId: string;
-  startTime: number;
-  lastActivity: number;
-  turnCount: number;
-  firstMessage: string;
+  message: string;
+  toolsCalled: string[];
+  timestamp: number;
 }
 
-interface StatsData {
-  totalConversations: number;
-  avgTurnCount: number;
-  voiceSessions: number;
-}
-
-export default function AnalyticsOverview({
-  isDark,
-  onConversationSelect,
-}: AnalyticsOverviewProps) {
+export default function AnalyticsOverview({ isDark }: AnalyticsOverviewProps) {
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
-  const [conversations, setConversations] = useState<ConversationItem[]>([]);
-  const [stats, setStats] = useState<StatsData | null>(null);
-  const [selectedConv, setSelectedConv] = useState<string | null>(null);
   const [analyticsError, setAnalyticsError] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    async function fetchData() {
-      setLoading(true);
-      const [analyticsRes, convsRes, statsRes] = await Promise.allSettled([
-        fetch("/api/observability/analytics").then((r) => r.json()),
-        fetch("/api/observability/data?type=conversations&limit=30").then((r) =>
-          r.json()
-        ),
-        fetch("/api/observability/data?type=stats").then((r) => r.json()),
-      ]);
+  const [topics, setTopics] = useState<TopicsData | null>(null);
+  const [recentMessages, setRecentMessages] = useState<RecentMessage[]>([]);
+  const [topicsLoading, setTopicsLoading] = useState(false);
+  const [topicsError, setTopicsError] = useState<string | null>(null);
 
-      if (analyticsRes.status === "fulfilled" && analyticsRes.value.success) {
-        setAnalytics(analyticsRes.value.data);
-      } else {
+  useEffect(() => {
+    async function fetchAnalytics() {
+      setLoading(true);
+      try {
+        const res = await fetch("/api/observability/analytics");
+        const data = await res.json();
+        if (data.success) {
+          setAnalytics(data.data);
+        } else {
+          setAnalyticsError(true);
+        }
+      } catch {
         setAnalyticsError(true);
       }
-
-      if (convsRes.status === "fulfilled" && convsRes.value.success) {
-        setConversations(convsRes.value.data.conversations);
-      }
-
-      if (statsRes.status === "fulfilled" && statsRes.value.success) {
-        setStats(statsRes.value.data);
-      }
-
       setLoading(false);
     }
-    fetchData();
+    fetchAnalytics();
   }, []);
+
+  async function handleAnalyzeTopics() {
+    setTopicsLoading(true);
+    setTopicsError(null);
+    try {
+      const res = await fetch("/api/observability/topics");
+      const data = await res.json();
+      if (data.success) {
+        setTopics(data.data);
+        setRecentMessages(data.recentMessages || []);
+      } else {
+        setTopicsError(data.error || "Failed to analyze topics");
+      }
+    } catch {
+      setTopicsError("Failed to fetch topics");
+    }
+    setTopicsLoading(false);
+  }
 
   const border = isDark ? "border-gray-800" : "border-gray-200";
   const cardBg = isDark ? "bg-gray-900/50" : "bg-gray-50";
@@ -87,32 +97,26 @@ export default function AnalyticsOverview({
   return (
     <div className="space-y-6">
       {/* Stats row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
         <StatCard
           label="Active Users (30d)"
           value={analytics?.activeUsers ?? "—"}
           isDark={isDark}
         />
         <StatCard
-          label="Conversations"
-          value={stats?.totalConversations ?? "—"}
+          label="Page Views (30d)"
+          value={analytics?.totalPageViews ?? "—"}
           isDark={isDark}
         />
         <StatCard
-          label="Avg Turns"
-          value={stats?.avgTurnCount ?? "—"}
-          isDark={isDark}
-        />
-        <StatCard
-          label="Voice Sessions"
-          value={stats?.voiceSessions ?? "—"}
+          label="Messages Analyzed"
+          value={topics?.totalMessages ?? "—"}
           isDark={isDark}
         />
       </div>
 
       {/* Sessions chart + Geography */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* Sessions over time */}
         <div className={`md:col-span-2 border ${border} ${cardBg} p-4`}>
           <h3 className={`font-mono text-xs ${muted} mb-3`}>
             Sessions (30 days)
@@ -121,14 +125,11 @@ export default function AnalyticsOverview({
             <SessionsChart data={analytics.sessionsOverTime} isDark={isDark} />
           ) : (
             <div className={`font-mono text-xs ${muted} py-8 text-center`}>
-              {analyticsError
-                ? "GA4 not configured"
-                : "No data"}
+              {analyticsError ? "GA4 not configured" : "No data"}
             </div>
           )}
         </div>
 
-        {/* Geography */}
         <div className={`border ${border} ${cardBg} p-4`}>
           <h3 className={`font-mono text-xs ${muted} mb-3`}>
             Top Countries
@@ -153,71 +154,125 @@ export default function AnalyticsOverview({
         </div>
       </div>
 
-      {/* Recent conversations */}
+      {/* Topic Analysis */}
       <div className={`border ${border} ${cardBg} p-4`}>
-        <h3 className={`font-mono text-xs ${muted} mb-3`}>
-          Recent Conversations
-        </h3>
-        {conversations.length > 0 ? (
+        <div className="flex items-center justify-between mb-4">
+          <h3 className={`font-mono text-xs ${muted}`}>
+            Topic Analysis
+          </h3>
+          <button
+            onClick={handleAnalyzeTopics}
+            disabled={topicsLoading}
+            className={`font-mono text-xs px-3 py-1.5 border transition-colors duration-200 ${
+              isDark
+                ? "border-gray-700 hover:border-gray-500 text-gray-300 disabled:text-gray-600"
+                : "border-gray-300 hover:border-gray-500 text-gray-700 disabled:text-gray-400"
+            }`}
+          >
+            {topicsLoading ? "Analyzing..." : "Analyze Topics"}
+          </button>
+        </div>
+
+        {topicsError && (
+          <div className="font-mono text-xs text-red-400 mb-3">{topicsError}</div>
+        )}
+
+        {topics && topics.topTopics.length > 0 ? (
+          <div className="space-y-4">
+            {/* Top topics */}
+            <div>
+              <h4 className={`font-mono text-[0.65rem] ${muted} mb-2 uppercase tracking-wider`}>
+                Top Topics
+              </h4>
+              <div className="space-y-1.5">
+                {topics.topTopics.map((t, i) => (
+                  <div key={t.topic} className="flex items-start gap-3 font-mono text-xs">
+                    <span className={`${muted} w-4 shrink-0 text-right`}>{i + 1}.</span>
+                    <span className="font-medium">{t.topic}</span>
+                    <span className={`${muted} shrink-0`}>({t.count})</span>
+                    {t.examples.length > 0 && (
+                      <span className={`${subtle} truncate`}>
+                        — {t.examples[0]}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Patterns */}
+            {topics.patterns.length > 0 && (
+              <div>
+                <h4 className={`font-mono text-[0.65rem] ${muted} mb-2 uppercase tracking-wider`}>
+                  Patterns
+                </h4>
+                <ul className="space-y-1">
+                  {topics.patterns.map((p, i) => (
+                    <li key={i} className={`font-mono text-xs ${subtle}`}>
+                      {p}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Surprising */}
+            {topics.surprising.length > 0 && (
+              <div>
+                <h4 className={`font-mono text-[0.65rem] ${muted} mb-2 uppercase tracking-wider`}>
+                  Surprising Queries
+                </h4>
+                <ul className="space-y-1">
+                  {topics.surprising.map((s, i) => (
+                    <li key={i} className={`font-mono text-xs ${subtle}`}>
+                      {s}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        ) : !topicsLoading && !topics ? (
+          <div className={`font-mono text-xs ${muted} py-6 text-center`}>
+            Click &quot;Analyze Topics&quot; to fetch recent messages from Vercel logs and extract topics via Gemini.
+          </div>
+        ) : topics && topics.topTopics.length === 0 ? (
+          <div className={`font-mono text-xs ${muted} py-6 text-center`}>
+            No messages found in recent logs.
+          </div>
+        ) : null}
+      </div>
+
+      {/* Recent Messages */}
+      {recentMessages.length > 0 && (
+        <div className={`border ${border} ${cardBg} p-4`}>
+          <h3 className={`font-mono text-xs ${muted} mb-3`}>
+            Recent Messages
+          </h3>
           <div className="space-y-1">
-            {conversations.map((conv) => (
-              <button
-                key={conv.id}
-                onClick={() => setSelectedConv(conv.id)}
-                className={`w-full text-left px-3 py-2 font-mono text-xs flex items-center gap-4 transition-colors duration-200 ${
-                  selectedConv === conv.id
-                    ? isDark
-                      ? "bg-gray-800"
-                      : "bg-gray-100"
-                    : isDark
-                      ? "hover:bg-gray-800/50"
-                      : "hover:bg-gray-100/50"
-                }`}
+            {recentMessages.map((msg, i) => (
+              <div
+                key={i}
+                className="flex items-center gap-4 font-mono text-xs py-1.5"
               >
                 <span className={`${muted} shrink-0 w-28`}>
-                  {new Date(conv.startTime).toLocaleDateString("en-US", {
+                  {new Date(msg.timestamp).toLocaleDateString("en-US", {
                     month: "short",
                     day: "numeric",
                     hour: "2-digit",
                     minute: "2-digit",
                   })}
                 </span>
-                <span className={`${subtle} shrink-0 w-16`}>
-                  {conv.turnCount} turn{conv.turnCount !== 1 ? "s" : ""}
-                </span>
-                <span className="truncate">
-                  {conv.firstMessage || "(empty)"}
-                </span>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onConversationSelect(conv.id);
-                  }}
-                  className={`ml-auto shrink-0 ${
-                    isDark
-                      ? "text-blue-400 hover:text-blue-300"
-                      : "text-blue-600 hover:text-blue-500"
-                  }`}
-                >
-                  context →
-                </button>
-              </button>
+                {msg.toolsCalled.length > 0 && (
+                  <span className={`${muted} shrink-0`}>
+                    [{msg.toolsCalled.length} tool{msg.toolsCalled.length !== 1 ? "s" : ""}]
+                  </span>
+                )}
+                <span className="truncate">{msg.message}</span>
+              </div>
             ))}
           </div>
-        ) : (
-          <div className={`font-mono text-xs ${muted} py-8 text-center`}>
-            No conversations yet
-          </div>
-        )}
-      </div>
-
-      {/* Conversation detail panel */}
-      {selectedConv && (
-        <ConversationDetail
-          isDark={isDark}
-          conversationId={selectedConv}
-          onClose={() => setSelectedConv(null)}
-        />
+        </div>
       )}
     </div>
   );

@@ -30,7 +30,6 @@ import { loopDetector } from '@/tools/_core/loop-detector';
 import { toolMemoryDedup } from '@/tools/_core/tool-memory-dedup';
 import { hashArgs } from '@/tools/_core/utils/hash-args';
 import { estimateTokens as estimateTokensForJson } from '@/tools/_core/utils/estimate-tokens';
-import { logConversationTurn } from '@/lib/services/observability-service';
 
 // Type definitions
 type ProviderSchema = {
@@ -1057,7 +1056,7 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { messages, timeoutExpired, userId, timezone, conversationId } = body;
+    const { messages, timeoutExpired, userId, timezone } = body;
 
     // Track tools called for observability logging
     const obsToolsCalled: string[] = [];
@@ -2877,11 +2876,17 @@ export async function POST(request: Request) {
                 console.log(`[Request Lifecycle] Total request time: ${totalRequestTime}ms`);
                 console.log(`[Request Lifecycle Summary] Context: ${contextPrepTime - requestStartTime}ms | Gemini TTFT: ${(firstChunkTime || bufferStart) - geminiCallStart}ms | Streaming: ${requestEndTime - (firstChunkTime || bufferStart)}ms`);
 
-                // Fire-and-forget observability logging
-                if (conversationId && userId) {
+                // Structured log for Vercel log analysis
+                {
                   const userMsg = getLastUserMessageText(messages);
-                  logConversationTurn(conversationId, userId, userMsg, obsToolsCalled)
-                    .catch(err => console.warn('[observability] logging failed:', err));
+                  if (userMsg) {
+                    console.log(`[FRAM_MSG] ${JSON.stringify({
+                      userId: userId || 'anonymous',
+                      message: userMsg.slice(0, 200),
+                      tools: obsToolsCalled,
+                      ts: Date.now()
+                    })}`);
+                  }
                 }
 
                 controller.close();
@@ -3375,11 +3380,17 @@ export async function POST(request: Request) {
                   .catch(err => console.warn(`[Usage] Failed to record usage for ${userId}:`, err));
               }
 
-              // Fire-and-forget observability logging
-              if (conversationId && userId) {
+              // Structured log for Vercel log analysis
+              {
                 const userMsg = getLastUserMessageText(messages);
-                logConversationTurn(conversationId, userId, userMsg, obsToolsCalled)
-                  .catch(err => console.warn('[observability] logging failed:', err));
+                if (userMsg) {
+                  console.log(`[FRAM_MSG] ${JSON.stringify({
+                    userId: userId || 'anonymous',
+                    message: userMsg.slice(0, 200),
+                    tools: obsToolsCalled,
+                    ts: Date.now()
+                  })}`);
+                }
               }
 
               controller.close();
