@@ -6,9 +6,10 @@ export async function GET() {
     const data = await getAnalyticsData();
     return NextResponse.json({ success: true, data });
   } catch (error) {
-    console.error('Analytics API error:', error);
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('Analytics API error:', message);
     return NextResponse.json(
-      { error: 'Failed to fetch analytics data' },
+      { error: message },
       { status: 500 }
     );
   }

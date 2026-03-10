@@ -36,7 +36,7 @@ interface RecentMessage {
 
 export default function AnalyticsOverview({ isDark }: AnalyticsOverviewProps) {
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
-  const [analyticsError, setAnalyticsError] = useState(false);
+  const [analyticsError, setAnalyticsError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   const [topics, setTopics] = useState<TopicsData | null>(null);
@@ -53,10 +53,10 @@ export default function AnalyticsOverview({ isDark }: AnalyticsOverviewProps) {
         if (data.success) {
           setAnalytics(data.data);
         } else {
-          setAnalyticsError(true);
+          setAnalyticsError(data.error || "Unknown error");
         }
-      } catch {
-        setAnalyticsError(true);
+      } catch (err) {
+        setAnalyticsError(err instanceof Error ? err.message : "Fetch failed");
       }
       setLoading(false);
     }
@@ -125,7 +125,7 @@ export default function AnalyticsOverview({ isDark }: AnalyticsOverviewProps) {
             <SessionsChart data={analytics.sessionsOverTime} isDark={isDark} />
           ) : (
             <div className={`font-mono text-xs ${muted} py-8 text-center`}>
-              {analyticsError ? "GA4 not configured" : "No data"}
+              {analyticsError || "No data"}
             </div>
           )}
         </div>
@@ -148,7 +148,7 @@ export default function AnalyticsOverview({ isDark }: AnalyticsOverviewProps) {
             </ul>
           ) : (
             <div className={`font-mono text-xs ${muted} py-8 text-center`}>
-              {analyticsError ? "GA4 not configured" : "No data"}
+              {analyticsError || "No data"}
             </div>
           )}
         </div>
@@ -234,7 +234,7 @@ export default function AnalyticsOverview({ isDark }: AnalyticsOverviewProps) {
           </div>
         ) : !topicsLoading && !topics ? (
           <div className={`font-mono text-xs ${muted} py-6 text-center`}>
-            Click &quot;Analyze Topics&quot; to fetch recent messages from Vercel logs and extract topics via Gemini.
+            Click &quot;Analyze Topics&quot; to analyze recent user messages via Gemini.
           </div>
         ) : topics && topics.topTopics.length === 0 ? (
           <div className={`font-mono text-xs ${muted} py-6 text-center`}>

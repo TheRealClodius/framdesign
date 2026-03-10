@@ -28,10 +28,20 @@ function getAnalyticsClient() {
         scopes: ['https://www.googleapis.com/auth/analytics.readonly'],
       });
     } else if (credentialsPath) {
-      auth = new google.auth.GoogleAuth({
-        keyFile: credentialsPath,
-        scopes: ['https://www.googleapis.com/auth/analytics.readonly'],
-      });
+      // Try as JSON string first (Vercel stores JSON as string in env vars)
+      try {
+        const credentials = JSON.parse(credentialsPath);
+        auth = new google.auth.GoogleAuth({
+          credentials,
+          scopes: ['https://www.googleapis.com/auth/analytics.readonly'],
+        });
+      } catch {
+        // Not JSON — treat as file path (local dev ADC)
+        auth = new google.auth.GoogleAuth({
+          keyFile: credentialsPath,
+          scopes: ['https://www.googleapis.com/auth/analytics.readonly'],
+        });
+      }
     } else {
       throw new Error('Missing GCS_SERVICE_ACCOUNT_KEY or GOOGLE_APPLICATION_CREDENTIALS');
     }
