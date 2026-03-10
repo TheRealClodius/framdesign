@@ -44,6 +44,7 @@ import {
   recordResponseMetrics,
   setContextInitTokens
 } from '../tools/_core/metrics.js';
+import { Redis } from '@upstash/redis';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -51,6 +52,20 @@ const __dirname = dirname(__filename);
 // Load environment variables from voice-server/.env regardless of cwd
 config({ path: join(__dirname, '.env') });
 
+
+// Observability: log voice session usage to Redis
+async function logVoiceUsage(userId) {
+  try {
+    const url = process.env.UPSTASH_REDIS_REST_URL;
+    const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+    if (!url || !token) return;
+    const redis = new Redis({ url, token });
+    await redis.incr('obs:voice:sessions');
+    await redis.sadd('obs:voice:users', userId);
+  } catch (err) {
+    console.warn('[observability] Failed to log voice usage:', err);
+  }
+}
 
 // Load tool registry at startup
 let geminiToolSchemas = [];
@@ -1359,7 +1374,12 @@ wss.on('connection', async (ws, req) => {
           console.log(`[${clientId}] Starting Gemini Live session for user: ${data.userId || 'anonymous'}`);
           currentUserId = data.userId || null;
           currentTimezone = data.timezone || null;
-          
+
+          // Log voice usage for observability
+          if (data.userId) {
+            logVoiceUsage(data.userId);
+          }
+
           // Check global budget if userId is provided
           if (data.userId) {
             const isOverBudget = await UsageService.isOverBudget(data.userId);

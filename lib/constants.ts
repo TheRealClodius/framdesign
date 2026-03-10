@@ -8,6 +8,7 @@ export const STORAGE_KEYS = {
   CONVERSATION: "fram_conversation",
   USER_ID: "fram_user_id",
   BUDGET_EXHAUSTED: "fram_budget_exhausted",
+  CONVERSATION_ID: "fram_conversation_id",
 } as const;
 
 // Message limits

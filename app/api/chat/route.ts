@@ -30,6 +30,7 @@ import { loopDetector } from '@/tools/_core/loop-detector';
 import { toolMemoryDedup } from '@/tools/_core/tool-memory-dedup';
 import { hashArgs } from '@/tools/_core/utils/hash-args';
 import { estimateTokens as estimateTokensForJson } from '@/tools/_core/utils/estimate-tokens';
+import { logConversationTurn } from '@/lib/services/observability-service';
 
 // Type definitions
 type ProviderSchema = {
@@ -1056,7 +1057,10 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { messages, timeoutExpired, userId, timezone } = body;
+    const { messages, timeoutExpired, userId, timezone, conversationId } = body;
+
+    // Track tools called for observability logging
+    const obsToolsCalled: string[] = [];
 
     // Check global budget if userId is provided
     // Wrapped in try/catch to prevent chat failures when usage store is inaccessible
@@ -1981,6 +1985,7 @@ export async function POST(request: Request) {
         const toolName = otherFunctionCall.name;
         const toolArgs = (otherFunctionCall.args || {}) as Record<string, unknown>;
         console.log(`Handling function call: ${toolName}`);
+        obsToolsCalled.push(toolName);
         const toolErrorNotices: Array<{ toolName: string; type: string; message: string }> = [];
 
         // Get tool metadata early for validation
@@ -2413,6 +2418,7 @@ export async function POST(request: Request) {
                     chainCount++;
                     const chainedToolName = nextFunctionCall.name;
                     console.log(`[Chain ${chainCount}/${MAX_CHAIN_LENGTH}] Executing chained function: ${chainedToolName}`);
+                    obsToolsCalled.push(chainedToolName);
 
                     // Record chained tool call
                     recordToolCall(
@@ -2871,6 +2877,13 @@ export async function POST(request: Request) {
                 console.log(`[Request Lifecycle] Total request time: ${totalRequestTime}ms`);
                 console.log(`[Request Lifecycle Summary] Context: ${contextPrepTime - requestStartTime}ms | Gemini TTFT: ${(firstChunkTime || bufferStart) - geminiCallStart}ms | Streaming: ${requestEndTime - (firstChunkTime || bufferStart)}ms`);
 
+                // Fire-and-forget observability logging
+                if (conversationId && userId) {
+                  const userMsg = getLastUserMessageText(messages);
+                  logConversationTurn(conversationId, userId, userMsg, obsToolsCalled)
+                    .catch(err => console.warn('[observability] logging failed:', err));
+                }
+
                 controller.close();
               } catch (error) {
                 console.error("Error in chained tool execution:", error);
@@ -3016,6 +3029,7 @@ export async function POST(request: Request) {
                 // Capture with explicit type to help TypeScript
                 const pendingLateCall = lateFunctionCall as { name: string; args: Record<string, unknown> };
                 console.log(`[Late Function Call] Executing ${pendingLateCall.name} (accumulated text: "${accumulatedFullText.trim().slice(0, 100)}...")`);
+                obsToolsCalled.push(pendingLateCall.name);
 
                 try {
                   // Initialize state controller (same as early detection path)
@@ -3361,6 +3375,12 @@ export async function POST(request: Request) {
                   .catch(err => console.warn(`[Usage] Failed to record usage for ${userId}:`, err));
               }
 
+              // Fire-and-forget observability logging
+              if (conversationId && userId) {
+                const userMsg = getLastUserMessageText(messages);
+                logConversationTurn(conversationId, userId, userMsg, obsToolsCalled)
+                  .catch(err => console.warn('[observability] logging failed:', err));
+              }
 
               controller.close();
             } catch (error) {
