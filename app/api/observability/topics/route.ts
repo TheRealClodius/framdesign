@@ -72,7 +72,7 @@ export async function GET() {
       return NextResponse.json({ success: true, data: cachedResult.data, cached: true });
     }
 
-    const messages = getRecentMessages(24);
+    const messages = await getRecentMessages(24);
 
     if (messages.length === 0) {
       const empty: TopicAnalysis = {
