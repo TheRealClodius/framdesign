@@ -105,7 +105,7 @@ Node 24 (.nvmrc). ES modules. Deployed: Vercel (text) + Railway (voice).
 
 - **JS vs TS**: TypeScript always, except tool handlers (`.js`)
 - **Error handling**: Tools use `ToolError` + `ErrorType`. API routes use `handleServerError()`. Services throw enhanced errors.
-- **Validation**: Zod for API input (`lib/schemas.ts`). JSON Schema + ajv for tool schemas.
+- **Validation**: Zod for API input. JSON Schema + ajv for tool schemas.
 - **Styling**: Tailwind CSS v4 classes only. No CSS modules, no styled-components.
 - **State**: React `useState`/`useEffect`. No Redux/Zustand. Server state via API calls.
 - **Imports**: `@/` aliases in TypeScript. Relative with `.js` extension in tool JS files.
@@ -139,6 +139,8 @@ Required in `.env`:
 ```
 GEMINI_API_KEY                  # Google Gemini API
 GEMINI_TEXT_MODEL                # Text agent model (default: gemini-3.1-flash-lite-preview)
+GEMINI_VOICE_MODEL               # Voice agent model (default: gemini-live-2.5-flash-native-audio)
+GEMINI_OBSERVABILITY_MODEL       # Observability topic analysis model (default: gemini-2.5-flash)
 PERPLEXITY_API_KEY              # External search
 QDRANT_CLUSTER_ENDPOINT         # Vector database URL
 QDRANT_API_KEY                  # Vector database auth
@@ -146,12 +148,14 @@ GCS_BUCKET_NAME                 # Google Cloud Storage bucket
 GCS_PROJECT_ID                  # GCS project ID
 GCS_SERVICE_ACCOUNT_KEY         # Base64-encoded service account key (Vercel)
 GOOGLE_APPLICATION_CREDENTIALS  # ADC or JSON credentials (local dev)
-RESEND_API_KEY                  # Email service
 NEXT_PUBLIC_VOICE_SERVER_URL    # Voice server WebSocket URL
-NEXT_PUBLIC_GA_MEASUREMENT_ID   # Google Analytics
+GA4_PROPERTY_ID                 # Google Analytics 4 property ID
+VERCEL_TOKEN                    # Vercel API token (observability logs)
+VERCEL_PROJECT_ID               # Vercel project ID (observability logs)
+VERCEL_TEAM_ID                  # Vercel team ID (observability logs)
 ```
 
-Voice server also needs its own `.env` in `voice-server/` with: `GEMINI_API_KEY`, `QDRANT_CLUSTER_ENDPOINT`, `QDRANT_API_KEY`, `ALLOWED_ORIGINS`.
+Voice server also needs its own `.env` in `voice-server/` with: `GEMINI_API_KEY`, `GEMINI_VOICE_MODEL`, `QDRANT_CLUSTER_ENDPOINT`, `QDRANT_API_KEY`, `ALLOWED_ORIGINS`.
 
 ## Reference
 

@@ -18,7 +18,6 @@ const mockResolveBlobUrlSafe = jest.fn((blobId, extension) => {
 jest.mock('@/lib/services/blob-storage-service', () => ({
   resolveBlobUrlSafe: mockResolveBlobUrlSafe,
   fetchAssetBuffer: jest.fn(),
-  generateSignedUrl: jest.fn(),
   uploadAsset: jest.fn(),
   assetExists: jest.fn(),
 }));

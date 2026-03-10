@@ -177,22 +177,6 @@ export async function resolveBlobUrl(
 }
 
 /**
- * Generate signed URL for private assets
- * @param blobId - Stable identifier
- * @param extension - File extension
- * @param expiresInDays - Number of days until expiration (default: 7)
- * @returns Signed URL
- * @deprecated Use resolveBlobUrl instead
- */
-export async function generateSignedUrl(
-  blobId: string,
-  extension: string,
-  expiresInDays: number = 7
-): Promise<string> {
-  return resolveBlobUrl(blobId, extension, expiresInDays);
-}
-
-/**
  * Upload asset to GCS
  * @param blobId - Stable identifier
  * @param fileBuffer - File contents as Buffer

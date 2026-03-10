@@ -21,7 +21,7 @@ async function analyzeTopics(messages: ParsedLogEntry[]): Promise<TopicAnalysis>
   const messageTexts = messages.map(m => m.message).join('\n- ');
 
   const result = await genAI.models.generateContent({
-    model: 'gemini-2.5-flash',
+    model: process.env.GEMINI_OBSERVABILITY_MODEL || 'gemini-2.5-flash',
     contents: `You are analyzing user messages sent to a design knowledge base AI assistant called FRAM.
 
 Here are the ${messages.length} most recent user messages:

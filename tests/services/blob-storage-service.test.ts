@@ -99,41 +99,6 @@ describe('BlobStorageService', () => {
     });
   });
   
-  describe('generateSignedUrl', () => {
-    test('generates valid signed URL', async () => {
-      // Skip if GCS not configured (for CI/CD)
-      if (!process.env.GCS_BUCKET_NAME) {
-        console.log('Skipping signed URL test - GCS not configured');
-        return;
-      }
-
-      const blobService = await import('@/lib/services/blob-storage-service');
-      const { generateSignedUrl } = blobService;
-      
-      const url = await generateSignedUrl('test/blob', 'png', 7);
-      
-      expect(url).toContain('storage.googleapis.com');
-      expect(url).toContain('test/blob');
-      expect(url).toContain('.png');
-      expect(url.toLowerCase()).toContain('signature=');
-    });
-    
-    test('signed URL expires after correct duration', async () => {
-      if (!process.env.GCS_BUCKET_NAME) {
-        console.log('Skipping signed URL expiration test - GCS not configured');
-        return;
-      }
-
-      const blobService = await import('@/lib/services/blob-storage-service');
-      const { generateSignedUrl } = blobService;
-      
-      const url = await generateSignedUrl('test/blob', 'png', 7);
-      
-      // URL should contain expiration parameter
-      expect(url).toContain('Expires=');
-    });
-  });
-  
   describe('uploadAsset', () => {
     test('uploads file to correct path', async () => {
       if (!process.env.GCS_BUCKET_NAME) {

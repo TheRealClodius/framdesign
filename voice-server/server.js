@@ -1481,7 +1481,7 @@ wss.on('connection', async (ws, req) => {
 
             assertLiveApiAvailable(ai);
             geminiSession = await ai.live.connect({
-              model: 'gemini-live-2.5-flash-native-audio',
+              model: process.env.GEMINI_VOICE_MODEL || 'gemini-live-2.5-flash-native-audio',
               config: config,
               callbacks: {
                 onopen: () => {
