@@ -30,12 +30,13 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Skip proxy for API routes, static files, and Next.js internals
+  // Skip rewriting for API routes, static files, Next.js internals, and observability
   if (
     pathname.startsWith('/api/') ||
     pathname.startsWith('/_next/') ||
     pathname.startsWith('/favicon') ||
     pathname.startsWith('/icon') ||
+    pathname.startsWith('/observability') ||
     pathname.includes('.')
   ) {
     return NextResponse.next();
