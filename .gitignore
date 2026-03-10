@@ -46,7 +46,6 @@ next-env.d.ts
 
 # tool registry build artifact
 tools/tool_registry.json
-.env*.local
 
 # test reports
 tests/e2e/kb-tools-agent-report.json
@@ -57,13 +56,13 @@ tests/e2e/visual-analysis-accuracy-report.json
 scripts/test-audio/
 scripts/voice-agent-test-questions.js
 
-# vector-search-api dependencies (deprecated - no longer used)
-vector-search-api/node_modules/
-
 # Google Cloud Storage service account key
 gcs-key.json
 gcs-service-account-key.json
-# GCS service account key - DO NOT COMMITtest-run.log
+# GCS service account key - DO NOT COMMIT
+
+# test artifacts
+test-run.log
 
 # usage tracking
 .usage/

@@ -37,10 +37,7 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ['tiktoken'],
   experimental: {
     scrollRestoration: false,
-    // Disable Turbopack persistent caching to avoid "Unable to write SST file" errors 
-    // when running in directories synced with iCloud Drive/OneDrive.
-    // RocksDB (used by Turbopack) struggles with cloud-synced filesystem locks.
-    // Disable Turbopack persistent caching to avoid "Unable to write SST file" errors 
+    // Disable Turbopack persistent caching to avoid "Unable to write SST file" errors
     // when running in directories synced with iCloud Drive/OneDrive.
     // RocksDB (used by Turbopack) struggles with cloud-synced filesystem locks.
     turbopackFileSystemCacheForDev: false,
@@ -118,14 +115,6 @@ const nextConfig: NextConfig = {
         'node_modules',
         __dirname,
       ];
-      
-      // Configure webpack to handle dynamic imports more flexibly
-      // This prevents webpack from throwing errors on computed import paths
-      config.optimization = {
-        ...config.optimization,
-        // Don't try to optimize dynamic imports that use computed paths
-        moduleIds: 'deterministic',
-      };
       
       // Suppress webpack warning for dynamic imports in tool registry
       // All tools are statically imported via HANDLER_IMPORTS map,

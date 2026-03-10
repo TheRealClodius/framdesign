@@ -34,7 +34,6 @@
     "node_modules",
     "tools/**/*",
     "voice-server/**/*",
-    "scripts/**/*",
-    "vector-search-api/**/*"
+    "scripts/**/*"
   ]
 }

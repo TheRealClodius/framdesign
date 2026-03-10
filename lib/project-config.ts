@@ -59,17 +59,3 @@ export const PROJECT_ENTITY_MAP: Record<string, string> = {
  * - "photo" will be selected (higher priority)
  */
 export const ASSET_TYPE_PRIORITY = ["photo", "diagram", "video", "gif"] as const;
-
-/**
- * Get all project names (for validation/debugging)
- */
-export function getProjectNames(): string[] {
-  return Object.keys(PROJECT_ENTITY_MAP);
-}
-
-/**
- * Check if a project name exists in the configuration
- */
-export function isKnownProject(projectName: string): boolean {
-  return projectName in PROJECT_ENTITY_MAP;
-}
