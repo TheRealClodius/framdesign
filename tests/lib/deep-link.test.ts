@@ -2,6 +2,8 @@ import { describe, test, expect } from "@jest/globals";
 import {
   parseDeepLinkFromSearchParams,
   resolveProjectDeepLink,
+  getDeepLinkKind,
+  buildChatSharePageUrl,
   DEEP_LINK_PARAM_Q,
   DEEP_LINK_PARAM_QUERY,
   DEEP_LINK_PARAM_PROJECT,
@@ -49,6 +51,46 @@ describe("parseDeepLinkFromSearchParams", () => {
     const out = parseDeepLinkFromSearchParams(sp);
     expect(out).not.toBeNull();
     expect(out!.length).toBe(4000);
+  });
+});
+
+describe("getDeepLinkKind", () => {
+  test("returns q when q is set", () => {
+    const sp = new URLSearchParams();
+    sp.set(DEEP_LINK_PARAM_Q, "x");
+    expect(getDeepLinkKind(sp)).toBe("q");
+  });
+
+  test("returns q when query alias is set", () => {
+    const sp = new URLSearchParams();
+    sp.set(DEEP_LINK_PARAM_QUERY, "x");
+    expect(getDeepLinkKind(sp)).toBe("q");
+  });
+
+  test("returns project when only project is set", () => {
+    const sp = new URLSearchParams();
+    sp.set(DEEP_LINK_PARAM_PROJECT, "urbanair");
+    expect(getDeepLinkKind(sp)).toBe("project");
+  });
+
+  test("q wins for kind when both present", () => {
+    const sp = new URLSearchParams();
+    sp.set(DEEP_LINK_PARAM_Q, "a");
+    sp.set(DEEP_LINK_PARAM_PROJECT, "urbanair");
+    expect(getDeepLinkKind(sp)).toBe("q");
+  });
+});
+
+describe("buildChatSharePageUrl", () => {
+  test("sets q and strips prior deep-link params", () => {
+    const href =
+      "https://fram.design/en?q=old&project=urbanair&other=1#x";
+    const out = buildChatSharePageUrl(href, "hello world");
+    const u = new URL(out);
+    expect(u.searchParams.get("q")).toBe("hello world");
+    expect(u.searchParams.has("project")).toBe(false);
+    expect(u.searchParams.get("other")).toBe("1");
+    expect(u.hash).toBe("#x");
   });
 });
 

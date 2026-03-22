@@ -18,6 +18,38 @@ export const DEEP_LINK_URL_KEYS = [
 
 const MAX_DEEP_LINK_CHARS = 4000;
 
+/** Which deep-link param drove the visit (for analytics). */
+export function getDeepLinkKind(
+  searchParams: URLSearchParams
+): "q" | "project" | null {
+  const q = (
+    searchParams.get(DEEP_LINK_PARAM_Q) ??
+    searchParams.get(DEEP_LINK_PARAM_QUERY)
+  )?.trim();
+  if (q) return "q";
+  if (searchParams.get(DEEP_LINK_PARAM_PROJECT)?.trim()) return "project";
+  return null;
+}
+
+/**
+ * Build a shareable URL to reopen this page with the same prompt prefilled (`?q=`).
+ * Strips any existing deep-link params first to avoid duplicates.
+ */
+export function buildChatSharePageUrl(
+  currentHref: string,
+  prompt: string
+): string {
+  const u = new URL(currentHref);
+  for (const key of DEEP_LINK_URL_KEYS) {
+    u.searchParams.delete(key);
+  }
+  const slice = prompt.trim().slice(0, MAX_DEEP_LINK_CHARS);
+  if (slice) {
+    u.searchParams.set(DEEP_LINK_PARAM_Q, slice);
+  }
+  return u.toString();
+}
+
 /**
  * `q` / `query` wins over `project` when both are present.
  */

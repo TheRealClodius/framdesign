@@ -157,7 +157,13 @@ import { getSuggestionImage } from "@/lib/project-image-map";
 import { PROJECTS } from "@/lib/project-config";
 import SuggestionImagePopup from "./SuggestionImagePopup";
 import EmptyStateCards from "./EmptyStateCards";
-import { parseDeepLinkFromSearchParams } from "@/lib/deep-link";
+import {
+  parseDeepLinkFromSearchParams,
+  stripDeepLinkParamsFromUrl,
+  getDeepLinkKind,
+  buildChatSharePageUrl,
+} from "@/lib/deep-link";
+import { trackChatEvent } from "@/lib/chat-analytics";
 import {
   stripSuggestionsFromContent,
   buildAssistantCopyText,
@@ -458,6 +464,9 @@ function ChatInterfaceInner() {
   const [input, setInput] = useState("");
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const copyFeedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [shareLinkCopied, setShareLinkCopied] = useState(false);
+  const shareLinkFeedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const deepLinkAnalyticsFiredRef = useRef(false);
   const [isLoading, setIsLoading] = useState(false);
   const [loadingStatus, setLoadingStatus] = useState<string | null>(null);
   const [timeoutUntil, setTimeoutUntilState] = useState<number | null>(null);
@@ -476,11 +485,32 @@ function ChatInterfaceInner() {
   // Detect user's IANA timezone once (e.g. "Europe/Bucharest")
   const userTimezone = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []);
 
+  const handleCopyShareLink = useCallback(async () => {
+    const t = input.trim();
+    if (!t) return;
+    const url = buildChatSharePageUrl(window.location.href, t);
+    try {
+      await navigator.clipboard.writeText(url);
+      trackChatEvent("chat_share_link_copied");
+      setShareLinkCopied(true);
+      if (shareLinkFeedbackTimeoutRef.current) {
+        clearTimeout(shareLinkFeedbackTimeoutRef.current);
+      }
+      shareLinkFeedbackTimeoutRef.current = setTimeout(() => {
+        setShareLinkCopied(false);
+        shareLinkFeedbackTimeoutRef.current = null;
+      }, 2000);
+    } catch {
+      // Permission denied — silent
+    }
+  }, [input]);
+
   const handleCopyAssistant = useCallback(async (message: Message) => {
     const text = buildAssistantCopyText(message);
     if (!text) return;
     try {
       await navigator.clipboard.writeText(text);
+      trackChatEvent("assistant_copy_clicked", { content_length: text.length });
       setCopiedMessageId(message.id);
       if (copyFeedbackTimeoutRef.current) {
         clearTimeout(copyFeedbackTimeoutRef.current);
@@ -498,6 +528,9 @@ function ChatInterfaceInner() {
     return () => {
       if (copyFeedbackTimeoutRef.current) {
         clearTimeout(copyFeedbackTimeoutRef.current);
+      }
+      if (shareLinkFeedbackTimeoutRef.current) {
+        clearTimeout(shareLinkFeedbackTimeoutRef.current);
       }
     };
   }, []);
@@ -752,6 +785,13 @@ function ChatInterfaceInner() {
     const fromUrl = parseDeepLinkFromSearchParams(searchParams);
     if (fromUrl) {
       setInput((prev) => (prev.trim() === "" ? fromUrl : prev));
+      if (!deepLinkAnalyticsFiredRef.current) {
+        deepLinkAnalyticsFiredRef.current = true;
+        const kind = getDeepLinkKind(searchParams);
+        if (kind) {
+          trackChatEvent("deep_link_opened", { link_type: kind });
+        }
+      }
     }
   }, [searchParams]);
 
@@ -1200,6 +1240,7 @@ function ChatInterfaceInner() {
 
     // Trigger the chat request
     const submitStarter = async () => {
+      stripDeepLinkParamsFromUrl();
       try {
         // Append asset context tag for the API (not shown in UI)
         const apiContent = assetContext
@@ -1399,6 +1440,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
 
     const userMessage = input.trim();
     setInput("");
+    stripDeepLinkParamsFromUrl();
     setMessages((prev) => [...prev, { id: generateMessageId(), role: "user", content: userMessage, timestamp: Date.now() }]);
     setIsLoading(true);
 
@@ -2054,8 +2096,21 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
                 placeholder={isVoiceMode ? "Voice mode active..." : "Ask me anything about FRAM..."}
               />
 
-              {/* Chin — right-aligned multi-state button */}
-              <div className="flex justify-end mt-2">
+              {/* Chin — copy share link + multi-state button */}
+              <div className="flex justify-between items-end gap-2 mt-2">
+                <div className="min-h-[20px] flex items-center">
+                  {input.trim() && !isVoiceMode ? (
+                    <button
+                      type="button"
+                      onClick={() => handleCopyShareLink()}
+                      className={`text-[0.65rem] uppercase tracking-wider font-mono transition-colors underline-offset-2 hover:underline ${isDark ? "text-gray-500 hover:text-gray-300" : "text-gray-500 hover:text-gray-800"}`}
+                      aria-label="Copy link to this prompt"
+                    >
+                      {shareLinkCopied ? "Link copied" : "Copy link"}
+                    </button>
+                  ) : null}
+                </div>
+                <div className="flex justify-end shrink-0">
                 <button
                   type="button"
                   onClick={async () => {
@@ -2155,6 +2210,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
                     </svg>
                   )}
                 </button>
+                </div>
               </div>
             </div>
           </div>
