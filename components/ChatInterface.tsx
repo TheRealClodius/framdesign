@@ -158,6 +158,10 @@ import { PROJECTS } from "@/lib/project-config";
 import SuggestionImagePopup from "./SuggestionImagePopup";
 import EmptyStateCards from "./EmptyStateCards";
 import { parseDeepLinkFromSearchParams } from "@/lib/deep-link";
+import {
+  stripSuggestionsFromContent,
+  buildAssistantCopyText,
+} from "@/lib/chat-display-utils";
 
 /**
  * Normalize text response from voice agent, especially fixing mermaid diagram formatting
@@ -374,40 +378,6 @@ function extractSuggestionsFromContent(content: string): string[] | undefined {
   return undefined;
 }
 
-/**
- * Strip suggestions and metadata from message content for display
- * Handles inline format: <suggestions>[...]</suggestions>
- * Also handles legacy formats: ---SUGGESTIONS---, ---OBSERVABILITY---, ---HAS_QUESTION---
- */
-function stripSuggestionsFromContent(content: string): string {
-  if (!content) return content;
-
-  let result = content;
-
-  // Remove inline suggestions: <suggestions>[...]</suggestions>
-  result = result.replace(/<suggestions>[\s\S]*?<\/suggestions>/g, '').trimEnd();
-
-  // Remove legacy ---SUGGESTIONS--- markers and their JSON payloads
-  const suggestionsMarker = '---SUGGESTIONS---';
-  if (result.includes(suggestionsMarker)) {
-    result = result.substring(0, result.indexOf(suggestionsMarker)).trimEnd();
-  }
-
-  // Remove observability metadata
-  const obsMarker = '---OBSERVABILITY---';
-  if (result.includes(obsMarker)) {
-    result = result.substring(0, result.indexOf(obsMarker)).trimEnd();
-  }
-
-  // Remove HAS_QUESTION marker (legacy)
-  const questionMarker = '---HAS_QUESTION---';
-  if (result.includes(questionMarker)) {
-    result = result.substring(0, result.indexOf(questionMarker)).trimEnd();
-  }
-
-  return result.trimEnd();
-}
-
 function formatVoiceSessionDuration(startTime: number | null): string | null {
   if (!startTime) return null;
 
@@ -486,6 +456,8 @@ function ChatInterfaceInner() {
     });
   }, []);
   const [input, setInput] = useState("");
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
+  const copyFeedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [loadingStatus, setLoadingStatus] = useState<string | null>(null);
   const [timeoutUntil, setTimeoutUntilState] = useState<number | null>(null);
@@ -503,6 +475,32 @@ function ChatInterfaceInner() {
 
   // Detect user's IANA timezone once (e.g. "Europe/Bucharest")
   const userTimezone = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []);
+
+  const handleCopyAssistant = useCallback(async (message: Message) => {
+    const text = buildAssistantCopyText(message);
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedMessageId(message.id);
+      if (copyFeedbackTimeoutRef.current) {
+        clearTimeout(copyFeedbackTimeoutRef.current);
+      }
+      copyFeedbackTimeoutRef.current = setTimeout(() => {
+        setCopiedMessageId(null);
+        copyFeedbackTimeoutRef.current = null;
+      }, 2000);
+    } catch {
+      // Permission denied or unsupported — silent
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (copyFeedbackTimeoutRef.current) {
+        clearTimeout(copyFeedbackTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Keep a ref to latest messages to avoid stale closures in async handlers
   const messagesRef = useRef(messages);
@@ -1755,6 +1753,18 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
                           }}
                         />
                       </div>
+                      {!message.streaming && buildAssistantCopyText(message) ? (
+                        <div className="mt-2">
+                          <button
+                            type="button"
+                            onClick={() => handleCopyAssistant(message)}
+                            className={`text-[0.65rem] uppercase tracking-wider font-mono transition-colors underline-offset-2 hover:underline ${isDark ? "text-gray-500 hover:text-gray-300" : "text-gray-500 hover:text-gray-800"}`}
+                            aria-label="Copy reply"
+                          >
+                            {copiedMessageId === message.id ? "Copied" : "Copy"}
+                          </button>
+                        </div>
+                      ) : null}
                       {message.images && message.images.length > 0 && (
                         <div className="mt-3">
                           {message.images.map((markdown, idx) => (
