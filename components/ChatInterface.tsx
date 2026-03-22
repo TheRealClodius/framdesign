@@ -125,7 +125,8 @@
  *   floating prompt overlay, even as the textarea grows (max-h-[120px]).
  * - The fade gradients use CSS classes defined in globals, not inline styles.
  */
-import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import MarkdownWithMermaid from "./MarkdownWithMermaid";
 import {
   generateMessageId,
@@ -156,6 +157,7 @@ import { getSuggestionImage } from "@/lib/project-image-map";
 import { PROJECTS } from "@/lib/project-config";
 import SuggestionImagePopup from "./SuggestionImagePopup";
 import EmptyStateCards from "./EmptyStateCards";
+import { parseDeepLinkFromSearchParams } from "@/lib/deep-link";
 
 /**
  * Normalize text response from voice agent, especially fixing mermaid diagram formatting
@@ -433,7 +435,8 @@ function getRandomProject(): string {
   return PROJECTS[Math.floor(Math.random() * PROJECTS.length)];
 }
 
-export default function ChatInterface() {
+function ChatInterfaceInner() {
+  const searchParams = useSearchParams();
   // Get current theme (dark mode during night time or based on system preference)
   const theme = useTheme();
   const isDark = theme === 'dark';
@@ -741,13 +744,18 @@ export default function ChatInterface() {
     checkBudget();
   }, []);
 
-  // Load conversation from localStorage on mount
+  // Load conversation from localStorage; prefill from ?q= / ?query= / ?project= only when no saved thread
   useEffect(() => {
     const loadedMessages = loadMessagesFromStorage(MESSAGE_LIMITS.MAX_PERSISTED_MESSAGES);
     if (loadedMessages.length > 0) {
       setMessages(loadedMessages);
+      return;
     }
-  }, []);
+    const fromUrl = parseDeepLinkFromSearchParams(searchParams);
+    if (fromUrl) {
+      setInput((prev) => (prev.trim() === "" ? fromUrl : prev));
+    }
+  }, [searchParams]);
 
   // Auto-save messages to localStorage on changes (debounced to reduce blocking during streaming)
   useEffect(() => {
@@ -2157,5 +2165,25 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
         />
       )}
     </section>
+  );
+}
+
+function ChatInterfaceSuspenseFallback() {
+  return (
+    <section
+      className="w-full max-w-[28rem] md:max-w-none mx-auto pt-0 pb-0 md:pb-0 h-fit md:h-[100vh] md:flex md:flex-col md:min-h-0 overflow-x-hidden bg-gray-900"
+      aria-busy="true"
+      aria-label="Chat"
+    >
+      <div className="relative flex-1 min-h-0 h-[600px] md:h-auto" />
+    </section>
+  );
+}
+
+export default function ChatInterface() {
+  return (
+    <Suspense fallback={<ChatInterfaceSuspenseFallback />}>
+      <ChatInterfaceInner />
+    </Suspense>
   );
 }
