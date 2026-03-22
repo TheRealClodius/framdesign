@@ -983,14 +983,14 @@ function ChatInterfaceInner() {
         console.log('🔴 FLAG SET: Voice session ended due to error - shouldStartNewTurn = TRUE');
         
         // Build error message with helpful details
-        let errorContent = `VOICE ERROR: ${message}`;
+        let errorContent = `Voice could not continue: ${message}`;
         if (details?.suggestion) {
           errorContent += `\n\nSuggestion: ${details.suggestion}`;
         }
         if (details?.helpUrl) {
           errorContent += `\n\nHelp: ${details.helpUrl}`;
         }
-        errorContent += `\n\nPLEASE TRY AGAIN OR USE TEXT CHAT.`;
+        errorContent += `\n\nYou can try again or keep chatting in text.`;
         
         setMessages((prev) => [
           ...prev,
@@ -1310,7 +1310,7 @@ function ChatInterfaceInner() {
         const errorMessage = error instanceof Error ? error.message : "Unknown error";
         setMessages((prev) => [
           ...prev,
-          { id: generateMessageId(), role: "assistant", content: `ERROR: ${errorMessage}. PLEASE TRY AGAIN.` }
+          { id: generateMessageId(), role: "assistant", content: `${errorMessage}. Please try again.` }
         ]);
       } finally {
         setIsLoading(false);
@@ -1614,7 +1614,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
             if (lastIndex >= 0 && updated[lastIndex].id === assistantMessageId) {
               updated[lastIndex] = {
                 ...updated[lastIndex],
-                content: `ERROR: ${streamError.message}. PLEASE TRY AGAIN.`,
+                content: `${streamError.message}. Please try again.`,
                 streaming: false,
               };
             }
@@ -1678,7 +1678,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
           if (lastIndex >= 0 && updated[lastIndex].id === assistantMessageId) {
             updated[lastIndex] = {
               ...updated[lastIndex],
-              content: data.message || data.error || "ERROR: COULD NOT GET RESPONSE.",
+              content: data.message || data.error || "No response from the assistant. Please try again.",
               streaming: false,
             };
           }
@@ -1694,7 +1694,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
 
       setMessages((prev) => [
         ...prev,
-        { id: generateMessageId(), role: "assistant", content: `ERROR: ${errorMessage}. PLEASE TRY AGAIN.` }
+        { id: generateMessageId(), role: "assistant", content: `${errorMessage}. Please try again.` }
       ]);
     } finally {
       setIsLoading(false);
@@ -2183,7 +2183,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
                             {
                               id: generateMessageId(),
                               role: "assistant",
-                              content: `VOICE ERROR: ${userFriendlyMessage}. YOU CAN CONTINUE USING TEXT CHAT.`
+                              content: `Voice unavailable: ${userFriendlyMessage} You can keep using text chat.`
                             }
                           ]);
                         }
