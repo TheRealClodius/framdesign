@@ -64,6 +64,40 @@ describe('Voice Feature: Transcripts & History', () => {
       const received = simulateTranscriptReception({}, history);
       expect(received).toHaveLength(0);
     });
+
+    test('should prefer model turn text over output transcription for the same assistant turn', () => {
+      const history = { user: [], assistant: [] };
+      let assistantTranscriptSentFromModelTurn = false;
+
+      const emitAssistantModelTurnText = (text: string) => {
+        assistantTranscriptSentFromModelTurn = true;
+        history.assistant.push({
+          role: 'assistant',
+          text,
+          timestamp: Date.now()
+        });
+      };
+
+      const maybeEmitAssistantOutputTranscript = (text: string) => {
+        if (assistantTranscriptSentFromModelTurn) {
+          return false;
+        }
+
+        history.assistant.push({
+          role: 'assistant',
+          text,
+          timestamp: Date.now()
+        });
+        return true;
+      };
+
+      emitAssistantModelTurnText('I found the project details.');
+      const emittedOutputTranscript = maybeEmitAssistantOutputTranscript('I found the project details.');
+
+      expect(emittedOutputTranscript).toBe(false);
+      expect(history.assistant).toHaveLength(1);
+      expect(history.assistant[0].text).toBe('I found the project details.');
+    });
   });
 
   // --- 2. Chat History Context Injection ---

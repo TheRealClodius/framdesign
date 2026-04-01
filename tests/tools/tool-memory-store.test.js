@@ -44,4 +44,23 @@ describe('ToolMemoryStore cleanup', () => {
 
     expect(toolMemoryStore.getSessionCount()).toBe(0);
   });
+
+  test('preserves extended call metadata used by agent context', () => {
+    nowSpy.mockReturnValue(1234);
+
+    toolMemoryStore.recordToolCall('session-c', {
+      ...BASE_RECORD,
+      id: 'call-rich',
+      summary: 'Summarized search result',
+      turn: 7,
+      tokens: 42
+    });
+
+    const [call] = toolMemoryStore.queryToolCalls('session-c', { timeRange: 'all' });
+
+    expect(call.id).toBe('call-rich');
+    expect(call.summary).toBe('Summarized search result');
+    expect(call.turn).toBe(7);
+    expect(call.tokens).toBe(42);
+  });
 });
