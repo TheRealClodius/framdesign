@@ -38,7 +38,7 @@ contact_policy:
 
 ## Overview
 
-FRAM is a multidisciplinary design and product lab based in Europe. It works across software, systems, and digital experiences, treating software as a material rather than a purely technical artifact or design deliverable.
+FRAM is a multidisciplinary design and product lab based in Europe, with offices in Bucharest, Romania and Rome, Italy. It works across software, systems, and digital experiences, treating software as a material rather than a purely technical artifact or design deliverable.
 
 The studio operates with a small, senior team and focuses on work where design, engineering, and product thinking are tightly coupled.
 
