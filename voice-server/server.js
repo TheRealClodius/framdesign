@@ -198,6 +198,9 @@ wss.on('connection', async (ws, req) => {
   let pendingMarkdownSnippets = [];
   // Track citations from perplexity_search tool results for voice transcript injection
   let pendingCitations = [];
+  // Track whether assistant transcript text already came from modelTurn.parts for this turn.
+  // If so, skip outputTranscription to avoid duplicate/conflicting chat lines.
+  let assistantTranscriptSentFromModelTurn = false;
 
   // Initialize state controller for session
   const state = createStateController({
@@ -535,7 +538,8 @@ wss.on('connection', async (ws, req) => {
         if (!geminiSession) return;
         
         // 1. Inject history if present
-        const pastToolCalls = toolMemoryStore.queryToolCalls(currentUserId || clientId, { timeRange: 'all' });
+        const toolMemorySessionId = currentUserId || clientId;
+        const pastToolCalls = toolMemoryStore.queryToolCalls(toolMemorySessionId, { timeRange: 'all' });
         let toolMemoryContext = '';
         
         if (pastToolCalls.length > 0) {
@@ -911,7 +915,8 @@ wss.on('connection', async (ws, req) => {
         // Record in tool memory store (NEW - Tool Memory)
         if (!dedupCheck.isDuplicate) {
           const callId = `call-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-          toolMemoryStore.recordToolCall(clientId, {
+          const toolMemorySessionId = currentUserId || clientId;
+          toolMemoryStore.recordToolCall(toolMemorySessionId, {
             id: callId,
             toolId: call.name,
             args: call.args || {},
@@ -1085,6 +1090,7 @@ wss.on('connection', async (ws, req) => {
             const transcriptText = part.text;
 
             console.log(`[${clientId}] ✓ TEXT RESPONSE RECEIVED! Sending transcript: ${transcriptText.substring(0, 50)}...`);
+            assistantTranscriptSentFromModelTurn = true;
             conversationTranscripts.assistant.push({
               text: transcriptText,
               timestamp: Date.now()
@@ -1184,6 +1190,7 @@ wss.on('connection', async (ws, req) => {
         // Reset transcript deduplication tracking for next turn
         // This prevents cross-turn deduplication from incorrectly filtering valid new transcripts
         lastTranscriptText = { user: '', assistant: '' };
+        assistantTranscriptSentFromModelTurn = false;
         pendingMarkdownSnippets = [];
         pendingCitations = []; // Clear citations for new turn
         
@@ -1241,6 +1248,7 @@ wss.on('connection', async (ws, req) => {
         // Reset transcript deduplication tracking on interruption
         // The interrupted response is incomplete, so we need fresh deduplication for the next response
         lastTranscriptText = { user: '', assistant: '' };
+        assistantTranscriptSentFromModelTurn = false;
         pendingMarkdownSnippets = [];
         pendingCitations = []; // Clear citations on interruption
         
@@ -1288,6 +1296,9 @@ wss.on('connection', async (ws, req) => {
       // Output transcription (model speech to text) - arrives in serverContent
       // According to Gemini Live API docs, transcripts are in serverContent.outputTranscription.text
       if (content.outputTranscription?.text) {
+        if (assistantTranscriptSentFromModelTurn) {
+          console.log(`[${clientId}] Skipping outputTranscription because assistant transcript was already emitted from modelTurn.parts`);
+        } else {
         const rawText = content.outputTranscription.text;
         const transcriptPreview = rawText.substring(0, 50);
         console.log(`[${clientId}] Transcript received: assistant - ${transcriptPreview}...`);
@@ -1345,6 +1356,7 @@ wss.on('connection', async (ws, req) => {
           } else {
             console.log(`[${clientId}] ⚠️ OUTPUT TRANSCRIPT SKIPPED - duplicate chunk detected`);
           }
+        }
         }
       }
     }
@@ -1713,6 +1725,7 @@ wss.on('connection', async (ws, req) => {
               userTurnCompletionInProgress = false;
               conversationTranscripts = { user: [], assistant: [] };
               lastTranscriptText = { user: '', assistant: '' }; // Reset transcript deduplication tracking
+              assistantTranscriptSentFromModelTurn = false;
               pendingMarkdownSnippets = [];
               pendingCitations = []; // Clear citations on session end
               state.set('pendingEndVoiceSession', null); // Clear any pending end session
@@ -1740,6 +1753,7 @@ wss.on('connection', async (ws, req) => {
             userTurnCompletionInProgress = false;
             conversationTranscripts = { user: [], assistant: [] };
             lastTranscriptText = { user: '', assistant: '' }; // Reset transcript deduplication tracking
+            assistantTranscriptSentFromModelTurn = false;
             pendingMarkdownSnippets = [];
             state.set('pendingEndVoiceSession', null); // Clear any pending end session
             state.set('shouldSuppressAudio', false); // Reset audio suppression flag
