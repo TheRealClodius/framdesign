@@ -32,6 +32,7 @@ const __dirname = path.dirname(__filename);
 
 // Tool schemas for Gemini (loaded at startup)
 let geminiToolSchemas = [];
+const DEFAULT_GEMINI_VOICE_MODEL = 'gemini-3.1-flash-live-preview';
 
 // Load environment variables
 config({ path: '.env' });
@@ -55,9 +56,12 @@ const isNonInteractive = args.includes('--non-interactive');
 const verboseMode = args.includes('--verbose');
 const singleQuestionArg = args.find(arg => arg.startsWith('--question='));
 const singleQuestionId = singleQuestionArg ? parseInt(singleQuestionArg.split('=')[1]) : null;
-// Content mode is default for pre-recorded audio; realtime mode for microphone-like streaming
-const useRealtimeMode = args.includes('--realtime-mode');
-const useContentMode = !useRealtimeMode;
+// Gemini 3.1 Live requires realtime input for audio after initial session setup.
+const useContentMode = args.includes('--content-mode');
+if (useContentMode) {
+  console.error(formatError('--content-mode is not supported with gemini-3.1-flash-live-preview. Use the default realtime mode.'));
+  process.exit(1);
+}
 
 if (!isInteractive && !isNonInteractive) {
   console.error(formatError('Please specify --interactive or --non-interactive'));
@@ -67,7 +71,7 @@ if (!isInteractive && !isNonInteractive) {
   console.log('\nOptions:');
   console.log('  --verbose                                            # Show detailed logs');
   console.log('  --question=N                                         # Run only question N');
-  console.log('  --realtime-mode                                      # Stream audio like microphone');
+  console.log('  --content-mode                                       # Unsupported for Gemini 3.1 Live (kept for migration warnings)');
   console.log('\nNote: Run scripts/generate-test-audio.js first to create audio test files');
   process.exit(1);
 }
@@ -185,11 +189,14 @@ async function createLiveSession(ai) {
         },
         activityHandling: 'START_OF_ACTIVITY_INTERRUPTS',
         turnCoverage: 'TURN_INCLUDES_ONLY_ACTIVITY'
+      },
+      historyConfig: {
+        initialHistoryInClientContent: true
       }
     };
 
     ai.live.connect({
-      model: 'gemini-live-2.5-flash-native-audio',
+      model: process.env.GEMINI_VOICE_MODEL || DEFAULT_GEMINI_VOICE_MODEL,
       config: sessionConfig,
       callbacks: {
         onopen: () => {
@@ -233,29 +240,12 @@ async function createLiveSession(ai) {
                   }
                 });
               },
-              // Alternative: Send audio as a content turn (for pre-recorded audio)
-              sendAudioAsContent: async (base64Audio) => {
-                if (!session) throw new Error('Session not initialized');
-                if (!responseData.startTime) {
-                  responseData.startTime = Date.now();
-                }
-                await session.sendClientContent({
-                  turns: [{
-                    role: 'user',
-                    parts: [{
-                      inlineData: {
-                        mimeType: 'audio/wav',
-                        data: base64Audio
-                      }
-                    }]
-                  }],
-                  turnComplete: true
-                });
+              sendAudioAsContent: async () => {
+                throw new Error('sendAudioAsContent is not supported with gemini-3.1-flash-live-preview');
               },
               signalTurnComplete: async () => {
                 if (!session) throw new Error('Session not initialized');
-                // Signal to Gemini that user's turn is complete and it should respond
-                await session.sendClientContent({ turnComplete: true });
+                await session.sendRealtimeInput({ audioStreamEnd: true });
               },
               waitForResponse: (timeout = 30000) => {
                 return new Promise((res, rej) => {
@@ -457,14 +447,6 @@ async function readAudioFile(audioFilePath) {
   return pcmData.toString('base64');
 }
 
-/**
- * Read full WAV file including header for content-based sending
- */
-async function readFullAudioFile(audioFilePath) {
-  const absolutePath = path.join(__dirname, audioFilePath);
-  const audioBuffer = await readFile(absolutePath);
-  return audioBuffer.toString('base64');
-}
 
 /**
  * Simulate real-time audio streaming by pacing chunks
@@ -516,44 +498,29 @@ async function processAudioQuestion(sessionHandler, audioQuestion, questionIndex
     console.log(formatStepHeader(1));
     console.log(`  🎤 Sending audio: ${audioQuestion.audioFile}`);
 
-    if (useContentMode) {
-      // Content mode: Send full WAV as a content turn (better for pre-recorded audio)
-      const base64Audio = await readFullAudioFile(audioQuestion.audioFile);
-      if (verboseMode) {
-        console.log(`  📊 Audio size: ${base64Audio.length} base64 chars (~${Math.round(base64Audio.length * 0.75 / 1000)}KB)`);
-        console.log('  📤 Sending audio as content turn...');
-      }
-      await sessionHandler.sendAudioAsContent(base64Audio);
-      if (verboseMode) {
-        console.log('  ✓ Audio sent as content (turnComplete included)');
-      }
-    } else {
-      // Realtime mode: Stream audio chunks like a microphone would
-      const base64Audio = await readAudioFile(audioQuestion.audioFile);
-      if (verboseMode) {
-        console.log(`  📊 Audio size: ${base64Audio.length} base64 chars (~${Math.round(base64Audio.length * 0.75 / 1000)}KB)`);
-      }
+    const base64Audio = await readAudioFile(audioQuestion.audioFile);
+    if (verboseMode) {
+      console.log(`  📊 Audio size: ${base64Audio.length} base64 chars (~${Math.round(base64Audio.length * 0.75 / 1000)}KB)`);
+    }
 
-      // Stream audio in real-time paced chunks
-      await streamAudioChunks(
-        sessionHandler,
-        base64Audio,
-        verboseMode ? (current, total) => {
-          if (current === total) {
-            console.log(`  📤 Streamed ${total} audio chunks`);
-          }
-        } : null
-      );
+    // Stream audio in realtime paced chunks so the CLI matches production Live API usage.
+    await streamAudioChunks(
+      sessionHandler,
+      base64Audio,
+      verboseMode ? (current, total) => {
+        if (current === total) {
+          console.log(`  📤 Streamed ${total} audio chunks`);
+        }
+      } : null
+    );
 
-      // Wait for VAD to detect end of speech after audio finishes
-      const vadProcessingDelay = 600; // ms after audio ends
-      await new Promise(resolve => setTimeout(resolve, vadProcessingDelay));
+    // Give server-side VAD a moment, then explicitly flush the audio stream for Gemini 3.1 Live.
+    const vadProcessingDelay = 600;
+    await new Promise(resolve => setTimeout(resolve, vadProcessingDelay));
 
-      // Signal turn complete so Gemini knows to respond
-      await sessionHandler.signalTurnComplete();
-      if (verboseMode) {
-        console.log('  ✓ Signaled turnComplete');
-      }
+    await sessionHandler.signalTurnComplete();
+    if (verboseMode) {
+      console.log('  ✓ Sent audioStreamEnd');
     }
 
     // Step 2: Wait for response
@@ -651,27 +618,27 @@ async function runNonInteractive() {
   console.log('╚════════════════════════════════════════════════════════════════════════════════╝\n');
 
   // Dynamically import VOICE_TEST_QUESTIONS
-  let VOICE_TEST_QUESTIONS;
+  let voiceTestQuestions;
   try {
-    const module = await import('./voice-agent-test-questions.js');
-    VOICE_TEST_QUESTIONS = module.VOICE_TEST_QUESTIONS;
-  } catch (error) {
+    const questionsModule = await import('./voice-agent-test-questions.js');
+    voiceTestQuestions = questionsModule.VOICE_TEST_QUESTIONS;
+  } catch {
     console.error(formatError('Could not load voice-agent-test-questions.js'));
     console.log('\nPlease run: node scripts/generate-test-audio.js');
     process.exit(1);
   }
 
   // Filter to single question if specified
-  let questionsToRun = VOICE_TEST_QUESTIONS;
+  let questionsToRun = voiceTestQuestions;
   if (singleQuestionId !== null) {
-    questionsToRun = VOICE_TEST_QUESTIONS.filter(q => q.id === singleQuestionId);
+    questionsToRun = voiceTestQuestions.filter(q => q.id === singleQuestionId);
     if (questionsToRun.length === 0) {
       console.error(formatError(`Question ${singleQuestionId} not found`));
       process.exit(1);
     }
     console.log(`Running single question: #${singleQuestionId}\n`);
   } else {
-    console.log(`Loaded ${VOICE_TEST_QUESTIONS.length} test questions\n`);
+    console.log(`Loaded ${voiceTestQuestions.length} test questions\n`);
   }
 
   if (verboseMode) {

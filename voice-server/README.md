@@ -30,6 +30,7 @@ GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
 
 # Optional fallback / utilities
 GEMINI_API_KEY=your_ai_studio_key
+GEMINI_VOICE_MODEL=gemini-3.1-flash-live-preview
 QDRANT_CLUSTER_ENDPOINT=https://your-qdrant-url
 QDRANT_API_KEY=your-qdrant-key
 PERPLEXITY_API_KEY=your-perplexity-key
@@ -44,6 +45,13 @@ npm run dev
 ```
 
 Server starts on `ws://localhost:8080`.
+
+## Gemini 3.1 Live migration notes
+
+- Default voice model: `gemini-3.1-flash-live-preview`.
+- `sendClientContent` is only used to seed initial history. Ongoing text/audio turns use realtime input.
+- Pre-recorded or live audio turns should end with `sendRealtimeInput({ audioStreamEnd: true })` rather than `sendClientContent({ turnComplete: true })`.
+- Proactive audio and affective dialogue are not enabled because Gemini 3.1 Flash Live does not support them.
 
 ## Deployment to Railway
 
