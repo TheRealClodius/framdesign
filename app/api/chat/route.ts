@@ -290,6 +290,10 @@ function getOrCreateToolSession(conversationHash: string): { lastAccess: number;
   return session;
 }
 
+function clearToolSession(conversationHash: string): boolean {
+  return toolSessionStore.delete(conversationHash);
+}
+
 /**
  * Record a tool call event
  */
@@ -1291,11 +1295,15 @@ export async function POST(request: Request) {
     const sessionId = userId || 'anonymous-text-session';
     let existingCallsCount = 0;
     let clearedStaleToolMemory = false;
+    let hadStoredToolSession = false;
+    let clearedStoredToolSession = false;
 
     // IMPORTANT: Clear stale tool memory for new conversations
     // A "new conversation" is detected when messages.length <= 2 (just first user message, or user + assistant)
     // This prevents stale tool memory from previous sessions from confusing the model
     if (messages.length <= 2) {
+      hadStoredToolSession = toolSessionStore.has(conversationHash);
+      clearedStoredToolSession = clearToolSession(conversationHash);
       const existingCalls = toolMemoryStore.queryToolCalls(sessionId, { toolId: "", timeRange: 'all', includeErrors: true });
       existingCallsCount = existingCalls.length;
       if (existingCalls.length > 0) {
@@ -1316,7 +1324,9 @@ export async function POST(request: Request) {
         hasUserId: typeof userId === 'string' && userId.length > 0,
         messageCount: messages.length,
         existingCallsCount,
-        clearedStaleToolMemory
+        clearedStaleToolMemory,
+        hadStoredToolSession,
+        clearedStoredToolSession
       },
       timestamp: Date.now()
     });
