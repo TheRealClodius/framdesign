@@ -27,7 +27,7 @@ Based on Perplexity research, here are the findings about the Google Gemini Live
    - Low latency interactions
    - Multilingual support (24 languages)
    - High-quality transcription
-   - Native audio features (affective dialog, context awareness)
+   - Native audio output with realtime multimodal understanding (note: Gemini 3.1 Flash Live does not support affective dialog or proactive audio)
 
 ### Verification Needed
 

@@ -33,16 +33,21 @@ class ToolMemoryStore {
    */
   recordToolCall(sessionId, call) {
     const session = this.getSession(sessionId);
+    const timestamp = call.timestamp || Date.now();
+
+    // Drop already-expired records instead of resurrecting a dead session
+    // with stale history that should no longer influence the agent.
+    if (Date.now() - timestamp > SESSION_TTL_MS) {
+      if (session.calls.length === 0) {
+        this.sessions.delete(sessionId);
+      }
+      return;
+    }
 
     session.calls.push({
+      ...call,
       id: call.id || `call-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      toolId: call.toolId,
-      args: call.args,
-      timestamp: call.timestamp || Date.now(),
-      duration: call.duration,
-      fullResponse: call.fullResponse,
-      ok: call.ok,
-      error: call.error
+      timestamp
     });
 
     // FIFO eviction
@@ -55,6 +60,7 @@ class ToolMemoryStore {
    * Get recent calls for a session
    */
   getRecentCalls(sessionId, limit = 10) {
+    this.cleanup();
     const session = this.sessions.get(sessionId);
     if (!session) return [];
 
@@ -65,6 +71,7 @@ class ToolMemoryStore {
    * Get full response for a specific call
    */
   getFullResponse(sessionId, callId) {
+    this.cleanup();
     const session = this.sessions.get(sessionId);
     if (!session) return null;
 
@@ -76,6 +83,7 @@ class ToolMemoryStore {
    * Get calls by tool ID
    */
   getCallsByTool(sessionId, toolId, limit = 10) {
+    this.cleanup();
     const session = this.sessions.get(sessionId);
     if (!session) return [];
 
@@ -100,6 +108,7 @@ class ToolMemoryStore {
    * Get session statistics
    */
   getStats(sessionId) {
+    this.cleanup();
     const session = this.sessions.get(sessionId);
     if (!session) return null;
 
@@ -122,6 +131,7 @@ class ToolMemoryStore {
    * Query tool calls with filters (compatibility method)
    */
   queryToolCalls(sessionId, options = {}) {
+    this.cleanup();
     const session = this.sessions.get(sessionId);
     if (!session) return [];
 
@@ -172,6 +182,7 @@ class ToolMemoryStore {
    * @returns {object|null} - Matching call or null
    */
   findSimilarCall(sessionId, toolId, args, threshold = 0.85) {
+    this.cleanup();
     const session = this.sessions.get(sessionId);
     if (!session) return null;
 

@@ -334,11 +334,10 @@ await transport.sendToolResult({
   result: result
 });
 
-// CRITICAL: After sending the last tool result, signal Gemini to continue generating
+// CRITICAL: sendToolResponse already unblocks Gemini's synchronous tool flow in 3.1 Live.
 const isLastTool = i === toolCalls.length - 1;
 if (isLastTool) {
-  // Signal Gemini that tool results are complete and it should continue responding
-  geminiSession.sendClientContent({ turnComplete: true });
+  console.log('All tool responses sent; Gemini will continue automatically.');
 }
 ```
 
@@ -442,9 +441,9 @@ The implementation aligns with the [Live API Tool Use guide](https://ai.google.d
    geminiSession.sendToolResponse({ functionResponses: [...] })
    ```
 
-4. **Turn Completion:** After tool results, signal Gemini to continue
+4. **Tool Continuation:** After tool results, Gemini continues once `sendToolResponse()` completes
    ```javascript
-   geminiSession.sendClientContent({ turnComplete: true })
+   geminiSession.sendToolResponse({ functionResponses: [...] })
    ```
 
 ### 🔍 Key Differences from Standard API

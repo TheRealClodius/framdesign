@@ -139,7 +139,7 @@ Required in `.env`:
 ```
 GEMINI_API_KEY                  # Google Gemini API
 GEMINI_TEXT_MODEL                # Text agent model (default: gemini-3.1-flash-lite-preview)
-GEMINI_VOICE_MODEL               # Voice agent model (default: gemini-live-2.5-flash-native-audio)
+GEMINI_VOICE_MODEL               # Voice agent model (default: gemini-3.1-flash-live-preview)
 GEMINI_OBSERVABILITY_MODEL       # Observability topic analysis model (default: gemini-2.5-flash)
 PERPLEXITY_API_KEY              # External search
 QDRANT_CLUSTER_ENDPOINT         # Vector database URL

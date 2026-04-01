@@ -274,6 +274,10 @@ function getOrCreateToolSession(conversationHash: string): { lastAccess: number;
   return session;
 }
 
+function clearToolSession(conversationHash: string): boolean {
+  return toolSessionStore.delete(conversationHash);
+}
+
 /**
  * Record a tool call event
  */
@@ -1257,6 +1261,7 @@ export async function POST(request: Request) {
     // A "new conversation" is detected when messages.length <= 2 (just first user message, or user + assistant)
     // This prevents stale tool memory from previous sessions from confusing the model
     if (messages.length <= 2) {
+      clearToolSession(conversationHash);
       const existingCalls = toolMemoryStore.queryToolCalls(sessionId, { toolId: "", timeRange: 'all', includeErrors: true });
       if (existingCalls.length > 0) {
         console.log(`[ToolMemory] Clearing ${existingCalls.length} stale tool calls for new conversation (messages: ${messages.length})`);
@@ -1420,16 +1425,16 @@ export async function POST(request: Request) {
             
             // Add functionCall message (model role)
             if (group.call) {
-              const callParts: ContentPart[] = [];
-              callParts.push({
+              const callPart: FunctionCallPart = {
                 functionCall: {
                   name: group.call.toolName,
                   args: toRecord(group.call.args || {})
-                }
-              });
+                },
+                ...(group.call.thoughtSignature ? { thoughtSignature: group.call.thoughtSignature } : {})
+              };
               recentMessages.push({
                 role: "model",
-                parts: callParts
+                parts: [callPart as unknown as Part]
               });
               console.log(`[ToolSession] Injected stored tool call: ${group.call.toolName} (turn ${currentTurnNumber}, chain ${chainPos})`);
             }
@@ -3022,14 +3027,13 @@ export async function POST(request: Request) {
 
               console.log(`Stream completed: ${chunksProcessed} chunks, ${bytesSent} bytes`);
 
-              // Check if we have a late function call that needs execution
-              const meaningfulTextThreshold = 50;
-              const hasMinimalText = accumulatedFullText.trim().length < meaningfulTextThreshold;
-
-              if (lateFunctionCall !== null && hasMinimalText) {
+              // Check if we have a late function call that needs execution.
+              // Execute it even if some preamble text was already streamed; otherwise
+              // the model can appear to "think out loud" and then skip the actual tool.
+              if (lateFunctionCall !== null) {
                 // Capture with explicit type to help TypeScript
                 const pendingLateCall = lateFunctionCall as { name: string; args: Record<string, unknown> };
-                console.log(`[Late Function Call] Executing ${pendingLateCall.name} (accumulated text: "${accumulatedFullText.trim().slice(0, 100)}...")`);
+                console.log(`[Late Function Call] Executing ${pendingLateCall.name} after streaming ${accumulatedFullText.trim().length} chars (accumulated text: "${accumulatedFullText.trim().slice(0, 100)}...")`);
                 obsToolsCalled.push(pendingLateCall.name);
 
                 try {
@@ -3149,6 +3153,8 @@ export async function POST(request: Request) {
                     if (cleanedLateResultData && typeof cleanedLateResultData === 'object') {
                       delete cleanedLateResultData._timing;
                       delete cleanedLateResultData._distance;
+                      delete cleanedLateResultData._allAssets;
+                      delete cleanedLateResultData._diagnostics;
                       if (Array.isArray(cleanedLateResultData.results)) {
                         cleanedLateResultData.results.forEach((r: any) => {
                           if (r.metadata) {
@@ -3156,6 +3162,17 @@ export async function POST(request: Request) {
                             delete r.metadata.vector;
                           }
                         });
+                      }
+
+                      if (pendingLateCall.name === 'kb_get' && cleanedLateResultData.content) {
+                        const maxLength = 2000;
+                        if (cleanedLateResultData.content.length > maxLength) {
+                          const originalLength = cleanedLateResultData.content.length;
+                          const truncated = cleanedLateResultData.content.substring(0, maxLength);
+                          cleanedLateResultData.content = truncated + '\n\n... [Content truncated for performance. Full content available in chunks.]';
+                          cleanedLateResultData._truncated = true;
+                          console.log(`[Performance] Truncated late kb_get content from ${originalLength} to ${maxLength} chars`);
+                        }
                       }
                     }
 
