@@ -7,7 +7,6 @@ import { jest, describe, test, expect, beforeAll, beforeEach } from '@jest/globa
 import { toolRegistry } from '../../tools/_core/registry.js';
 import { createStateController } from '../../tools/_core/state-controller.js';
 import { GeminiLiveTransport } from '../../voice-server/providers/gemini-live-transport.js';
-import { ErrorType } from '../../tools/_core/error-types.js';
 
 describe('Voice Agent: Tool Integration', () => {
   let mockGeminiSession;
@@ -32,7 +31,7 @@ describe('Voice Agent: Tool Integration', () => {
 
     // Mock Gemini Live session
     mockGeminiSession = {
-      send: jest.fn().mockResolvedValue(undefined),
+      sendToolResponse: jest.fn().mockResolvedValue(undefined),
       on: jest.fn(),
       close: jest.fn()
     };
@@ -200,16 +199,14 @@ describe('Voice Agent: Tool Integration', () => {
       });
 
       // Verify result was sent to Gemini
-      expect(mockGeminiSession.send).toHaveBeenCalledTimes(1);
-      const sentMessage = mockGeminiSession.send.mock.calls[0][0];
+      expect(mockGeminiSession.sendToolResponse).toHaveBeenCalledTimes(1);
+      const sentMessage = mockGeminiSession.sendToolResponse.mock.calls[0][0];
       
-      expect(sentMessage).toHaveProperty('clientContent');
-      expect(sentMessage.clientContent).toHaveProperty('toolResponse');
-      expect(sentMessage.clientContent.toolResponse.functionResponses).toHaveLength(1);
-      expect(sentMessage.clientContent.toolResponse.functionResponses[0].id).toBe('call-123');
-      expect(sentMessage.clientContent.toolResponse.functionResponses[0].name).toBe('end_voice_session');
+      expect(sentMessage.functionResponses).toHaveLength(1);
+      expect(sentMessage.functionResponses[0].id).toBe('call-123');
+      expect(sentMessage.functionResponses[0].name).toBe('end_voice_session');
       // Gemini Live API expects just the data, not the full envelope
-      expect(sentMessage.clientContent.toolResponse.functionResponses[0].response).toEqual(result.data);
+      expect(sentMessage.functionResponses[0].response).toEqual(result.data);
     });
 
     test('should handle tool execution failure and send error to Gemini', async () => {
@@ -263,9 +260,9 @@ describe('Voice Agent: Tool Integration', () => {
       });
 
       // Verify error was sent
-      const sentMessage = mockGeminiSession.send.mock.calls[0][0];
+      const sentMessage = mockGeminiSession.sendToolResponse.mock.calls[0][0];
       // Gemini Live API expects just the error object, not the full envelope
-      expect(sentMessage.clientContent.toolResponse.functionResponses[0].response).toEqual(result.error);
+      expect(sentMessage.functionResponses[0].response).toEqual(result.error);
     });
   });
 
@@ -368,13 +365,13 @@ describe('Voice Agent: Tool Integration', () => {
       });
 
       // Step 5: Verify complete flow
-      expect(mockGeminiSession.send).toHaveBeenCalledTimes(1);
-      const response = mockGeminiSession.send.mock.calls[0][0];
+      expect(mockGeminiSession.sendToolResponse).toHaveBeenCalledTimes(1);
+      const response = mockGeminiSession.sendToolResponse.mock.calls[0][0];
       
-      expect(response.clientContent.toolResponse.functionResponses[0].id).toBe('call-integration-test');
+      expect(response.functionResponses[0].id).toBe('call-integration-test');
       // Gemini Live API expects just the data, not the full envelope
-      expect(response.clientContent.toolResponse.functionResponses[0].response).toEqual(result.data);
-      expect(response.clientContent.toolResponse.functionResponses[0].response.reason).toBe('user_request');
+      expect(response.functionResponses[0].response).toEqual(result.data);
+      expect(response.functionResponses[0].response.reason).toBe('user_request');
     });
   });
 });

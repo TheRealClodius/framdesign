@@ -96,6 +96,7 @@ const VERTEXAI_LOCATION = process.env.VERTEXAI_LOCATION || 'us-central1';
 const GOOGLE_APPLICATION_CREDENTIALS = process.env.GOOGLE_APPLICATION_CREDENTIALS; // Service account JSON path
 const PORT = process.env.PORT || 8080;
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'http://localhost:3000').split(',');
+const DEFAULT_GEMINI_VOICE_MODEL = 'gemini-3.1-flash-live-preview';
 
 // Check for either AI Studio or Vertex AI credentials
 const USE_VERTEX_AI = !!VERTEXAI_PROJECT;
@@ -188,7 +189,6 @@ wss.on('connection', async (ws, req) => {
   let conversationHistory = []; // Store for context injection
   let pendingRequest = null; // Store pending user request from text agent handoff
   let currentUserId = null; // Store userId for usage tracking
-  let currentTimezone = null; // Store user's IANA timezone (e.g. "Europe/Bucharest")
   let currentTurn = 1; // Track conversation turns for loop detection (NEW)
   
   // Track last transcript text to detect and deduplicate overlapping chunks from Gemini
@@ -304,19 +304,25 @@ wss.on('connection', async (ws, req) => {
     }
   }
 
-  function scheduleUserTurnTimeout() {
-    clearUserTurnTimeout();
-    userTurnTimeout = setTimeout(() => {
-      if (!state.get('awaitingUserTurn')) {
-        return;
-      }
-      if (pendingAudioBuffer.length === 0) {
-        return;
-      }
-      finalizeUserTurn('silence_timeout').catch((error) => {
-        console.error(`[${clientId}] Error auto-finalizing user turn:`, error);
-      });
-    }, USER_TURN_SILENCE_MS);
+  function sendTextToGemini(text) {
+    if (!geminiSession) {
+      console.warn(`[${clientId}] Cannot send text - no session`);
+      return false;
+    }
+
+    if (!text || typeof text !== 'string' || !text.trim()) {
+      console.warn(`[${clientId}] Cannot send empty text to Gemini`);
+      return false;
+    }
+
+    try {
+      geminiSession.sendRealtimeInput({ text });
+      console.log(`[${clientId}] Text → Gemini (${text.length} chars)`);
+      return true;
+    } catch (error) {
+      console.error(`[${clientId}] Error sending text to Gemini:`, error);
+      return false;
+    }
   }
 
   // Helper function to deduplicate overlapping transcript chunks
@@ -491,9 +497,9 @@ wss.on('connection', async (ws, req) => {
       state.set('userAudioChunkCount', 0); // Reset barge-in counter
       console.log(`[${clientId}] Setting isModelGenerating=true (audio blocked until barge-in threshold)`);
 
-      // Signal to Gemini that user's turn is complete
-      await geminiSession.sendClientContent({ turnComplete: true });
-      console.log(`[${clientId}] ✓ Sent turnComplete=true to Gemini`);
+      // Gemini 3.1 Live expects realtime audio streams to be flushed via audioStreamEnd.
+      await geminiSession.sendRealtimeInput({ audioStreamEnd: true });
+      console.log(`[${clientId}] ✓ Sent audioStreamEnd=true to Gemini`);
     } catch (error) {
       console.error(`[${clientId}] Error finalizing user turn (${source}):`, error);
       // Reset state on error to avoid deadlock
@@ -562,52 +568,54 @@ wss.on('connection', async (ws, req) => {
                 parts: turn.parts
               }))
             ];
-            
-            // Determine if voice agent should respond immediately
-            // Use explicit pendingRequest from text agent handoff (scalable approach)
-            // Fallback: respond if last turn was user (unanswered message)
-            const lastTurn = historyTurns[historyTurns.length - 1];
-            const shouldRespond = !!pendingRequest || lastTurn.role === 'user';
-            
-            // If there's a pending request, append it as context for the agent
+
+            const buildTextFromParts = (parts) => (parts || [])
+              .map((part) => typeof part?.text === 'string' ? part.text : '')
+              .filter(Boolean)
+              .join('\n\n')
+              .trim();
+
+            let realtimePrompt = null;
+
             if (pendingRequest) {
-              historyTurns.push({
-                role: 'user',
-                parts: [{ text: `[Continue with: ${pendingRequest}]` }]
-              });
-              console.log(`[${clientId}] 📌 Appended pending request to history: "${pendingRequest}"`);
+              realtimePrompt = `[Continue with: ${pendingRequest}]`;
+            } else {
+              const lastConversationTurn = conversationHistory[conversationHistory.length - 1];
+              const shouldResumeLastUserTurn = lastConversationTurn?.role === 'user';
+              if (shouldResumeLastUserTurn) {
+                const extractedText = buildTextFromParts(lastConversationTurn.parts);
+                if (extractedText) {
+                  historyTurns.pop();
+                  realtimePrompt = extractedText;
+                }
+              }
             }
-            
-            // If Gemini will respond, pre-emptively set generating flag
-            if (shouldRespond) {
-              state.set('isModelGenerating', true);
-              console.log(`[${clientId}] Pre-emptively setting isModelGenerating (history injection with response)`);
-            }
-            
-            geminiSession.sendClientContent({ 
+
+            // Gemini 3.1 Live only supports sendClientContent for initial history seeding.
+            geminiSession.sendClientContent({
               turns: historyTurns,
-              turnComplete: shouldRespond 
+              turnComplete: true
             });
-            
-            console.log(`[${clientId}] History injected: ${historyTurns.length} turns, pendingRequest=${!!pendingRequest}, willRespond=${shouldRespond}`);
+
+            const willRespond = !!realtimePrompt;
+            console.log(`[${clientId}] History seeded: ${historyTurns.length} turns, pendingRequest=${!!pendingRequest}, willRespond=${willRespond}`);
+
+            if (realtimePrompt) {
+              state.set('isModelGenerating', true);
+              console.log(`[${clientId}] Pre-emptively setting isModelGenerating (realtime prompt after history seed)`);
+              sendTextToGemini(realtimePrompt);
+            }
           } catch (error) {
             console.error(`[${clientId}] Error sending conversation history:`, error);
           }
         } else if (pendingRequest) {
-          // No history but there's a pending request - send it as a user message
+          // No history but there's a pending request - send it as realtime text.
           try {
-            // Pre-emptively set generating flag since Gemini will respond
             state.set('isModelGenerating', true);
-            console.log(`[${clientId}] Pre-emptively setting isModelGenerating (pending request)`);
-            
-            geminiSession.sendClientContent({ 
-              turns: [{
-                role: 'user',
-                parts: [{ text: `[Continue with: ${pendingRequest}]` }]
-              }],
-              turnComplete: true 
-            });
-            console.log(`[${clientId}] 📌 No history, but sent pending request: "${pendingRequest}"`);
+            console.log(`[${clientId}] Pre-emptively setting isModelGenerating (pending request via realtime text)`);
+
+            sendTextToGemini(`[Continue with: ${pendingRequest}]`);
+            console.log(`[${clientId}] 📌 No history, sent pending request via realtime text: "${pendingRequest}"`);
           } catch (error) {
             console.error(`[${clientId}] Error sending pending request:`, error);
             state.set('isModelGenerating', false);
@@ -1357,8 +1365,6 @@ wss.on('connection', async (ws, req) => {
         case 'start':
           console.log(`[${clientId}] Starting Gemini Live session for user: ${data.userId || 'anonymous'}`);
           currentUserId = data.userId || null;
-          currentTimezone = data.timezone || null;
-
           // Check global budget if userId is provided
           if (data.userId) {
             const isOverBudget = await UsageService.isOverBudget(data.userId);
@@ -1430,6 +1436,9 @@ wss.on('connection', async (ws, req) => {
                 // Only include detected speech activity in the user's turn
                 turnCoverage: 'TURN_INCLUDES_ONLY_ACTIVITY'
               },
+              historyConfig: {
+                initialHistoryInClientContent: true
+              },
               // Add tool support (all 5 tools from registry)
               tools: [{ functionDeclarations: geminiToolSchemas }]
             };
@@ -1481,7 +1490,7 @@ wss.on('connection', async (ws, req) => {
 
             assertLiveApiAvailable(ai);
             geminiSession = await ai.live.connect({
-              model: process.env.GEMINI_VOICE_MODEL || 'gemini-live-2.5-flash-native-audio',
+              model: process.env.GEMINI_VOICE_MODEL || DEFAULT_GEMINI_VOICE_MODEL,
               config: config,
               callbacks: {
                 onopen: () => {
@@ -1664,6 +1673,23 @@ wss.on('connection', async (ws, req) => {
           } else {
             console.error(`[${clientId}] Session ready but geminiSession is null`);
           }
+          break;
+
+        case 'text':
+          if (!sessionReady || !geminiSession) {
+            ws.send(JSON.stringify({
+              type: 'error',
+              error: 'Voice session is not ready for text input yet.'
+            }));
+            break;
+          }
+
+          if (!data.data || typeof data.data !== 'string' || data.data.trim().length === 0) {
+            console.warn(`[${clientId}] Received empty text message, skipping`);
+            break;
+          }
+
+          sendTextToGemini(data.data.trim());
           break;
 
         case 'stop':
