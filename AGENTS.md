@@ -15,7 +15,8 @@ Node 24 is required (`.nvmrc`). Use `source /home/ubuntu/.nvm/nvm.sh && nvm use 
 
 ### Environment
 - `.env` at root and `voice-server/.env` are required. Copy from `.env.example` files.
-- `GCS_SERVICE_ACCOUNT_KEY` must be left **empty** (not `placeholder`) if real credentials aren't available, otherwise `npm run build` and page data collection fail with a base64 decode error.
+- **GCS credentials**: This project uses `GOOGLE_APPLICATION_CREDENTIALS` (a JSON string of GCP service account credentials) and `VERTEXAI_PROJECT` instead of `GCS_PROJECT_ID` / `GCS_SERVICE_ACCOUNT_KEY`. The codebase falls back from `GCS_PROJECT_ID` → `VERTEXAI_PROJECT` and from `GCS_SERVICE_ACCOUNT_KEY` → `GOOGLE_APPLICATION_CREDENTIALS` automatically (see `blob-storage-service.ts`, `message-log-service.ts`).
+- `GCS_SERVICE_ACCOUNT_KEY` must be left **empty** (not `placeholder`) if not used, otherwise `npm run build` fails with a base64 decode error.
 - The dev server and build succeed with placeholder API keys, but the chat AI features require a real `GEMINI_API_KEY`.
 
 ### Lint & tests
@@ -35,4 +36,5 @@ Node 24 is required (`.nvmrc`). Use `source /home/ubuntu/.nvm/nvm.sh && nvm use 
 - `tools/tool_registry.json` is gitignored and must be regenerated via `npm run build:tools` after cloning or after tool changes.
 - The `prebuild` hook in `package.json` auto-runs `build:tools` before `npm run build`, but you must run it manually before `npm run dev`.
 - When writing `.env` files from shell scripts, use literal values — not `${VAR}` shell expansion syntax inside single-quoted heredocs (`<< 'EOF'`). Shell variables inside `'EOF'` heredocs are not expanded and will be written as literal `${VAR}` strings, causing API auth failures at runtime.
-- `GCS_PROJECT_ID` and `GCS_SERVICE_ACCOUNT_KEY` are optional for basic chat functionality. The chat + KB search work with just `GEMINI_API_KEY`, `QDRANT_*`, and `GCS_BUCKET_NAME`. GCS credentials are only needed for signed URL generation and asset uploads.
+- `GCS_PROJECT_ID` and `GCS_SERVICE_ACCOUNT_KEY` are not used in this deployment. Use `VERTEXAI_PROJECT` and `GOOGLE_APPLICATION_CREDENTIALS` (JSON string) instead. The codebase supports both credential paths.
+- The KB embedding pipeline (`npx tsx scripts/Embed/embed-kb.ts`) needs `GEMINI_API_KEY`, `QDRANT_CLUSTER_ENDPOINT`, and `QDRANT_API_KEY`. It takes ~60s for all 23 KB files (243 chunks). Upserts are idempotent.
