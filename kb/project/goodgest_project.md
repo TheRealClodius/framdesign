@@ -7,6 +7,7 @@ client: Goodgest
 period: 2025-present
 team:
   - person:andrei_clodius
+  - person:simone_marra
 domains:
   - mobile
   - cross-platform
@@ -16,48 +17,69 @@ domains:
   - digital
   - enterprise
   - UX
+  - automation
+  - agentic-workflows
 outcomes:
-  - Ongoing partnership, creative direction and productization for Western European markets
+  - Ongoing deep partnership, FRAM embedded in Goodgest driving transformation from managed services to self-service product surfaces
+  - Building Digito product suite (Studio + Events app) with a two-person core team using Claude Code extensively
+  - Digito Studio in active client use, reportedly "very easy to understand"
+  - Targeting Italy and Germany with expansion planned
 ---
 
 ## Overview
 
-Goodgest is a current partnership with FRAM. FRAM leads creative direction and productization of Goodgest's services for Western European markets. The collaboration spans identity work, internal tooling, and the development of Goodgest's first whitelabel cross-platform mobile application.
+Goodgest is FRAM's current main project. FRAM is deeply embedded in Goodgest, helping transform the company from a managed-service operation into a self-service, product-surface-driven one. The collaboration spans identity work, internal tooling, automations for internal flows, and the development of the Digito product suite — a set of product surfaces that offer agencies and enterprises the tools to run their events.
 
 ## Context and problem
 
-Goodgest operates in the event management space and needs a coherent product ecosystem for both administrators and participants. The challenge is to productize existing services into scalable, whitelabel-ready software — an admin dashboard for event organizers and a mobile app for participants — while establishing a clear brand language and UX foundation.
+Goodgest operates in the event management space and previously ran as a managed-service operation, handling events directly for clients. The challenge is to transform that model into scalable, self-service product surfaces — giving agencies and enterprises the tools to drive their own events while freeing Goodgest's internal teams from manual operational work.
 
 ## Role and scope
 
-FRAM leads creative direction and productization across the entire Goodgest engagement:
+FRAM leads creative direction, productization, and hands-on building across the entire Goodgest engagement:
 
-- **Creative direction**: Shaping the overall product vision, brand language, and interaction patterns for Goodgest's ecosystem.
-- **Productization strategy**: Translating Goodgest's existing services into productized software for Western European markets.
-- **Identity and branding**: Leading the logo and identity exploration, producing the core mark, logo patterns, and event wallpapers.
-- **UX and user flows**: Organizing user flows for internal admin dashboards and designing the logic and experience for the mobile app.
-- **Digito Events app**: Creating UX, logic, and product design for Goodgest's first whitelabel cross-platform (iOS and Android) mobile app, targeted at agencies and enterprises for timeboxed events (up to two weeks).
-- **Ecosystem design**: Building a clear event-management ecosystem for admins and participants that operates under the Goodgest umbrella.
+- **Company transformation**: Guiding Goodgest's shift from managed services to self-service product surfaces.
+- **Digito product suite**: Building the full Digito ecosystem — Studio (operator control surface) and Events (cross-platform mobile app) — infusing the new Digito brand across all surfaces.
+- **Internal automations**: Building agentic workflows for internal flows such as project creation from Git seeds, helping Goodgest employees move faster and serve more clients.
+- **Identity and branding**: Leading logo and identity exploration, producing the core mark, logo patterns, and event wallpapers. Infusing the Digito brand across all product surfaces.
+- **Creative direction**: Shaping the overall product vision, brand language, and interaction patterns for the ecosystem.
 
 ## What is being built
 
-- **Admin dashboards**: Internal tools for event organizers, built as a Next.js application with workable databases and backend.
-- **Digito Events**: Whitelabel cross-platform mobile app (Flutter, iOS and Android) for agencies and enterprises, designed for timeboxed events of up to two weeks.
-- **Event-management ecosystem**: A coherent system connecting admin tooling and participant-facing experiences under the Goodgest brand.
-- **Identity system**: Updated Goodgest logo system including core mark, logo patterns, and event wallpapers.
+### Digito Studio
+
+The operator control surface where event operators work. Studio serves as both an internal tool for Goodgest employees and the client-facing control surface for event management. Studio is currently in active use by a client, who reports it as "very easy to understand." Operators use Studio to:
+
+- Switch on the event app and load content
+- View deep analytics and participant data
+- Create invite forms and email templates
+- Manage mass email lists
+- Build event assets assisted by agentic workflows
+
+### Digito Events
+
+A cross-platform mobile app (Flutter, iOS and Android) for event participants. The app is deeply modularized — a config file dictates what features are shown based on who accesses it. For smaller companies, Digito Events is available as a self-service add-on through the dashboard. For larger clients wanting deeper customization, it becomes a whitelabel app under the client's own brand.
+
+### Internal automations
+
+Agentic workflows that speed up Goodgest's internal operations, including project scaffolding from Git seeds, allowing employees to focus less time on repetitive setup work.
+
+### Identity system
+
+Updated Goodgest logo system including core mark, logo patterns, and event wallpapers, with the Digito brand carried across all product surfaces.
 
 ## Process
 
-The Goodgest collaboration follows the approach Andrei developed during the Agent Desktop work at UiPath, where design and engineering merge through direct codebase contribution. Through FRAM, Andrei uses Claude Code to build complex proof-of-concepts with workable databases, backend, and frontend — Next.js for admin dashboards and Flutter for mobile apps — to demonstrate the full breadth of concepts and potential productization patterns.
+The Goodgest work is built by an extremely small core team: Andrei Clodius and Simone Marra, a senior full-stack engineer. Andrei manages to build most of the UI interactions and core features himself, while Simone handles the full-stack engineering. They work in tandem and move fast week by week.
 
-There is very little classic handoff with Goodgest engineers. Instead, the process involves working directly with the actual material to find possibilities. Andrei draws a parallel to industrial design: learning a material's strength leads to more adequate shapes and production processes for a physical object. In this context, the material is code and various frameworks. The design work is understanding how to shape existing materials, weigh cost, speed, and other requirements, and arrive at something that is useful, desirable, and beautiful at the same time.
+Claude Code is used extensively across the board, enabling high iteration speed and unprecedented UX quality for a team of this size. The process follows the approach Andrei developed during the Agent Desktop work at UiPath, where design and engineering merge through direct codebase contribution — working directly with the actual material to find possibilities rather than relying on classic handoff.
 
 ## What this project represents
 
-The Goodgest partnership represents FRAM's evolution toward a model where design and engineering are inseparable. It demonstrates:
+The Goodgest partnership represents FRAM at its most embedded — not just leading creative direction for a client, but actively driving a company's transformation from the inside. It demonstrates:
 
-- Leading creative direction and productization for an external partner's entire product ecosystem.
-- Building functional proof-of-concepts as design artifacts, using code as the primary medium.
-- Bridging the gap between design intent and engineering reality by working directly in the codebase.
-- Treating code as a material to be shaped, extending the principles of industrial design into software.
-- Creating whitelabel-ready products that can scale across markets and use cases.
+- Transforming a managed-service company into a product-driven one through design and engineering leadership.
+- Building an entire product suite (Studio + Events) with a two-person core team using AI-assisted development.
+- Treating code as a design material, with Claude Code enabling a small team to achieve the output and quality typically requiring much larger teams.
+- Infusing brand identity across every product surface as part of the build process, not as a separate exercise.
+- Creating deeply modularized, whitelabel-ready products that scale across markets and client tiers.
