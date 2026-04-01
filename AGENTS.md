@@ -31,6 +31,9 @@ Node 24 is required (`.nvmrc`). Use `source /home/ubuntu/.nvm/nvm.sh && nvm use 
 | Voice server | `npm run dev:voice` | 8080 | Optional; needs `voice-server/.env` |
 | All (concurrent) | `npm run dev:all` | 3000, 8080 | Runs text + voice + tool watcher |
 
+### UI testing
+The site loads with the hero section in view. When manually or visually testing chat, **scroll down to the chat area first** so the relevant UI is in frame. That avoids repeated hero-only captures and saves context tokens.
+
 ### Gotchas
 - No Docker or local databases needed — all external services (Qdrant, GCS, Gemini) are cloud-hosted.
 - `tools/tool_registry.json` is gitignored and must be regenerated via `npm run build:tools` after cloning or after tool changes.
