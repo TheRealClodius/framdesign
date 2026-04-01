@@ -1898,9 +1898,15 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
                       })()}
                     </>
                   ) : (
-                    <p className={`leading-relaxed break-words overflow-x-hidden transition-colors duration-300 ${isDark ? 'text-gray-100' : 'text-black'}`}>
+                    <div
+                      className={`inline-block max-w-full text-left rounded-2xl rounded-br-md px-4 py-2.5 leading-relaxed break-words overflow-x-hidden shadow-sm transition-colors duration-300 ${
+                        isDark
+                          ? "bg-gray-800/90 text-gray-100 border border-gray-600/70 ring-1 ring-white/5"
+                          : "bg-stone-100/95 text-stone-900 border border-stone-200/90 ring-1 ring-stone-900/[0.04]"
+                      }`}
+                    >
                       {message.content}
-                    </p>
+                    </div>
                   )}
                 </div>
               </div>
