@@ -78,6 +78,11 @@ export async function generateQueryEmbedding(query: string): Promise<number[]> {
 }
 
 /**
+ * Alias for document embedding (same implementation as query embedding)
+ */
+export const generateEmbedding = generateQueryEmbedding;
+
+/**
  * Get embedding model dimension
  *
  * @returns Vector dimension (768 for compatibility with existing vectors)

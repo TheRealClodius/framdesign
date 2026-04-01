@@ -17,6 +17,7 @@ const nextConfig: NextConfig = {
   // This ensures tools/tool_registry.json is available at runtime in API routes
   outputFileTracingIncludes: {
     '/api/chat': ['./tools/tool_registry.json'],
+    '/api/embed': ['./kb/**/*'],
   },
   async headers() {
     return [
