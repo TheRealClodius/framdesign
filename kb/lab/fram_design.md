@@ -11,7 +11,7 @@ based_in:
   offices:
     - city: Bucharest
       country: Romania
-      address: Palatul Universului
+      address: Strada Semicercului
     - city: Rome
       country: Italy
       address: Near Circo Massimo
