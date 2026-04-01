@@ -13,22 +13,6 @@ function debugLog(msg: string) {
     // ignore
   }
 }
-
-const AGENT_DEBUG_LOG_PATH = '/opt/cursor/logs/debug.log';
-
-function writeAgentDebugLog(payload: {
-  hypothesisId: string;
-  location: string;
-  message: string;
-  data: Record<string, unknown>;
-  timestamp: number;
-}): void {
-  try {
-    fs.appendFileSync(AGENT_DEBUG_LOG_PATH, JSON.stringify(payload) + '\n');
-  } catch {
-    // ignore debug logging failures
-  }
-}
 import {
   CACHE_CONFIG,
   MESSAGE_LIMITS,
@@ -1079,27 +1063,6 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { messages, timeoutExpired, userId, timezone } = body;
 
-    // #region agent log
-    writeAgentDebugLog({
-      hypothesisId: 'A',
-      location: 'app/api/chat/route.ts:1073',
-      message: 'Chat POST payload received',
-      data: {
-        requestSource: request.headers.get('user-agent')?.includes('Mozilla') ? 'browser' : 'non-browser',
-        origin: request.headers.get('origin') || null,
-        referer: request.headers.get('referer') || null,
-        hasUserId: typeof userId === 'string' && userId.length > 0,
-        timezone: typeof timezone === 'string' ? timezone : null,
-        timeoutExpired: Boolean(timeoutExpired),
-        messageCount: Array.isArray(messages) ? messages.length : -1,
-        lastRoles: Array.isArray(messages) ? messages.slice(-6).map((msg: RawMessage) => msg?.role || 'missing') : [],
-        hasToolCalls: Array.isArray(messages) ? messages.some((msg: RawMessage) => Array.isArray(msg?.toolCalls) && msg.toolCalls.length > 0) : false,
-        hasToolResults: Array.isArray(messages) ? messages.some((msg: RawMessage) => Array.isArray(msg?.toolResults) && msg.toolResults.length > 0) : false
-      },
-      timestamp: Date.now()
-    });
-    // #endregion
-
     // Track tools called for observability logging
     const obsToolsCalled: string[] = [];
 
@@ -1293,44 +1256,19 @@ export async function POST(request: Request) {
     // Inject Tool Memory Summary (Point B/C from tool-memory.md)
     // This ensures the agent is always aware of its "vision status" before answering
     const sessionId = userId || 'anonymous-text-session';
-    let existingCallsCount = 0;
-    let clearedStaleToolMemory = false;
-    let hadStoredToolSession = false;
-    let clearedStoredToolSession = false;
 
     // IMPORTANT: Clear stale tool memory for new conversations
     // A "new conversation" is detected when messages.length <= 2 (just first user message, or user + assistant)
     // This prevents stale tool memory from previous sessions from confusing the model
     if (messages.length <= 2) {
-      hadStoredToolSession = toolSessionStore.has(conversationHash);
-      clearedStoredToolSession = clearToolSession(conversationHash);
+      clearToolSession(conversationHash);
       const existingCalls = toolMemoryStore.queryToolCalls(sessionId, { toolId: "", timeRange: 'all', includeErrors: true });
-      existingCallsCount = existingCalls.length;
       if (existingCalls.length > 0) {
         console.log(`[ToolMemory] Clearing ${existingCalls.length} stale tool calls for new conversation (messages: ${messages.length})`);
         toolMemoryStore.clearSession(sessionId);
         loopDetector.clearSession(sessionId);
-        clearedStaleToolMemory = true;
       }
     }
-
-    // #region agent log
-    writeAgentDebugLog({
-      hypothesisId: 'B',
-      location: 'app/api/chat/route.ts:1282',
-      message: 'Fresh conversation tool-memory check',
-      data: {
-        sessionId,
-        hasUserId: typeof userId === 'string' && userId.length > 0,
-        messageCount: messages.length,
-        existingCallsCount,
-        clearedStaleToolMemory,
-        hadStoredToolSession,
-        clearedStoredToolSession
-      },
-      timestamp: Date.now()
-    });
-    // #endregion
 
     const pastToolCalls = toolMemoryStore.queryToolCalls(sessionId, { toolId: "", timeRange: 'all', includeErrors: false });
     
@@ -1487,22 +1425,6 @@ export async function POST(request: Request) {
             
             // Add functionCall message (model role)
             if (group.call) {
-              // #region agent log
-              writeAgentDebugLog({
-                hypothesisId: 'A',
-                location: 'app/api/chat/route.ts:1444',
-                message: 'Replaying stored tool call',
-                data: {
-                  conversationHashPrefix: conversationHash.slice(0, 12),
-                  turnNumber: currentTurnNumber,
-                  toolName: group.call.toolName,
-                  chainPosition: chainPos,
-                  hasThoughtSignature: Boolean(group.call.thoughtSignature),
-                  turnEventCount: turnEvents.length
-                },
-                timestamp: Date.now()
-              });
-              // #endregion
               const callPart: FunctionCallPart = {
                 functionCall: {
                   name: group.call.toolName,
@@ -2292,22 +2214,6 @@ export async function POST(request: Request) {
           }
         ];
 
-        // #region agent log
-        writeAgentDebugLog({
-          hypothesisId: 'D',
-          location: 'app/api/chat/route.ts:2225',
-          message: 'Preparing follow-up after tool execution',
-          data: {
-            toolName,
-            hasPreservedFunctionPart: Boolean(otherFunctionPart),
-            hasThoughtSignature: Boolean(otherFunctionPart?.thoughtSignature),
-            responsePartsCount: responseParts.length,
-            cleanedResultOk: result.ok
-          },
-          timestamp: Date.now()
-        });
-        // #endregion
-
         if (!result.ok) {
           toolErrorNotices.push({
             toolName,
@@ -2504,20 +2410,6 @@ export async function POST(request: Request) {
                      
                      if (!accumulatedThoughtSignature) {
                         console.error(`[Chain ${chainCount}] MISSING thoughtSignature! Dumping chunks to chunks_debug.json`);
-                        // #region agent log
-                        writeAgentDebugLog({
-                          hypothesisId: 'D',
-                          location: 'app/api/chat/route.ts:2430',
-                          message: 'Chained function call missing thought signature',
-                          data: {
-                            chainCount,
-                            toolName: accumulatedFunctionCall.name || null,
-                            hasFunctionArgs: Boolean(accumulatedFunctionCall.args && Object.keys(accumulatedFunctionCall.args).length > 0),
-                            debugChunkCount: debugChunks.length
-                          },
-                          timestamp: Date.now()
-                        });
-                        // #endregion
                         try {
                            fs.writeFileSync('chunks_debug.json', JSON.stringify(debugChunks, null, 2));
                         } catch (e) {
@@ -3336,21 +3228,6 @@ export async function POST(request: Request) {
                         parts: lateResponseParts
                       }
                     ];
-
-                    // #region agent log
-                    writeAgentDebugLog({
-                      hypothesisId: 'D',
-                      location: 'app/api/chat/route.ts:3241',
-                      message: 'Preparing late follow-up after tool execution',
-                      data: {
-                        toolName: pendingLateCall.name,
-                        hasThoughtSignature: Boolean(lateThoughtSignature),
-                        lateResponsePartsCount: lateResponseParts.length,
-                        lateResultOk: lateResult.ok
-                      },
-                      timestamp: Date.now()
-                    });
-                    // #endregion
 
                     // Make follow-up API call
                     const lateFollowUpStream = await retryWithBackoff(async () => {
