@@ -34,3 +34,5 @@ Node 24 is required (`.nvmrc`). Use `source /home/ubuntu/.nvm/nvm.sh && nvm use 
 - No Docker or local databases needed — all external services (Qdrant, GCS, Gemini) are cloud-hosted.
 - `tools/tool_registry.json` is gitignored and must be regenerated via `npm run build:tools` after cloning or after tool changes.
 - The `prebuild` hook in `package.json` auto-runs `build:tools` before `npm run build`, but you must run it manually before `npm run dev`.
+- When writing `.env` files from shell scripts, use literal values — not `${VAR}` shell expansion syntax inside single-quoted heredocs (`<< 'EOF'`). Shell variables inside `'EOF'` heredocs are not expanded and will be written as literal `${VAR}` strings, causing API auth failures at runtime.
+- `GCS_PROJECT_ID` and `GCS_SERVICE_ACCOUNT_KEY` are optional for basic chat functionality. The chat + KB search work with just `GEMINI_API_KEY`, `QDRANT_*`, and `GCS_BUCKET_NAME`. GCS credentials are only needed for signed URL generation and asset uploads.
