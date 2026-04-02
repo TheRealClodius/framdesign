@@ -11,7 +11,9 @@ import { BudgetExhaustedError } from '@/lib/errors';
 import { promises as fs } from 'fs';
 import path from 'path';
 
-const USAGE_DIR = path.join(process.cwd(), '.usage');
+const USAGE_DIR = process.env.FRAM_USAGE_DIR
+  ? path.resolve(process.env.FRAM_USAGE_DIR)
+  : path.join(process.cwd(), '.usage');
 const USAGE_FILE = path.join(USAGE_DIR, 'user-tokens.json');
 
 describe('Feature: Telemetry & Limits', () => {

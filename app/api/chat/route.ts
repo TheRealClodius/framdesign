@@ -16,6 +16,7 @@ function debugLog(msg: string) {
 import {
   CACHE_CONFIG,
   MESSAGE_LIMITS,
+  RATE_LIMIT_CONFIG,
   TOKEN_CONFIG,
   STREAM_CONFIG,
 } from "@/lib/constants";
@@ -25,6 +26,8 @@ import { toolRegistry } from '@/tools/_core/registry';
 import { createStateController } from '@/tools/_core/state-controller';
 import { retryWithBackoff as retryToolExecution } from '@/tools/_core/retry-handler';
 import { UsageService } from '@/lib/services/usage-service';
+import { checkRateLimit } from '@/lib/services/rate-limit-service';
+import { resolveBudgetKey } from '@/lib/utils/budget-key';
 import { toolMemoryStore } from '@/tools/_core/tool-memory-store';
 import { loopDetector } from '@/tools/_core/loop-detector';
 import { toolMemoryDedup } from '@/tools/_core/tool-memory-dedup';
@@ -1063,23 +1066,52 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { messages, timeoutExpired, userId, timezone } = body;
 
+    const budgetKey = resolveBudgetKey(
+      typeof userId === 'string' ? userId : undefined,
+      request
+    );
+
+    const chatLimit = checkRateLimit(
+      'chat',
+      budgetKey,
+      RATE_LIMIT_CONFIG.CHAT_WINDOW_MS,
+      RATE_LIMIT_CONFIG.CHAT_MAX_PER_WINDOW
+    );
+    if (!chatLimit.ok) {
+      return NextResponse.json(
+        {
+          error: 'RATE_LIMITED',
+          message: 'Too many requests. Please wait before sending another message.',
+          retryAfterSec: chatLimit.retryAfterSec,
+        },
+        { status: 429, headers: { 'Retry-After': String(chatLimit.retryAfterSec) } }
+      );
+    }
+
     // Track tools called for observability logging
     const obsToolsCalled: string[] = [];
 
-    // Check global budget if userId is provided
-    // Wrapped in try/catch to prevent chat failures when usage store is inaccessible
-    if (userId) {
-      try {
-        const isOverBudget = await UsageService.isOverBudget(userId);
-        if (isOverBudget) {
-          return NextResponse.json({
-            error: "USER_BUDGET_EXHAUSTED",
-            message: "You have reached your global token limit. Please contact support to increase your budget."
-          }, { status: 402 });
-        }
-      } catch (budgetError) {
-        console.error("Failed to check user budget, allowing request to proceed:", budgetError);
+    try {
+      const isOverBudget = await UsageService.isOverBudget(budgetKey);
+      if (isOverBudget) {
+        return NextResponse.json(
+          {
+            error: 'USER_BUDGET_EXHAUSTED',
+            message:
+              "You have reached your global token limit. Please contact support to increase your budget.",
+          },
+          { status: 402 }
+        );
       }
+    } catch (budgetError) {
+      console.error('Failed to check user budget:', budgetError);
+      return NextResponse.json(
+        {
+          error: 'BUDGET_CHECK_UNAVAILABLE',
+          message: 'Usage tracking is temporarily unavailable. Please try again shortly.',
+        },
+        { status: 503 }
+      );
     }
 
     const apiKey = process.env.GEMINI_API_KEY;
@@ -1255,7 +1287,7 @@ export async function POST(request: Request) {
 
     // Inject Tool Memory Summary (Point B/C from tool-memory.md)
     // This ensures the agent is always aware of its "vision status" before answering
-    const sessionId = userId || 'anonymous-text-session';
+    const sessionId = budgetKey;
 
     // IMPORTANT: Clear stale tool memory for new conversations
     // A "new conversation" is detected when messages.length <= 2 (just first user message, or user + assistant)
@@ -1841,7 +1873,7 @@ export async function POST(request: Request) {
         const ctx: ToolExecutionContext = {
           conversationHash,
           messages,
-          sessionId: userId || 'anonymous',
+          sessionId: budgetKey,
           observability
         };
 
@@ -1907,7 +1939,7 @@ export async function POST(request: Request) {
         const ctx: ToolExecutionContext = {
           conversationHash,
           messages,
-          sessionId: userId || 'anonymous',
+          sessionId: budgetKey,
           observability
         };
 
@@ -2000,7 +2032,7 @@ export async function POST(request: Request) {
           return NextResponse.json({ error: `Unknown tool: ${toolName}` }, { status: 400 });
         }
 
-        const sessionId = userId || 'anonymous-text-session';
+        const sessionId = budgetKey;
         const turnNumber = Math.ceil(messages.length / 2);
 
         // Pre-execution deduplication check (tool memory)
@@ -2867,12 +2899,12 @@ export async function POST(request: Request) {
                   }
                 }
                 
-                // Record global token usage if userId is available
-                if (userId && accumulatedFullText) {
+                // Record global token usage for this budget key
+                if (accumulatedFullText) {
                   const generatedTokens = countTokens(accumulatedFullText);
-                  UsageService.recordUsage(userId, generatedTokens)
-                    .then(usage => console.log(`[Usage] Recorded ${generatedTokens} tokens for ${userId}. Total: ${usage.totalTokens}`))
-                    .catch(err => console.warn(`[Usage] Failed to record usage for ${userId}:`, err));
+                  UsageService.recordUsage(budgetKey, generatedTokens)
+                    .then(usage => console.log(`[Usage] Recorded ${generatedTokens} tokens for ${budgetKey}. Total: ${usage.totalTokens}`))
+                    .catch(err => console.warn(`[Usage] Failed to record usage for ${budgetKey}:`, err));
                 }
 
 
@@ -2886,7 +2918,7 @@ export async function POST(request: Request) {
                 {
                   const userMsg = getLastUserMessageText(messages);
                   if (userMsg) {
-                    logMessage(userId || 'anonymous', userMsg, obsToolsCalled);
+                    logMessage(budgetKey, userMsg, obsToolsCalled);
                   }
                 }
 
@@ -3062,7 +3094,7 @@ export async function POST(request: Request) {
                     // Fall through to fallback
                   } else {
                     // Build execution context
-                    const sessionId = userId || 'anonymous-text-session';
+                    const sessionId = budgetKey;
                     const lateExecutionContext = {
                       clientId: `text-late-${Date.now()}`,
                       ws: null,
@@ -3385,19 +3417,19 @@ export async function POST(request: Request) {
                 controller.enqueue(encoder.encode(`\n---OBSERVABILITY---\n${observabilityJson}`));
               }
               
-              // Record global token usage if userId is available
-              if (userId && accumulatedFullText) {
+              // Record global token usage for this budget key
+              if (accumulatedFullText) {
                 const generatedTokens = countTokens(accumulatedFullText);
-                UsageService.recordUsage(userId, generatedTokens)
-                  .then(usage => console.log(`[Usage] Recorded ${generatedTokens} tokens for ${userId}. Total: ${usage.totalTokens}`))
-                  .catch(err => console.warn(`[Usage] Failed to record usage for ${userId}:`, err));
+                UsageService.recordUsage(budgetKey, generatedTokens)
+                  .then(usage => console.log(`[Usage] Recorded ${generatedTokens} tokens for ${budgetKey}. Total: ${usage.totalTokens}`))
+                  .catch(err => console.warn(`[Usage] Failed to record usage for ${budgetKey}:`, err));
               }
 
               // Log for observability
               {
                 const userMsg = getLastUserMessageText(messages);
                 if (userMsg) {
-                  logMessage(userId || 'anonymous', userMsg, obsToolsCalled);
+                  logMessage(budgetKey, userMsg, obsToolsCalled);
                 }
               }
 
