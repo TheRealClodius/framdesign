@@ -102,32 +102,30 @@ const PORT = process.env.PORT || 8080;
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'http://localhost:3000').split(',');
 const DEFAULT_GEMINI_VOICE_MODEL = 'gemini-3.1-flash-live-preview';
 
-// Check for either AI Studio or Vertex AI credentials
-const USE_VERTEX_AI = !!VERTEXAI_PROJECT;
+// Prefer AI Studio (API key) for Live API — Gemini 3.1 Live models are available on AI Studio.
+// Fall back to Vertex AI only if no API key is set but Vertex AI project is configured.
+const USE_VERTEX_AI = !GEMINI_API_KEY && !!VERTEXAI_PROJECT;
 
 // Log environment status for debugging
 console.log('[ENV] Environment variables check:');
-console.log(`[ENV]   VERTEXAI_PROJECT: ${VERTEXAI_PROJECT || 'NOT SET'} (Main Agent Provider: Vertex AI)`);
-console.log(`[ENV]   GEMINI_API_KEY: ${GEMINI_API_KEY ? 'SET' : 'NOT SET'} (Secondary Provider/Tool Summarizer: AI Studio)`);
+console.log(`[ENV]   GEMINI_API_KEY: ${GEMINI_API_KEY ? 'SET' : 'NOT SET'} (Primary: AI Studio)`);
+console.log(`[ENV]   VERTEXAI_PROJECT: ${VERTEXAI_PROJECT || 'NOT SET'} (Fallback: Vertex AI)`);
 console.log(`[ENV]   VERTEXAI_LOCATION: ${VERTEXAI_LOCATION}`);
 console.log(`[ENV]   GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS ? 'SET' : 'NOT SET'} (Vertex AI Auth)`);
 console.log(`[ENV]   PORT: ${PORT}`);
 console.log(`[ENV]   ALLOWED_ORIGINS: ${ALLOWED_ORIGINS.join(', ')}`);
 
-if (!USE_VERTEX_AI && !GEMINI_API_KEY) {
+if (!GEMINI_API_KEY && !VERTEXAI_PROJECT) {
   console.error('[ERROR] Missing required credentials!');
-  console.error('[ERROR] Either GEMINI_API_KEY or VERTEXAI_PROJECT is required');
-  console.error('[ERROR] For Live API: Set VERTEXAI_PROJECT and authenticate with gcloud CLI or set GOOGLE_APPLICATION_CREDENTIALS');
-  console.error('[ERROR] For standard API: Set GEMINI_API_KEY from AI Studio');
+  console.error('[ERROR] Set GEMINI_API_KEY (recommended) or VERTEXAI_PROJECT');
   console.error('[ERROR] Server will exit. Please set environment variables in Railway dashboard.');
   process.exit(1);
 }
 
 if (USE_VERTEX_AI) {
   console.log(`[STARTUP] Using Vertex AI (Project: ${VERTEXAI_PROJECT}, Location: ${VERTEXAI_LOCATION}) for Main Agent`);
-  
-  // Priority: GOOGLE_APPLICATION_CREDENTIALS > ADC (gcloud auth)
-  // VERTEXAI_API_KEY is only used as legacy fallback for service account JSON strings
+  console.log('[STARTUP] Note: Set GEMINI_API_KEY to use AI Studio instead (recommended for Live API models)');
+
   if (GOOGLE_APPLICATION_CREDENTIALS) {
     try {
       // Try to parse as JSON (Railway environment variable stores JSON as string)
@@ -149,8 +147,7 @@ if (USE_VERTEX_AI) {
     console.log('[STARTUP]   Note: Run "gcloud auth application-default login" if not authenticated');
   }
 } else {
-  console.log('[STARTUP] Using Google AI Studio authentication (API Key) for Main Agent');
-  console.log('[STARTUP] Warning: Live API is NOT available with AI Studio keys - only standard APIs work');
+  console.log('[STARTUP] Using Google AI Studio (API Key) for Main Agent + Live API');
 }
 
 // Create HTTP server for health checks
