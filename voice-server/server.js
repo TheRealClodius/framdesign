@@ -32,6 +32,10 @@ import { ErrorType } from '../tools/_core/error-types.js';
 import { retryWithBackoff } from '../tools/_core/retry-handler.js';
 import { loopDetector } from '../tools/_core/loop-detector.js';
 import { UsageService } from '../lib/services/usage-service.ts';
+import { checkRateLimit } from '../lib/services/rate-limit-service.ts';
+import { RATE_LIMIT_CONFIG } from '../lib/constants.ts';
+import { getClientIpFromNodeHeaders, resolveBudgetKeyFromParts } from '../lib/utils/budget-key.ts';
+import { readEnvInt } from '../lib/server-env.ts';
 import { toolMemoryStore } from '../tools/_core/tool-memory-store.js';
 import { toolMemoryDedup } from '../tools/_core/tool-memory-dedup.js';
 import { hashArgs } from '../tools/_core/utils/hash-args.js';
@@ -188,7 +192,7 @@ wss.on('connection', async (ws, req) => {
   let conversationTranscripts = { user: [], assistant: [] };
   let conversationHistory = []; // Store for context injection
   let pendingRequest = null; // Store pending user request from text agent handoff
-  let currentUserId = null; // Store userId for usage tracking
+  let currentUserId = null; // Budget key (validated client id or ip-hash) for usage tracking
   let currentTurn = 1; // Track conversation turns for loop detection (NEW)
   
   // Track last transcript text to detect and deduplicate overlapping chunks from Gemini
@@ -1374,14 +1378,32 @@ wss.on('connection', async (ws, req) => {
       console.log(`[${clientId}] Received message type: ${data.type}`);
 
       switch (data.type) {
-        case 'start':
-          console.log(`[${clientId}] Starting Gemini Live session for user: ${data.userId || 'anonymous'}`);
-          currentUserId = data.userId || null;
-          // Check global budget if userId is provided
-          if (data.userId) {
-            const isOverBudget = await UsageService.isOverBudget(data.userId);
+        case 'start': {
+          const clientIp = getClientIpFromNodeHeaders(req.headers, req.socket?.remoteAddress);
+          const budgetKey = resolveBudgetKeyFromParts(
+            typeof data.userId === 'string' ? data.userId : undefined,
+            clientIp
+          );
+          console.log(`[${clientId}] Starting Gemini Live session for budget key: ${budgetKey.slice(0, 24)}...`);
+
+          const voiceWindowMs = readEnvInt('VOICE_RATE_LIMIT_WINDOW_MS', RATE_LIMIT_CONFIG.VOICE_START_WINDOW_MS);
+          const voiceMax = readEnvInt('VOICE_RATE_LIMIT_MAX', RATE_LIMIT_CONFIG.VOICE_START_MAX_PER_WINDOW);
+          const voiceLimit = checkRateLimit('voice_start', budgetKey, voiceWindowMs, voiceMax);
+          if (!voiceLimit.ok) {
+            ws.send(JSON.stringify({
+              type: 'error',
+              error: 'RATE_LIMITED',
+              details: { retryAfterSec: voiceLimit.retryAfterSec, message: 'Too many voice sessions. Please wait and try again.' }
+            }));
+            return;
+          }
+
+          currentUserId = budgetKey;
+
+          try {
+            const isOverBudget = await UsageService.isOverBudget(budgetKey);
             if (isOverBudget) {
-              console.warn(`[${clientId}] Rejecting session - user ${data.userId} over budget`);
+              console.warn(`[${clientId}] Rejecting session - over budget for ${budgetKey.slice(0, 16)}...`);
               ws.send(JSON.stringify({
                 type: 'error',
                 error: 'USER_BUDGET_EXHAUSTED',
@@ -1392,6 +1414,14 @@ wss.on('connection', async (ws, req) => {
               }));
               return;
             }
+          } catch (e) {
+            console.error(`[${clientId}] Budget check failed:`, e);
+            ws.send(JSON.stringify({
+              type: 'error',
+              error: 'BUDGET_CHECK_UNAVAILABLE',
+              details: { message: 'Usage tracking is temporarily unavailable. Please try again shortly.' }
+            }));
+            return;
           }
 
           // Store conversation history for context injection
@@ -1621,6 +1651,7 @@ wss.on('connection', async (ws, req) => {
             }));
           }
           break;
+        }
 
         case 'audio':
           // Validate audio data

@@ -36,6 +36,16 @@ export const TOKEN_CONFIG = {
   SUMMARY_WORD_LIMIT: 80,
 } as const;
 
+/** In-memory per-instance rate limits (see lib/services/rate-limit-service.ts) */
+export const RATE_LIMIT_CONFIG = {
+  CHAT_WINDOW_MS: Number(process.env.CHAT_RATE_LIMIT_WINDOW_MS) || 60_000,
+  CHAT_MAX_PER_WINDOW: Number(process.env.CHAT_RATE_LIMIT_MAX) || 20,
+  BUDGET_API_WINDOW_MS: Number(process.env.BUDGET_API_RATE_LIMIT_WINDOW_MS) || 60_000,
+  BUDGET_API_MAX_PER_WINDOW: Number(process.env.BUDGET_API_RATE_LIMIT_MAX) || 60,
+  VOICE_START_WINDOW_MS: Number(process.env.VOICE_RATE_LIMIT_WINDOW_MS) || 60_000,
+  VOICE_START_MAX_PER_WINDOW: Number(process.env.VOICE_RATE_LIMIT_MAX) || 10,
+} as const;
+
 // Stream configuration
 export const STREAM_CONFIG = {
   UPDATE_INTERVAL_MS: 100,

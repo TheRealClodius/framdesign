@@ -164,17 +164,18 @@ export async function streamChatResponse(
  * Send chat request and get JSON response (for non-streaming cases)
  */
 export async function sendChatRequest(request: ChatRequest): Promise<ChatResponse> {
-  const response = await fetch("/api/chat", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      messages: prepareMessagesForSend(request.messages),
-      timeoutExpired: request.timeoutExpired || false,
-      timezone: request.timezone,
-    }),
-  });
+    const response = await fetch("/api/chat", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        messages: prepareMessagesForSend(request.messages),
+        timeoutExpired: request.timeoutExpired || false,
+        userId: request.userId,
+        timezone: request.timezone,
+      }),
+    });
 
   if (!response.ok) {
     throw await parseApiError(response);

@@ -5,15 +5,25 @@
  * once the global token budget is exhausted.
  */
 
+import { promises as fs } from 'fs';
+import path from 'path';
 import { UsageService } from '../../../lib/services/usage-service';
 import { TOKEN_CONFIG } from '../../../lib/constants';
+
+const USAGE_DIR = process.env.FRAM_USAGE_DIR
+  ? path.resolve(process.env.FRAM_USAGE_DIR)
+  : path.join(process.cwd(), '.usage');
+const USAGE_FILE = path.join(USAGE_DIR, 'user-tokens.json');
 
 describe('Kill Switch Integration', () => {
   const testUserId = 'test-kill-switch-user';
 
   beforeEach(async () => {
-    // Reset usage for test user (direct file manipulation simulation)
-    await UsageService.recordUsage(testUserId, - (await UsageService.getUserUsage(testUserId)).totalTokens);
+    try {
+      await fs.unlink(USAGE_FILE);
+    } catch {
+      // no file
+    }
   });
 
   test('should allow requests when under budget', async () => {
