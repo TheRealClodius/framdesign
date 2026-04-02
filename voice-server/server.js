@@ -269,7 +269,7 @@ wss.on('connection', async (ws, req) => {
   }
 
   // Initialize GoogleGenAI with appropriate credentials
-  // Note: Don't set apiVersion for Vertex AI - the SDK handles it
+  // Note: Don't set apiVersion - the SDK auto-selects the correct version for the Live API
   let aiConfig;
   
   if (USE_VERTEX_AI) {
@@ -302,8 +302,7 @@ wss.on('connection', async (ws, req) => {
   } else {
     // Google AI Studio (standard API)
     aiConfig = {
-      apiKey: GEMINI_API_KEY,
-      apiVersion: 'v1beta'
+      apiKey: GEMINI_API_KEY
     };
   }
   
