@@ -300,10 +300,10 @@ wss.on('connection', async (ws, req) => {
     // Otherwise, SDK will use Application Default Credentials (ADC)
     // ADC uses gcloud auth or GOOGLE_APPLICATION_CREDENTIALS file path
   } else {
-    // Google AI Studio (standard API)
+    // Google AI Studio — omit apiVersion so the SDK auto-selects the correct
+    // version for each endpoint (v1alpha for Live API, v1beta for standard).
     aiConfig = {
-      apiKey: GEMINI_API_KEY,
-      apiVersion: 'v1beta'
+      apiKey: GEMINI_API_KEY
     };
   }
   
