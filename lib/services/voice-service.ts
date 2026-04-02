@@ -45,11 +45,13 @@ export class VoiceService extends EventTarget {
   private mediaStream: MediaStream | null = null;
   private audioWorkletNode: ScriptProcessorNode | null = null;
   private isActive = false;
+  private hasEstablishedSession = false;
   private audioQueue: AudioBufferSourceNode[] = [];
   private nextPlayTime = 0;
   private reconnectAttempts = 0;
   private reconnectTimer: NodeJS.Timeout | null = null;
   private heartbeatTimer: NodeJS.Timeout | null = null;
+  private startupTimer: NodeJS.Timeout | null = null;
   private conversationHistory: Array<{ role: string; content: string }> = [];
   private pendingRequest: string | null = null;
   private currentUserId: string | undefined = undefined;
@@ -78,6 +80,7 @@ export class VoiceService extends EventTarget {
   private thinkingAudio: HTMLAudioElement | null = null;
   private thinkingFadeInterval: number | null = null;
   private isThinkingSoundActive = false;
+  private readonly STARTUP_TIMEOUT_MS = 15000;
   
   constructor() {
     super();
@@ -89,9 +92,9 @@ export class VoiceService extends EventTarget {
    * @param pendingRequest - Optional pending user request to address immediately (from text agent handoff)
    */
   async start(conversationHistory: Array<{ role: string; content: string }>, pendingRequest: string | null = null, userId?: string, timezone?: string): Promise<void> {
-    if (this.isActive) {
-      console.warn('Attempted to start voice session while already active');
-      throw new Error('Voice session already active');
+    if (this.isActive || this.startPromiseResolve || this.startPromiseReject) {
+      console.warn('Attempted to start voice session while already active or starting');
+      throw new Error(this.isActive ? 'Voice session already active' : 'Voice session is already starting');
     }
     
     this.pendingRequest = pendingRequest;
@@ -157,12 +160,14 @@ export class VoiceService extends EventTarget {
 
     // Reset reconnection state
     this.isIntentionallyStopping = false;
+    this.hasEstablishedSession = false;
     this.reconnectAttempts = 0;
     this.conversationHistory = conversationHistory;
     this.partialTranscripts = { user: [], assistant: [] };
     this.audioPlaybackErrors = 0;
     this.noiseFloor = this.SILENCE_THRESHOLD;
     this.nextPlayTime = 0;
+    this.shouldPauseAudioSending = false;
 
     // 1. Request microphone permission
     try {
@@ -195,17 +200,18 @@ export class VoiceService extends EventTarget {
   /**
    * Connect to WebSocket server with reconnection support
    */
-  private connectWebSocket(): Promise<void> {
+  private connectWebSocket(reconnecting = false): Promise<void> {
     return new Promise((resolve, reject) => {
-      this.startPromiseResolve = resolve;
-      this.startPromiseReject = reject;
+      if (!reconnecting) {
+        this.startPromiseResolve = resolve;
+        this.startPromiseReject = reject;
+      }
 
       try {
         this.ws = new WebSocket(VOICE_CONFIG.WEBSOCKET_URL);
 
         this.ws.onopen = async () => {
           console.log('WebSocket connected');
-          this.reconnectAttempts = 0; // Reset on successful connection
           
           // Clear any pending reconnect timer
           if (this.reconnectTimer) {
@@ -213,24 +219,36 @@ export class VoiceService extends EventTarget {
             this.reconnectTimer = null;
           }
           
-          // 4. Setup audio processing pipeline
-          await this.setupAudioProcessing();
-          
-          // 5. Set active immediately so audio processing can start
-          this.isActive = true;
-          console.log('Session marked as active, audio processing will now work');
-          
-          // 6. Send start message with conversation history and pending request
-          this.ws!.send(JSON.stringify({
-            type: 'start',
-            conversationHistory: this.conversationHistory,
-            pendingRequest: this.pendingRequest,
-            userId: this.currentUserId,
-            timezone: this.currentTimezone
-          }));
+          try {
+            // 4. Setup audio processing pipeline once per session lifecycle.
+            await this.setupAudioProcessing();
 
-          // Start heartbeat to detect disconnections
-          this.startHeartbeat();
+            this.isActive = false;
+            this.beginStartupTimer();
+
+            // 5. Send start message with conversation history and pending request
+            this.ws!.send(JSON.stringify({
+              type: 'start',
+              conversationHistory: this.conversationHistory,
+              pendingRequest: this.pendingRequest,
+              userId: this.currentUserId,
+              timezone: this.currentTimezone
+            }));
+
+            // Start heartbeat to detect disconnections
+            this.startHeartbeat();
+
+            if (reconnecting) {
+              resolve();
+            }
+          } catch (error) {
+            console.error('Failed to initialize voice session after WebSocket open:', error);
+            this.failStartup(
+              error instanceof Error ? error.message : 'Failed to initialize voice session',
+              true
+            );
+            reject(error);
+          }
         };
 
         this.ws.onmessage = (event) => {
@@ -257,15 +275,22 @@ export class VoiceService extends EventTarget {
           
           // Stop heartbeat
           this.stopHeartbeat();
+          this.clearStartupTimer();
           
-          // Only attempt reconnection if not intentionally stopping and session was active
-          if (!this.isIntentionallyStopping && this.isActive) {
+          // Only attempt reconnection after a real session has started at least once.
+          if (!this.isIntentionallyStopping && this.hasEstablishedSession) {
+            this.isActive = false;
             this.attemptReconnection();
           } else {
-            // Clean up if intentionally stopping or never started
-            if (!this.isActive) {
-              this.cleanup();
+            if (!this.isIntentionallyStopping && this.startPromiseReject) {
+              this.failStartup(
+                event.reason || 'Voice session disconnected before startup completed.',
+                true
+              );
+              return;
             }
+
+            this.cleanup();
           }
         };
       } catch (error) {
@@ -307,6 +332,7 @@ export class VoiceService extends EventTarget {
       return;
     }
 
+    this.isActive = false;
     this.reconnectAttempts++;
     const delay = VOICE_CONFIG.RECONNECT_DELAY * Math.pow(2, this.reconnectAttempts - 1); // Exponential backoff
     
@@ -317,7 +343,7 @@ export class VoiceService extends EventTarget {
     }));
 
     this.reconnectTimer = setTimeout(() => {
-      this.connectWebSocket().catch((error) => {
+      this.connectWebSocket(true).catch((error) => {
         console.error('Reconnection failed:', error);
         // Will retry automatically if attempts remain
       });
@@ -357,6 +383,11 @@ export class VoiceService extends EventTarget {
   private async setupAudioProcessing(): Promise<void> {
     if (!this.audioContext || !this.mediaStream) {
       console.error('Cannot setup audio processing: missing audioContext or mediaStream');
+      return;
+    }
+
+    if (this.audioWorkletNode) {
+      console.log('Audio processing pipeline already exists, reusing existing nodes');
       return;
     }
 
@@ -575,6 +606,9 @@ export class VoiceService extends EventTarget {
         break;
 
       case 'started':
+        this.clearStartupTimer();
+        this.hasEstablishedSession = true;
+        this.reconnectAttempts = 0;
         this.isActive = true;
         console.log('Voice session started:', message.sessionId);
         this.dispatchEvent(new CustomEvent('started', { detail: message }));
@@ -652,12 +686,13 @@ export class VoiceService extends EventTarget {
 
       case 'error':
         console.error('Server error:', message.error);
+        this.clearStartupTimer();
         
         // Check for specific error types
         const errorMessage = message.error || 'Unknown error';
         const errorDetails = 'details' in message ? (message as WebSocketMessage & { details?: { type?: string; suggestion?: string; helpUrl?: string } }).details : null;
         let userFriendlyMessage = errorMessage;
-        let canRetry = true;
+        let canRetry = this.hasEstablishedSession;
         
         if (errorMessage.includes('quota') || errorMessage.includes('rate limit')) {
           userFriendlyMessage = 'API quota exceeded. Please try again later.';
@@ -684,11 +719,9 @@ export class VoiceService extends EventTarget {
           }
         }));
         
-        // Only reject if we're still in the start phase
-        if (this.startPromiseReject) {
-          this.startPromiseReject(new Error(userFriendlyMessage));
-          this.startPromiseResolve = null;
-          this.startPromiseReject = null;
+        // Fail fast during initial startup so the UI does not sit in STARTING...
+        if (!this.hasEstablishedSession && this.startPromiseReject) {
+          this.failStartup(userFriendlyMessage, false);
         }
         break;
 
@@ -1161,6 +1194,7 @@ export class VoiceService extends EventTarget {
   private cleanup(): void {
     // Stop heartbeat
     this.stopHeartbeat();
+    this.clearStartupTimer();
     
     // Stop thinking sound
     this.stopThinkingSound();
@@ -1216,6 +1250,7 @@ export class VoiceService extends EventTarget {
     }
 
     this.isActive = false;
+    this.hasEstablishedSession = false;
     this.audioQueue = [];
     this.reconnectAttempts = 0;
     this.conversationHistory = [];
@@ -1254,6 +1289,52 @@ export class VoiceService extends EventTarget {
    */
   clearConversationHistory(): void {
     this.conversationHistory = [];
+  }
+
+  private beginStartupTimer(): void {
+    this.clearStartupTimer();
+    this.startupTimer = setTimeout(() => {
+      if (this.isIntentionallyStopping || this.hasEstablishedSession) {
+        return;
+      }
+
+      this.dispatchEvent(new CustomEvent('error', {
+        detail: {
+          message: 'Voice session timed out while starting. Please try again.',
+          canRetry: false
+        }
+      }));
+      this.failStartup('Voice session timed out while starting. Please try again.', false);
+    }, this.STARTUP_TIMEOUT_MS);
+  }
+
+  private clearStartupTimer(): void {
+    if (this.startupTimer) {
+      clearTimeout(this.startupTimer);
+      this.startupTimer = null;
+    }
+  }
+
+  private failStartup(message: string, dispatchEvent: boolean): void {
+    this.clearStartupTimer();
+    this.isActive = false;
+
+    if (dispatchEvent) {
+      this.dispatchEvent(new CustomEvent('error', {
+        detail: {
+          message,
+          canRetry: false
+        }
+      }));
+    }
+
+    if (this.startPromiseReject) {
+      this.startPromiseReject(new Error(message));
+      this.startPromiseResolve = null;
+      this.startPromiseReject = null;
+    }
+
+    this.cleanup();
   }
 }
 

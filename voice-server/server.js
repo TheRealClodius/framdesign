@@ -188,6 +188,7 @@ wss.on('connection', async (ws, req) => {
   // Session state
   let geminiSession = null;
   let sessionReady = false;  // Track if setupComplete has been received
+  let sessionStarted = false; // Track whether client has been told startup succeeded
   let audioBuffer = [];  // Buffer audio chunks until session is ready
   let conversationTranscripts = { user: [], assistant: [] };
   let conversationHistory = []; // Store for context injection
@@ -231,9 +232,44 @@ wss.on('connection', async (ws, req) => {
   let userTurnTimeout = null;
   let userTurnCompletionInProgress = false;
   const USER_TURN_SILENCE_MS = 900;
+  const STARTUP_TIMEOUT_MS = 15000;
+  let startupTimeout = null;
 
   // Transport will be set when geminiSession is created
   let transport = null;
+
+  function clearStartupTimeout() {
+    if (startupTimeout) {
+      clearTimeout(startupTimeout);
+      startupTimeout = null;
+    }
+  }
+
+  function failSessionStartup(errorMessage, details = null, closeCode = 1011) {
+    clearStartupTimeout();
+    sessionReady = false;
+    sessionStarted = false;
+
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({
+        type: 'error',
+        error: errorMessage,
+        details
+      }));
+
+      // Close the browser socket so the client exits startup cleanly instead of hanging.
+      ws.close(closeCode, 'Voice session startup failed');
+    }
+
+    if (geminiSession) {
+      try {
+        geminiSession.close();
+      } catch (error) {
+        console.error(`[${clientId}] Error closing Gemini session after startup failure:`, error);
+      }
+      geminiSession = null;
+    }
+  }
 
   // Initialize GoogleGenAI with appropriate credentials
   // Note: Don't set apiVersion for Vertex AI - the SDK handles it
@@ -526,15 +562,7 @@ wss.on('connection', async (ws, req) => {
       
       // DON'T set sessionReady yet - we need to inject history first
       // Otherwise new audio chunks will bypass the buffer and reach Gemini before context
-      
-      // Tell the client session is ready (they can start sending audio, we'll buffer it)
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({
-          type: 'started',
-          sessionId: clientId
-        }));
-      }
-      
+
       // CRITICAL: Inject history FIRST, then set sessionReady, then flush audio
       const historyDelay = 50; // Small delay to ensure session is stable
       
@@ -632,7 +660,16 @@ wss.on('connection', async (ws, req) => {
         
         // 2. NOW set sessionReady - new audio will go directly to Gemini
         sessionReady = true;
+        sessionStarted = true;
+        clearStartupTimeout();
         console.log(`[${clientId}] Session now ready for audio`);
+
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({
+            type: 'started',
+            sessionId: clientId
+          }));
+        }
         
         // 3. Flush any buffered audio (collected while waiting for history)
         if (audioBuffer.length > 0) {
@@ -1600,6 +1637,11 @@ wss.on('connection', async (ws, req) => {
                     console.error(`[${clientId}] Permission denied. Check service account IAM roles.`);
                   }
                   
+                  if (!sessionStarted) {
+                    failSessionStartup(errorMessage, errorDetails);
+                    return;
+                  }
+
                   // Notify client - let client handle reconnection
                   if (ws.readyState === WebSocket.OPEN) {
                     ws.send(JSON.stringify({
@@ -1614,6 +1656,14 @@ wss.on('connection', async (ws, req) => {
                 onclose: (event) => {
                   console.log(`[${clientId}] Gemini session closed. Code: ${event?.code}, Reason: ${event?.reason}`);
                   console.log(`[${clientId}] Close event details:`, event);
+                  if (!sessionStarted) {
+                    failSessionStartup(
+                      event?.reason || 'Gemini Live session closed before startup completed.',
+                      null,
+                      event?.code || 1011
+                    );
+                    return;
+                  }
                   geminiSession = null;
                 }
               }
@@ -1622,6 +1672,14 @@ wss.on('connection', async (ws, req) => {
 
             // Initialize transport now that session exists
             transport = new GeminiLiveTransport(geminiSession);
+
+            clearStartupTimeout();
+            startupTimeout = setTimeout(() => {
+              if (!sessionStarted) {
+                console.error(`[${clientId}] Startup timed out waiting for Gemini setupComplete`);
+                failSessionStartup('Voice session timed out while waiting for Gemini to initialize.');
+              }
+            }, STARTUP_TIMEOUT_MS);
 
             // Don't send 'started' yet - wait for setupComplete message
             console.log(`[${clientId}] Gemini Live session connecting, waiting for setup complete...`);
@@ -1644,11 +1702,7 @@ wss.on('connection', async (ws, req) => {
               console.error(`[${clientId}] Authentication error during session start. Verify credentials.`);
             }
             
-            ws.send(JSON.stringify({
-              type: 'error',
-              error: errorMessage,
-              details: errorDetails
-            }));
+            failSessionStartup(errorMessage, errorDetails);
           }
           break;
         }
@@ -1750,6 +1804,7 @@ wss.on('connection', async (ws, req) => {
               
               geminiSession = null;
               sessionReady = false;
+              sessionStarted = false;
               audioBuffer = [];
               pendingAudioBuffer = [];
               clearUserTurnTimeout();
@@ -1778,6 +1833,7 @@ wss.on('connection', async (ws, req) => {
             }));
             ws.send(JSON.stringify({ type: 'stopped' }));
             sessionReady = false;
+            sessionStarted = false;
             audioBuffer = [];
             pendingAudioBuffer = [];
             clearUserTurnTimeout();
@@ -1828,6 +1884,7 @@ wss.on('connection', async (ws, req) => {
     endSession(clientId);
     loopDetector.clearSession(clientId);
     clearUserTurnTimeout();
+    clearStartupTimeout();
     userTurnCompletionInProgress = false;
     pendingAudioBuffer = [];
 
