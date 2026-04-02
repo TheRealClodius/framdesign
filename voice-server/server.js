@@ -35,6 +35,7 @@ import { UsageService } from '../lib/services/usage-service.ts';
 import { checkRateLimit } from '../lib/services/rate-limit-service.ts';
 import { RATE_LIMIT_CONFIG } from '../lib/constants.ts';
 import { getClientIpFromNodeHeaders, resolveBudgetKeyFromParts } from '../lib/utils/budget-key.ts';
+import { readEnvInt } from '../lib/server-env.ts';
 import { toolMemoryStore } from '../tools/_core/tool-memory-store.js';
 import { toolMemoryDedup } from '../tools/_core/tool-memory-dedup.js';
 import { hashArgs } from '../tools/_core/utils/hash-args.js';
@@ -1385,12 +1386,9 @@ wss.on('connection', async (ws, req) => {
           );
           console.log(`[${clientId}] Starting Gemini Live session for budget key: ${budgetKey.slice(0, 24)}...`);
 
-          const voiceLimit = checkRateLimit(
-            'voice_start',
-            budgetKey,
-            RATE_LIMIT_CONFIG.VOICE_START_WINDOW_MS,
-            RATE_LIMIT_CONFIG.VOICE_START_MAX_PER_WINDOW
-          );
+          const voiceWindowMs = readEnvInt('VOICE_RATE_LIMIT_WINDOW_MS', RATE_LIMIT_CONFIG.VOICE_START_WINDOW_MS);
+          const voiceMax = readEnvInt('VOICE_RATE_LIMIT_MAX', RATE_LIMIT_CONFIG.VOICE_START_MAX_PER_WINDOW);
+          const voiceLimit = checkRateLimit('voice_start', budgetKey, voiceWindowMs, voiceMax);
           if (!voiceLimit.ok) {
             ws.send(JSON.stringify({
               type: 'error',

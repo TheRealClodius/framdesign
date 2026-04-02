@@ -28,6 +28,7 @@ import { retryWithBackoff as retryToolExecution } from '@/tools/_core/retry-hand
 import { UsageService } from '@/lib/services/usage-service';
 import { checkRateLimit } from '@/lib/services/rate-limit-service';
 import { resolveBudgetKey } from '@/lib/utils/budget-key';
+import { readEnvInt } from '@/lib/server-env';
 import { toolMemoryStore } from '@/tools/_core/tool-memory-store';
 import { loopDetector } from '@/tools/_core/loop-detector';
 import { toolMemoryDedup } from '@/tools/_core/tool-memory-dedup';
@@ -1071,12 +1072,9 @@ export async function POST(request: Request) {
       request
     );
 
-    const chatLimit = checkRateLimit(
-      'chat',
-      budgetKey,
-      RATE_LIMIT_CONFIG.CHAT_WINDOW_MS,
-      RATE_LIMIT_CONFIG.CHAT_MAX_PER_WINDOW
-    );
+    const chatWindowMs = readEnvInt('CHAT_RATE_LIMIT_WINDOW_MS', RATE_LIMIT_CONFIG.CHAT_WINDOW_MS);
+    const chatMax = readEnvInt('CHAT_RATE_LIMIT_MAX', RATE_LIMIT_CONFIG.CHAT_MAX_PER_WINDOW);
+    const chatLimit = checkRateLimit('chat', budgetKey, chatWindowMs, chatMax);
     if (!chatLimit.ok) {
       return NextResponse.json(
         {
