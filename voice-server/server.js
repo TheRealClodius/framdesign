@@ -1506,10 +1506,10 @@ wss.on('connection', async (ws, req) => {
                   // Minimal prefix padding for low-latency responsiveness
                   prefixPaddingMs: 30
                 },
-                // Allow barge-in during model speech
-                activityHandling: 'START_OF_ACTIVITY_INTERRUPTS',
-                // Only include detected speech activity in the user's turn
-                turnCoverage: 'TURN_INCLUDES_ONLY_ACTIVITY'
+                // Allow barge-in during model speech.
+                // Note: don't set turnCoverage here — it's a Gemini 2.5-only option;
+                // gemini-3.1-flash-live-preview rejects the session with 1008.
+                activityHandling: 'START_OF_ACTIVITY_INTERRUPTS'
               },
               historyConfig: {
                 initialHistoryInClientContent: true
@@ -1646,8 +1646,14 @@ wss.on('connection', async (ws, req) => {
                       details: errorDetails
                     }));
                   }
-                  // Mark session as closed on error
+                  // Tear down local session state so the client doesn't keep
+                  // streaming audio into a dead session.
                   geminiSession = null;
+                  sessionReady = false;
+                  audioBuffer = [];
+                  pendingAudioBuffer = [];
+                  clearUserTurnTimeout();
+                  userTurnCompletionInProgress = false;
                 },
                 onclose: (event) => {
                   console.log(`[${clientId}] Gemini session closed. Code: ${event?.code}, Reason: ${event?.reason}`);
@@ -1660,7 +1666,22 @@ wss.on('connection', async (ws, req) => {
                     );
                     return;
                   }
+                  // Gemini dropped the connection post-startup. Without this cleanup,
+                  // sessionReady stays true and the client streams audio forever into
+                  // a null geminiSession.
+                  if (ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({
+                      type: 'error',
+                      error: `Voice session ended unexpectedly (code ${event?.code ?? 'unknown'}${event?.reason ? `: ${event.reason}` : ''})`,
+                      details: { type: 'gemini_session_closed', code: event?.code, reason: event?.reason }
+                    }));
+                  }
                   geminiSession = null;
+                  sessionReady = false;
+                  audioBuffer = [];
+                  pendingAudioBuffer = [];
+                  clearUserTurnTimeout();
+                  userTurnCompletionInProgress = false;
                 }
               }
             });
