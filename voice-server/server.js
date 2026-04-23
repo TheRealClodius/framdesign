@@ -546,11 +546,12 @@ wss.on('connection', async (ws, req) => {
       state.set('userAudioChunkCount', 0); // Reset barge-in counter
       console.log(`[${clientId}] Setting isModelGenerating=true (audio blocked until barge-in threshold)`);
 
-      // Gemini 3.1 Live expects realtime audio streams to be flushed via audioStreamEnd.
-      // Its automaticActivityDetection does NOT fire end-of-turn on its own
-      // when a sendRealtimeInput stream goes idle.
-      await geminiSession.sendRealtimeInput({ audioStreamEnd: true });
-      console.log(`[${clientId}] ✓ Sent audioStreamEnd=true to Gemini`);
+      // Gemini 3.1 Live's automaticActivityDetection doesn't fire end-of-turn
+      // on its own when a sendRealtimeInput stream goes idle. Signal turn end
+      // via sendClientContent instead — sendRealtimeInput({ audioStreamEnd:true })
+      // causes Gemini to close the socket with code 1008 on 3.1.
+      await geminiSession.sendClientContent({ turnComplete: true });
+      console.log(`[${clientId}] ✓ Sent sendClientContent({turnComplete:true}) to Gemini`);
 
       // Let the client know we've closed the user's turn.
       if (ws && ws.readyState === WebSocket.OPEN) {
