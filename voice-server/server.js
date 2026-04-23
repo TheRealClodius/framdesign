@@ -345,8 +345,9 @@ wss.on('connection', async (ws, req) => {
   }
 
   // Gemini 3.1 Live's automaticActivityDetection does NOT fire end-of-turn
-  // from sendRealtimeInput streams when the browser pauses sending audio.
-  // We detect silence server-side and call finalizeUserTurn -> audioStreamEnd.
+  // from sendRealtimeInput streams on its own, and browsers keep streaming
+  // silent audio even when the user stops speaking — so we detect silence
+  // server-side and call finalizeUserTurn -> sendClientContent(turnComplete).
   function scheduleUserTurnTimeout() {
     clearUserTurnTimeout();
     userTurnTimeout = setTimeout(() => {
@@ -355,6 +356,32 @@ wss.on('connection', async (ws, req) => {
         console.error(`[${clientId}] Error in silence-timeout finalize:`, err);
       });
     }, USER_TURN_SILENCE_MS);
+  }
+
+  // Inspect a base64-encoded PCM16 chunk (16kHz mono) and return true when
+  // it's below an amplitude threshold — i.e. the user is not actively
+  // speaking right now. Used to let the silence timer actually fire when
+  // the browser keeps streaming silence during a pause.
+  function isAudioChunkSilent(base64Data) {
+    if (!base64Data) return true;
+    try {
+      const buf = Buffer.from(base64Data, 'base64');
+      const sampleCount = Math.floor(buf.length / 2);
+      if (sampleCount === 0) return true;
+      let peak = 0;
+      // Scan at most ~200 samples for speed — enough to catch any peak.
+      const step = Math.max(1, Math.floor(sampleCount / 200));
+      for (let i = 0; i < sampleCount; i += step) {
+        const sample = buf.readInt16LE(i * 2);
+        const abs = sample < 0 ? -sample : sample;
+        if (abs > peak) peak = abs;
+      }
+      // Int16 peak is 32767. 500 ≈ 1.5% of full scale — below this is
+      // indistinguishable from mic hiss / empty room noise.
+      return peak < 500;
+    } catch {
+      return false; // Fail open: treat as speech so we don't starve the timer
+    }
   }
 
   function sendTextToGemini(text) {
@@ -1801,8 +1828,10 @@ wss.on('connection', async (ws, req) => {
                   }
                   // Send audio to Gemini to trigger the interruption
                   sendAudioToGemini(data.data);
-                  // Arm silence timer so the barge-in turn also gets finalized.
-                  scheduleUserTurnTimeout();
+                  // Arm silence timer only on non-silent chunks; see comment above.
+                  if (!isAudioChunkSilent(data.data)) {
+                    scheduleUserTurnTimeout();
+                  }
                 }
                 // Silently block audio during generation (chunk counting for barge-in)
                 break;
@@ -1811,9 +1840,13 @@ wss.on('connection', async (ws, req) => {
               // Model not generating - reset counter and send audio normally
               state.set('userAudioChunkCount', 0);
               sendAudioToGemini(data.data);
-              // Arm the silence timer — if no more audio arrives within
-              // USER_TURN_SILENCE_MS, we'll send audioStreamEnd to Gemini.
-              scheduleUserTurnTimeout();
+              // Arm the silence timer only on chunks that actually contain
+              // speech. Browsers keep sending silent chunks during pauses,
+              // which would otherwise reset the timer forever and block
+              // end-of-turn detection.
+              if (!isAudioChunkSilent(data.data)) {
+                scheduleUserTurnTimeout();
+              }
             } catch (error) {
               console.error(`[${clientId}] Error sending audio:`, error);
               console.error(`[${clientId}] Error stack:`, error.stack);
