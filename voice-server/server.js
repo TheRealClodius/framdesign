@@ -186,6 +186,7 @@ wss.on('connection', async (ws, req) => {
   let geminiSession = null;
   let sessionReady = false;  // Track if setupComplete has been received
   let sessionStarted = false; // Track whether client has been told startup succeeded
+  let sessionClosingByClient = false; // Set when the client asks to stop — suppresses spurious "closed unexpectedly" error frames from onclose
   let audioBuffer = [];  // Buffer audio chunks until session is ready
   let conversationTranscripts = { user: [], assistant: [] };
   let conversationHistory = []; // Store for context injection
@@ -1430,6 +1431,8 @@ wss.on('connection', async (ws, req) => {
 
       switch (data.type) {
         case 'start': {
+          // Reset the client-initiated-close guard for a fresh session on the same socket.
+          sessionClosingByClient = false;
           const clientIp = getClientIpFromNodeHeaders(req.headers, req.socket?.remoteAddress);
           const budgetKey = resolveBudgetKeyFromParts(
             typeof data.userId === 'string' ? data.userId : undefined,
@@ -1676,6 +1679,18 @@ wss.on('connection', async (ws, req) => {
                 onclose: (event) => {
                   console.log(`[${clientId}] Gemini session closed. Code: ${event?.code}, Reason: ${event?.reason}`);
                   console.log(`[${clientId}] Close event details:`, event);
+                  // If the user asked to stop, the stop handler has already sent
+                  // session_complete + stopped and reset state. Don't also emit
+                  // a misleading "closed before startup" / "ended unexpectedly" error.
+                  if (sessionClosingByClient) {
+                    geminiSession = null;
+                    sessionReady = false;
+                    audioBuffer = [];
+                    pendingAudioBuffer = [];
+                    clearUserTurnTimeout();
+                    userTurnCompletionInProgress = false;
+                    return;
+                  }
                   if (!sessionStarted) {
                     failSessionStartup(
                       event?.reason || 'Gemini Live session closed before startup completed.',
@@ -1833,15 +1848,18 @@ wss.on('connection', async (ws, req) => {
           console.log(`[${clientId}] Stopping session`);
           if (geminiSession) {
             try {
+              // Mark this close as user-initiated so onclose doesn't emit a
+              // misleading "ended unexpectedly"/"before startup" error.
+              sessionClosingByClient = true;
               // Close the Live API session
               geminiSession.close();
-              
+
               // Send complete transcript history
               ws.send(JSON.stringify({
                 type: 'session_complete',
                 transcripts: conversationTranscripts
               }));
-              
+
               geminiSession = null;
               sessionReady = false;
               sessionStarted = false;
