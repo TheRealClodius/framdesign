@@ -343,6 +343,19 @@ wss.on('connection', async (ws, req) => {
     }
   }
 
+  // Gemini 3.1 Live's automaticActivityDetection does NOT fire end-of-turn
+  // from sendRealtimeInput streams when the browser pauses sending audio.
+  // We detect silence server-side and call finalizeUserTurn -> audioStreamEnd.
+  function scheduleUserTurnTimeout() {
+    clearUserTurnTimeout();
+    userTurnTimeout = setTimeout(() => {
+      userTurnTimeout = null;
+      finalizeUserTurn('silence_timeout').catch((err) => {
+        console.error(`[${clientId}] Error in silence-timeout finalize:`, err);
+      });
+    }, USER_TURN_SILENCE_MS);
+  }
+
   function sendTextToGemini(text) {
     if (!geminiSession) {
       console.warn(`[${clientId}] Cannot send text - no session`);
@@ -515,20 +528,17 @@ wss.on('connection', async (ws, req) => {
         return;
       }
 
-      if (pendingAudioBuffer.length === 0) {
-        console.log(`[${clientId}] No buffered audio for user turn (${source}) - skipping Gemini turnComplete`);
-        if (ws && ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ type: 'turn_complete' }));
+      // Flush any chunks that were buffered (e.g. during startup) before the
+      // realtime pipeline was ready.
+      if (pendingAudioBuffer.length > 0) {
+        console.log(`[${clientId}] Finalizing user turn (${source}) with ${pendingAudioBuffer.length} buffered chunks`);
+        const chunksToSend = pendingAudioBuffer;
+        pendingAudioBuffer = [];
+        for (const audioChunk of chunksToSend) {
+          sendAudioToGemini(audioChunk);
         }
-        return;
-      }
-
-      console.log(`[${clientId}] Finalizing user turn (${source}) with ${pendingAudioBuffer.length} buffered chunks`);
-      const chunksToSend = pendingAudioBuffer;
-      pendingAudioBuffer = [];
-
-      for (const audioChunk of chunksToSend) {
-        sendAudioToGemini(audioChunk);
+      } else {
+        console.log(`[${clientId}] Finalizing user turn (${source}) from realtime stream (no pending buffer)`);
       }
 
       // Block audio during model generation
@@ -537,8 +547,15 @@ wss.on('connection', async (ws, req) => {
       console.log(`[${clientId}] Setting isModelGenerating=true (audio blocked until barge-in threshold)`);
 
       // Gemini 3.1 Live expects realtime audio streams to be flushed via audioStreamEnd.
+      // Its automaticActivityDetection does NOT fire end-of-turn on its own
+      // when a sendRealtimeInput stream goes idle.
       await geminiSession.sendRealtimeInput({ audioStreamEnd: true });
       console.log(`[${clientId}] ✓ Sent audioStreamEnd=true to Gemini`);
+
+      // Let the client know we've closed the user's turn.
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'turn_complete' }));
+      }
     } catch (error) {
       console.error(`[${clientId}] Error finalizing user turn (${source}):`, error);
       // Reset state on error to avoid deadlock
@@ -1768,6 +1785,8 @@ wss.on('connection', async (ws, req) => {
                   }
                   // Send audio to Gemini to trigger the interruption
                   sendAudioToGemini(data.data);
+                  // Arm silence timer so the barge-in turn also gets finalized.
+                  scheduleUserTurnTimeout();
                 }
                 // Silently block audio during generation (chunk counting for barge-in)
                 break;
@@ -1776,6 +1795,9 @@ wss.on('connection', async (ws, req) => {
               // Model not generating - reset counter and send audio normally
               state.set('userAudioChunkCount', 0);
               sendAudioToGemini(data.data);
+              // Arm the silence timer — if no more audio arrives within
+              // USER_TURN_SILENCE_MS, we'll send audioStreamEnd to Gemini.
+              scheduleUserTurnTimeout();
             } catch (error) {
               console.error(`[${clientId}] Error sending audio:`, error);
               console.error(`[${clientId}] Error stack:`, error.stack);
