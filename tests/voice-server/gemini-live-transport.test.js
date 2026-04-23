@@ -71,15 +71,15 @@ describe('GeminiLiveTransport', () => {
       });
     });
 
-    test('omits id when it is the fallback (same as name)', async () => {
+    test('falls back to name as id when none provided', async () => {
       await transport.sendToolResult({
-        id: 'kb_search',
+        id: null,
         name: 'kb_search',
         result: { ok: true, data: { answer: 'ok' } }
       });
 
       const payload = sendToolResponse.mock.calls[0][0];
-      expect(payload.functionResponses[0].id).toBeUndefined();
+      expect(payload.functionResponses[0].id).toBe('kb_search');
       expect(payload.functionResponses[0].response).toEqual({ answer: 'ok' });
     });
 

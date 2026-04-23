@@ -110,21 +110,18 @@ export class GeminiLiveTransport extends ToolTransport {
     // The full envelope ({ ok, data/error, intents, meta }) is for internal use only
     const responseData = result.ok ? result.data : result.error;
 
-    // Build function response - Gemini Live API format
-    // NOTE: id field is optional and may not be present in the original call
+    // Build function response - Gemini Live API format.
+    // Gemini 3.1 Live correlates tool responses by id. Always echo whatever the
+    // model sent (falling back to the tool name if no id was provided).
     const functionResponse = {
       name,
-      response: responseData // Just the data or error, not the full envelope
+      response: responseData, // Just the data or error, not the full envelope
+      id: id || name
     };
-
-    // Only include id if it was provided and is not just the name (our fallback)
-    if (id && id !== name) {
-      functionResponse.id = id;
-    }
 
     console.log('[GeminiLiveTransport] Sending tool response:', JSON.stringify({
       name,
-      hasId: !!functionResponse.id,
+      id: functionResponse.id,
       responsePreview: JSON.stringify(responseData).substring(0, 200)
     }));
 

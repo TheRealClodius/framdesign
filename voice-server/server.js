@@ -220,7 +220,11 @@ wss.on('connection', async (ws, req) => {
     // Counter for audio chunks during model generation - requires sustained speech for barge-in
     userAudioChunkCount: 0,
     // Whether we are intentionally buffering user audio (disabled when relying on Gemini VAD)
-    awaitingUserTurn: false
+    awaitingUserTurn: false,
+    // True while we're executing a tool and have not yet sent the tool response.
+    // Gemini Live closes the socket with 1008 "Operation is not implemented..."
+    // if we stream audio or activity signals while a tool call is pending.
+    awaitingToolResponse: false
   });
 
   // Audio buffer for storing audio chunks while awaiting user turn
@@ -316,13 +320,19 @@ wss.on('connection', async (ws, req) => {
       console.warn(`[${clientId}] Cannot send audio - no session`);
       return false;
     }
-    
+
+    // Gate while a tool call is pending. Gemini Live closes the socket with
+    // 1008 if we stream audio during this window.
+    if (state.get('awaitingToolResponse')) {
+      return false;
+    }
+
     // Reduce log verbosity - only log every 50th chunk
     audioSendCount++;
     if (audioSendCount === 1 || audioSendCount % 50 === 0) {
       console.log(`[${clientId}] Audio → Gemini (chunk #${audioSendCount}, ${base64Audio.length} chars)`);
     }
-    
+
     try {
       geminiSession.sendRealtimeInput({
         audio: {
@@ -344,24 +354,20 @@ wss.on('connection', async (ws, req) => {
     }
   }
 
-  // Gemini 3.1 Live's automaticActivityDetection does NOT fire end-of-turn
-  // from sendRealtimeInput streams on its own, and browsers keep streaming
-  // silent audio even when the user stops speaking — so we detect silence
-  // server-side and call finalizeUserTurn -> sendClientContent(turnComplete).
-  function scheduleUserTurnTimeout() {
-    clearUserTurnTimeout();
-    userTurnTimeout = setTimeout(() => {
-      userTurnTimeout = null;
-      finalizeUserTurn('silence_timeout').catch((err) => {
-        console.error(`[${clientId}] Error in silence-timeout finalize:`, err);
-      });
-    }, USER_TURN_SILENCE_MS);
-  }
+  // Manual Voice Activity Detection (Gemini 3.1 Live):
+  // Gemini's built-in VAD does not reliably fire end-of-turn on continuous
+  // browser audio streams, so we disable it and drive turn boundaries from
+  // server-side amplitude analysis.
+  //
+  //   - On the first speech-level chunk after silence: send activityStart.
+  //   - After SILENT_CHUNK_THRESHOLD consecutive silent chunks: send activityEnd.
+  //
+  // Chunks are ~3640 base64 chars ≈ 2730 PCM bytes ≈ 85 ms of audio at 16 kHz.
+  // 12 silent chunks ≈ 1 s of silence, which is a comfortable turn boundary.
+  let userActivityOpen = false;
+  let silentChunkStreak = 0;
+  const SILENT_CHUNK_THRESHOLD = 12;
 
-  // Inspect a base64-encoded PCM16 chunk (16kHz mono) and return true when
-  // it's below an amplitude threshold — i.e. the user is not actively
-  // speaking right now. Used to let the silence timer actually fire when
-  // the browser keeps streaming silence during a pause.
   function isAudioChunkSilent(base64Data) {
     if (!base64Data) return true;
     try {
@@ -369,7 +375,6 @@ wss.on('connection', async (ws, req) => {
       const sampleCount = Math.floor(buf.length / 2);
       if (sampleCount === 0) return true;
       let peak = 0;
-      // Scan at most ~200 samples for speed — enough to catch any peak.
       const step = Math.max(1, Math.floor(sampleCount / 200));
       for (let i = 0; i < sampleCount; i += step) {
         const sample = buf.readInt16LE(i * 2);
@@ -377,10 +382,35 @@ wss.on('connection', async (ws, req) => {
         if (abs > peak) peak = abs;
       }
       // Int16 peak is 32767. 500 ≈ 1.5% of full scale — below this is
-      // indistinguishable from mic hiss / empty room noise.
+      // indistinguishable from mic hiss.
       return peak < 500;
     } catch {
-      return false; // Fail open: treat as speech so we don't starve the timer
+      return false; // fail open → treat as speech
+    }
+  }
+
+  async function beginUserActivity() {
+    if (!geminiSession || userActivityOpen) return;
+    if (state.get('awaitingToolResponse')) return;
+    try {
+      await geminiSession.sendRealtimeInput({ activityStart: {} });
+      userActivityOpen = true;
+      console.log(`[${clientId}] 🎙  activityStart → Gemini`);
+    } catch (err) {
+      console.error(`[${clientId}] Failed to send activityStart:`, err);
+    }
+  }
+
+  async function endUserActivity(reason) {
+    if (!geminiSession || !userActivityOpen) return;
+    if (state.get('awaitingToolResponse')) return;
+    try {
+      await geminiSession.sendRealtimeInput({ activityEnd: {} });
+      userActivityOpen = false;
+      silentChunkStreak = 0;
+      console.log(`[${clientId}] 🛑 activityEnd → Gemini (${reason})`);
+    } catch (err) {
+      console.error(`[${clientId}] Failed to send activityEnd:`, err);
     }
   }
 
@@ -569,19 +599,14 @@ wss.on('connection', async (ws, req) => {
         console.log(`[${clientId}] Finalizing user turn (${source}) from realtime stream (no pending buffer)`);
       }
 
-      // Block audio during model generation
+      // Gemini 3.1 Live docs: after the initial history seed, you MUST use
+      // sendRealtimeInput — calling sendClientContent again (including with
+      // turnComplete) is not supported and closes the socket with 1008.
+      // Automatic VAD handles end-of-turn for audio, so we just let the
+      // client know we've released our side of the user turn.
       state.set('isModelGenerating', true);
       state.set('userAudioChunkCount', 0); // Reset barge-in counter
-      console.log(`[${clientId}] Setting isModelGenerating=true (audio blocked until barge-in threshold)`);
 
-      // Gemini 3.1 Live's automaticActivityDetection doesn't fire end-of-turn
-      // on its own when a sendRealtimeInput stream goes idle. Signal turn end
-      // via sendClientContent instead — sendRealtimeInput({ audioStreamEnd:true })
-      // causes Gemini to close the socket with code 1008 on 3.1.
-      await geminiSession.sendClientContent({ turnComplete: true });
-      console.log(`[${clientId}] ✓ Sent sendClientContent({turnComplete:true}) to Gemini`);
-
-      // Let the client know we've closed the user's turn.
       if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'turn_complete' }));
       }
@@ -653,47 +678,70 @@ wss.on('connection', async (ws, req) => {
               .join('\n\n')
               .trim();
 
-            let realtimePrompt = null;
-
+            let pendingRequestText = null;
             if (pendingRequest) {
-              realtimePrompt = `[Continue with: ${pendingRequest}]`;
-            } else {
-              const lastConversationTurn = conversationHistory[conversationHistory.length - 1];
-              const shouldResumeLastUserTurn = lastConversationTurn?.role === 'user';
-              if (shouldResumeLastUserTurn) {
-                const extractedText = buildTextFromParts(lastConversationTurn.parts);
-                if (extractedText) {
-                  historyTurns.pop();
-                  realtimePrompt = extractedText;
-                }
+              pendingRequestText = `[Continue with: ${pendingRequest}]`;
+              historyTurns.push({
+                role: 'user',
+                parts: [{ text: pendingRequestText }]
+              });
+            }
+
+            // History seeding on Gemini 3.1 Flash Live: do NOT set
+            // turnComplete: true here. Doing so tells the server "this turn is
+            // complete, respond now"; when audio input then arrives, the
+            // server closes the socket with 1008 "Operation is not implemented,
+            // or supported, or enabled." Use turnComplete: false so the server
+            // treats this purely as context that seeds the conversation, then
+            // lets the first realtime audio activity drive the next turn.
+            //
+            // If the seed ends with a user turn that we want the model to
+            // respond to immediately (pending-request handoff), we send that
+            // as a separate sendClientContent with turnComplete: true below.
+            const lastTurnRole = historyTurns[historyTurns.length - 1]?.role;
+            const endsWithPendingUserTurn = lastTurnRole === 'user' && !!pendingRequest;
+
+            if (endsWithPendingUserTurn) {
+              // Seed prior context without completing the turn, then send the
+              // pending user request as a completed turn so the model responds.
+              const contextTurns = historyTurns.slice(0, -1);
+              const finalUserTurn = historyTurns[historyTurns.length - 1];
+              if (contextTurns.length > 0) {
+                geminiSession.sendClientContent({
+                  turns: contextTurns,
+                  turnComplete: false
+                });
               }
-            }
-
-            // Gemini 3.1 Live only supports sendClientContent for initial history seeding.
-            geminiSession.sendClientContent({
-              turns: historyTurns,
-              turnComplete: true
-            });
-
-            const willRespond = !!realtimePrompt;
-            console.log(`[${clientId}] History seeded: ${historyTurns.length} turns, pendingRequest=${!!pendingRequest}, willRespond=${willRespond}`);
-
-            if (realtimePrompt) {
+              geminiSession.sendClientContent({
+                turns: [finalUserTurn],
+                turnComplete: true
+              });
               state.set('isModelGenerating', true);
-              console.log(`[${clientId}] Pre-emptively setting isModelGenerating (realtime prompt after history seed)`);
-              sendTextToGemini(realtimePrompt);
+            } else {
+              geminiSession.sendClientContent({
+                turns: historyTurns,
+                turnComplete: false
+              });
             }
+
+            const willRespond = endsWithPendingUserTurn;
+            console.log(`[${clientId}] History seeded: ${historyTurns.length} turns, pendingRequest=${!!pendingRequest}, willRespond=${willRespond}`);
           } catch (error) {
             console.error(`[${clientId}] Error sending conversation history:`, error);
           }
         } else if (pendingRequest) {
-          // No history but there's a pending request - send it as realtime text.
+          // No prior history — seed the pending request as the initial user
+          // turn via sendClientContent (the only supported path on 3.1 Live).
           try {
             state.set('isModelGenerating', true);
-            console.log(`[${clientId}] Pre-emptively setting isModelGenerating (pending request via realtime text)`);
-
-            sendTextToGemini(`[Continue with: ${pendingRequest}]`);
-            console.log(`[${clientId}] 📌 No history, sent pending request via realtime text: "${pendingRequest}"`);
+            geminiSession.sendClientContent({
+              turns: [{
+                role: 'user',
+                parts: [{ text: `[Continue with: ${pendingRequest}]` }]
+              }],
+              turnComplete: true
+            });
+            console.log(`[${clientId}] 📌 Seeded pending request as initial turn: "${pendingRequest}"`);
           } catch (error) {
             console.error(`[${clientId}] Error sending pending request:`, error);
             state.set('isModelGenerating', false);
@@ -748,12 +796,24 @@ wss.on('connection', async (ws, req) => {
 
       // Parse tool calls via transport
       const toolCalls = transport.receiveToolCalls(message);
-      
+
+      // Gate audio + activity signals until we've sent the tool response.
+      // Gemini Live closes the socket with 1008 if we send realtime input
+      // while a tool call is pending.
+      if (toolCalls.length > 0) {
+        state.set('awaitingToolResponse', true);
+        // Close any open activity window locally so we don't re-send activityEnd
+        // after the tool response. Gemini treats the tool call as its own turn
+        // boundary.
+        userActivityOpen = false;
+        silentChunkStreak = 0;
+      }
+
       // Signal client that tool execution is starting (for thinking sound feedback)
       if (toolCalls.length > 0 && ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ 
-          type: 'tool_call_started', 
-          toolCount: toolCalls.length 
+        ws.send(JSON.stringify({
+          type: 'tool_call_started',
+          toolCount: toolCalls.length
         }));
         console.log(`[${clientId}] ✓ Sent tool_call_started signal (${toolCalls.length} tools)`);
       }
@@ -1073,6 +1133,9 @@ wss.on('connection', async (ws, req) => {
         const isLastTool = i === toolCalls.length - 1;
         if (isLastTool) {
           console.log(`[${clientId}] All tool results sent (${toolCalls.length} tools) - Gemini will auto-continue after sendToolResponse`);
+          // Re-open the audio pipe now that Gemini has our tool response and
+          // is producing its continuation turn.
+          state.set('awaitingToolResponse', false);
           try {
             // Signal client that tool execution is complete (for UI feedback)
             if (ws && ws.readyState === WebSocket.OPEN) {
@@ -1087,6 +1150,11 @@ wss.on('connection', async (ws, req) => {
         } else {
           console.log(`[${clientId}] Tool ${call.name} result sent (${i + 1}/${toolCalls.length})`);
         }
+      }
+      // Defensive: if the loop exited early (empty toolCalls, all invalid) the
+      // flag might still be set. Make sure we never leave it stuck.
+      if (state.get('awaitingToolResponse')) {
+        state.set('awaitingToolResponse', false);
       }
     }
 
@@ -1262,8 +1330,9 @@ wss.on('connection', async (ws, req) => {
           state.set('shouldSuppressAudio', false);
           state.set('shouldSuppressTranscript', false);
           state.set('pendingEndVoiceSession', null);
+          state.set('awaitingToolResponse', false);
         }
-        
+
         state.set('isModelGenerating', false);
         state.set('interruptionSent', false);
         state.set('userAudioChunkCount', 0); // Reset barge-in counter
@@ -1542,32 +1611,30 @@ wss.on('connection', async (ws, req) => {
               inputAudioTranscription: {},
               // Enable output audio transcription for debugging
               outputAudioTranscription: {},
-              // Configure Voice Activity Detection (VAD) - rely on Gemini VAD (Profile A)
+              // Use manual Voice Activity Detection: Gemini 3.1 Live's
+              // automatic VAD does not fire reliably on continuous browser
+              // audio streams (verified: input transcription never arrives
+              // even after 350+ chunks of real speech). We disable auto-VAD
+              // and emit activityStart / activityEnd ourselves, driven by a
+              // server-side amplitude check on each incoming PCM chunk.
               realtimeInputConfig: {
+                // Manual VAD: we send activityStart / activityEnd ourselves.
+                // Do NOT set activityHandling here — that field is only
+                // meaningful when automatic VAD is enabled. On Gemini 3.1 Live,
+                // combining disabled auto-VAD with activityHandling causes the
+                // server to close the socket with 1008 "Operation is not
+                // implemented, or supported, or enabled." once the first user
+                // turn completes.
                 automaticActivityDetection: {
-                  // Less sensitive to detecting speech start (reduces false triggers from background noise)
-                  startOfSpeechSensitivity: 'START_SENSITIVITY_LOW',
-                  // Less likely to detect end of speech prematurely (KEY for preventing cutoffs)
-                  endOfSpeechSensitivity: 'END_SENSITIVITY_LOW',
-                  // Short silence window for responsive turn-taking
-                  silenceDurationMs: 400,
-                  // Minimal prefix padding for low-latency responsiveness
-                  prefixPaddingMs: 30
-                },
-                // Allow barge-in during model speech.
-                // Note: don't set turnCoverage here — it's a Gemini 2.5-only option;
-                // gemini-3.1-flash-live-preview rejects the session with 1008.
-                activityHandling: 'START_OF_ACTIVITY_INTERRUPTS'
-              },
-              historyConfig: {
-                initialHistoryInClientContent: true
+                  disabled: true
+                }
               },
               // Add tool support (all 5 tools from registry)
               tools: [{ functionDeclarations: geminiToolSchemas }]
             };
             
             console.log(`[${clientId}] System instruction injected (${systemInstruction.length} chars, includes tool docs from registry)`);
-            console.log(`[${clientId}] VAD config: startSensitivity=LOW, endSensitivity=LOW, silenceDurationMs=400, prefixPaddingMs=30, activityHandling=START_OF_ACTIVITY_INTERRUPTS`);
+            console.log(`[${clientId}] VAD config: manual (auto-VAD disabled); server drives activityStart/activityEnd`);
             
             // Log tool declarations explicitly
             const toolDecls = config.tools?.[0]?.functionDeclarations || [];
@@ -1702,10 +1769,21 @@ wss.on('connection', async (ws, req) => {
                   pendingAudioBuffer = [];
                   clearUserTurnTimeout();
                   userTurnCompletionInProgress = false;
+                  state.set('awaitingToolResponse', false);
                 },
                 onclose: (event) => {
                   console.log(`[${clientId}] Gemini session closed. Code: ${event?.code}, Reason: ${event?.reason}`);
                   console.log(`[${clientId}] Close event details:`, event);
+                  if (event?.code === 1008) {
+                    console.error(`[${clientId}] ⚠️ 1008 policy violation from Gemini Live. Session state at close:`, JSON.stringify({
+                      awaitingToolResponse: state.get('awaitingToolResponse'),
+                      isModelGenerating: state.get('isModelGenerating'),
+                      userActivityOpen,
+                      audioSendCount,
+                      currentTurn,
+                      turn: currentTurn
+                    }));
+                  }
                   // If the user asked to stop, the stop handler has already sent
                   // session_complete + stopped and reset state. Don't also emit
                   // a misleading "closed before startup" / "ended unexpectedly" error.
@@ -1742,6 +1820,7 @@ wss.on('connection', async (ws, req) => {
                   pendingAudioBuffer = [];
                   clearUserTurnTimeout();
                   userTurnCompletionInProgress = false;
+                  state.set('awaitingToolResponse', false);
                 }
               }
             });
@@ -1826,26 +1905,36 @@ wss.on('connection', async (ws, req) => {
                       type: 'interrupted'
                     }));
                   }
-                  // Send audio to Gemini to trigger the interruption
+                  // Send audio to Gemini to trigger the interruption.
+                  // Gemini 3.1 Live's automatic VAD handles end-of-turn itself.
                   sendAudioToGemini(data.data);
-                  // Arm silence timer only on non-silent chunks; see comment above.
-                  if (!isAudioChunkSilent(data.data)) {
-                    scheduleUserTurnTimeout();
-                  }
                 }
                 // Silently block audio during generation (chunk counting for barge-in)
                 break;
               }
               
-              // Model not generating - reset counter and send audio normally
+              // Model not generating — manual VAD drives turn boundaries
+              // because Gemini 3.1 Live's own VAD doesn't fire reliably on
+              // continuous browser streams. See beginUserActivity / endUserActivity.
               state.set('userAudioChunkCount', 0);
-              sendAudioToGemini(data.data);
-              // Arm the silence timer only on chunks that actually contain
-              // speech. Browsers keep sending silent chunks during pauses,
-              // which would otherwise reset the timer forever and block
-              // end-of-turn detection.
-              if (!isAudioChunkSilent(data.data)) {
-                scheduleUserTurnTimeout();
+              const silent = isAudioChunkSilent(data.data);
+              if (!silent) {
+                silentChunkStreak = 0;
+                if (!userActivityOpen) {
+                  // Fire-and-forget; we still want to stream this chunk.
+                  beginUserActivity();
+                }
+                sendAudioToGemini(data.data);
+              } else {
+                silentChunkStreak += 1;
+                // Keep a small silent buffer inside the activity window to
+                // give Gemini natural "trailing silence" before ending the turn.
+                if (userActivityOpen && silentChunkStreak <= SILENT_CHUNK_THRESHOLD) {
+                  sendAudioToGemini(data.data);
+                }
+                if (userActivityOpen && silentChunkStreak >= SILENT_CHUNK_THRESHOLD) {
+                  endUserActivity('silence_threshold');
+                }
               }
             } catch (error) {
               console.error(`[${clientId}] Error sending audio:`, error);
