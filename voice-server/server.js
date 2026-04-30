@@ -360,13 +360,15 @@ wss.on('connection', async (ws, req) => {
   // server-side amplitude analysis.
   //
   //   - On the first speech-level chunk after silence: send activityStart.
-  //   - After SILENT_CHUNK_THRESHOLD consecutive silent chunks: send activityEnd.
+  //   - After SILENCE_END_MS of continuous real-time silence: send activityEnd.
   //
-  // Chunks are ~3640 base64 chars ≈ 2730 PCM bytes ≈ 85 ms of audio at 16 kHz.
-  // 12 silent chunks ≈ 1 s of silence, which is a comfortable turn boundary.
+  // We measure silence in wall-clock time (not chunk count) because browsers
+  // and networks can burst many chunks in microseconds — a count-based
+  // threshold trips instantly during such bursts and produces rapid
+  // start/end thrash, which Gemini Live rejects with 1007.
   let userActivityOpen = false;
-  let silentChunkStreak = 0;
-  const SILENT_CHUNK_THRESHOLD = 12;
+  let silenceEndTimer = null;
+  const SILENCE_END_MS = 1000;
 
   function isAudioChunkSilent(base64Data) {
     if (!base64Data) return true;
@@ -389,14 +391,26 @@ wss.on('connection', async (ws, req) => {
     }
   }
 
+  function clearSilenceEndTimer() {
+    if (silenceEndTimer) {
+      clearTimeout(silenceEndTimer);
+      silenceEndTimer = null;
+    }
+  }
+
+  // Flag flips synchronously so concurrent audio events can't race past
+  // the guard during the in-flight sendRealtimeInput. Rolled back if the
+  // network call fails so a stale flag doesn't strand the next turn.
   async function beginUserActivity() {
     if (!geminiSession || userActivityOpen) return;
     if (state.get('awaitingToolResponse')) return;
+    userActivityOpen = true;
+    clearSilenceEndTimer();
     try {
       await geminiSession.sendRealtimeInput({ activityStart: {} });
-      userActivityOpen = true;
       console.log(`[${clientId}] 🎙  activityStart → Gemini`);
     } catch (err) {
+      userActivityOpen = false;
       console.error(`[${clientId}] Failed to send activityStart:`, err);
     }
   }
@@ -404,12 +418,13 @@ wss.on('connection', async (ws, req) => {
   async function endUserActivity(reason) {
     if (!geminiSession || !userActivityOpen) return;
     if (state.get('awaitingToolResponse')) return;
+    userActivityOpen = false;
+    clearSilenceEndTimer();
     try {
       await geminiSession.sendRealtimeInput({ activityEnd: {} });
-      userActivityOpen = false;
-      silentChunkStreak = 0;
       console.log(`[${clientId}] 🛑 activityEnd → Gemini (${reason})`);
     } catch (err) {
+      userActivityOpen = true;
       console.error(`[${clientId}] Failed to send activityEnd:`, err);
     }
   }
@@ -806,7 +821,7 @@ wss.on('connection', async (ws, req) => {
         // after the tool response. Gemini treats the tool call as its own turn
         // boundary.
         userActivityOpen = false;
-        silentChunkStreak = 0;
+        clearSilenceEndTimer();
       }
 
       // Signal client that tool execution is starting (for thinking sound feedback)
@@ -1793,6 +1808,8 @@ wss.on('connection', async (ws, req) => {
                     audioBuffer = [];
                     pendingAudioBuffer = [];
                     clearUserTurnTimeout();
+                    clearSilenceEndTimer();
+                    userActivityOpen = false;
                     userTurnCompletionInProgress = false;
                     return;
                   }
@@ -1819,6 +1836,8 @@ wss.on('connection', async (ws, req) => {
                   audioBuffer = [];
                   pendingAudioBuffer = [];
                   clearUserTurnTimeout();
+                  clearSilenceEndTimer();
+                  userActivityOpen = false;
                   userTurnCompletionInProgress = false;
                   state.set('awaitingToolResponse', false);
                 }
@@ -1919,21 +1938,21 @@ wss.on('connection', async (ws, req) => {
               state.set('userAudioChunkCount', 0);
               const silent = isAudioChunkSilent(data.data);
               if (!silent) {
-                silentChunkStreak = 0;
+                clearSilenceEndTimer();
                 if (!userActivityOpen) {
-                  // Fire-and-forget; we still want to stream this chunk.
                   beginUserActivity();
                 }
                 sendAudioToGemini(data.data);
-              } else {
-                silentChunkStreak += 1;
-                // Keep a small silent buffer inside the activity window to
-                // give Gemini natural "trailing silence" before ending the turn.
-                if (userActivityOpen && silentChunkStreak <= SILENT_CHUNK_THRESHOLD) {
-                  sendAudioToGemini(data.data);
-                }
-                if (userActivityOpen && silentChunkStreak >= SILENT_CHUNK_THRESHOLD) {
-                  endUserActivity('silence_threshold');
+              } else if (userActivityOpen) {
+                // Keep streaming silent chunks inside the activity window so
+                // Gemini hears natural trailing silence; arm a single timer
+                // to end the turn after a real-time silence window.
+                sendAudioToGemini(data.data);
+                if (!silenceEndTimer) {
+                  silenceEndTimer = setTimeout(() => {
+                    silenceEndTimer = null;
+                    endUserActivity('silence_window');
+                  }, SILENCE_END_MS);
                 }
               }
             } catch (error) {
