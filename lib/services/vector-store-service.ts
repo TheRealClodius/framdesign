@@ -1,141 +1,114 @@
 /**
- * Vector store service using Qdrant Cloud
- * Manages KB document embeddings and similarity search
- * 
- * Uses Qdrant Cloud HTTP API - works in all environments (local, Vercel, Railway)
- */
-
-import { QdrantClient } from '@qdrant/js-client-rest';
-import { v5 as uuidv5 } from 'uuid';
-
-/**
- * Namespace UUID for Fram KB document IDs.
- * Used with UUID v5 to produce deterministic, collision-free UUIDs from string document IDs.
- * (Using the DNS namespace as a stable, well-known base.)
- */
-const FRAM_KB_NAMESPACE = '6ba7b810-9dad-11d1-80b4-00c04fd430c8';
-
-/**
- * Convert string ID to deterministic UUID v5 for Qdrant.
- * UUID v5 is generated from SHA-1 of namespace + string, producing a
- * 128-bit ID with negligible collision probability.
+ * Vector store service using Upstash Vector.
  *
- * Replaces the previous 32-bit hash truncation which had theoretical
- * collision risk at scale.
+ * Replaces the previous Qdrant Cloud implementation. Public API is preserved
+ * so callers (kb-search/handler.js, kb-get/handler.js, kb-embed-service,
+ * kb-audit, verify-kb-embedding, test-search) need no changes.
+ *
+ * Filter input remains the legacy shape:
+ *   { entity_type: 'project' }                              -> equality
+ *   { related_entities: { $contains: 'lab:fram_design' } }  -> array membership
+ * Both are translated to Upstash's SQL-like metadata filter DSL.
+ *
+ * Index configuration (created via Vercel Marketplace):
+ *   dimensions: 768, similarity: COSINE, embeddingModel: NA, region: dub1
  */
-function stringIdToUuid(id: string): string {
-  return uuidv5(id, FRAM_KB_NAMESPACE);
-}
 
-// Qdrant configuration (read lazily to support dotenv in scripts)
-const COLLECTION_NAME = 'kb_documents';
-const VECTOR_SIZE = 768; // gemini-embedding-001 with outputDimensionality=768
+import { Index } from '@upstash/vector';
 
-// Lazy-loaded Qdrant client
-let qdrantClient: QdrantClient | null = null;
+const VECTOR_SIZE = 768;
 
-/**
- * Get or create Qdrant client
- */
-function getQdrantClient(): QdrantClient {
-  if (!qdrantClient) {
-    const endpoint = process.env.QDRANT_CLUSTER_ENDPOINT;
-    const apiKey = process.env.QDRANT_API_KEY;
+let indexClient: Index | null = null;
 
-    if (!endpoint) {
+function getIndex(): Index {
+  if (!indexClient) {
+    const url = process.env.UPSTASH_VECTOR_REST_URL;
+    const token = process.env.UPSTASH_VECTOR_REST_TOKEN;
+    if (!url) {
       throw new Error(
-        'QDRANT_CLUSTER_ENDPOINT environment variable is required. ' +
-        'Set it to your Qdrant Cloud cluster URL.'
+        'UPSTASH_VECTOR_REST_URL environment variable is required.'
       );
     }
-
-    if (!apiKey) {
+    if (!token) {
       throw new Error(
-        'QDRANT_API_KEY environment variable is required. ' +
-        'Set it to your Qdrant Cloud API key.'
+        'UPSTASH_VECTOR_REST_TOKEN environment variable is required.'
       );
     }
-
-    qdrantClient = new QdrantClient({
-      url: endpoint,
-      apiKey: apiKey,
-    });
+    indexClient = new Index({ url, token });
   }
-
-  return qdrantClient;
+  return indexClient;
 }
 
 /**
- * Ensure collection exists with proper configuration
+ * Escape a value for inclusion as a quoted string in Upstash's filter DSL.
+ * Upstash filter strings use double quotes; embedded quotes/backslashes are
+ * backslash-escaped.
  */
-async function ensureCollection(): Promise<void> {
-  const client = getQdrantClient();
-
-  try {
-    // Check if collection exists
-    const collections = await client.getCollections();
-    const exists = collections.collections.some(
-      (col) => col.name === COLLECTION_NAME
-    );
-
-    if (!exists) {
-      // Create collection with proper configuration
-      await client.createCollection(COLLECTION_NAME, {
-        vectors: {
-          size: VECTOR_SIZE,
-          distance: 'Cosine',
-        },
-      });
-
-      console.log(`[vector-store] Created collection ${COLLECTION_NAME}`);
-
-      // Create payload indexes for efficient filtering
-      try {
-        await client.createPayloadIndex(COLLECTION_NAME, {
-          field_name: 'entity_id',
-          field_schema: 'keyword',
-        });
-        await client.createPayloadIndex(COLLECTION_NAME, {
-          field_name: 'entity_type',
-          field_schema: 'keyword',
-        });
-        await client.createPayloadIndex(COLLECTION_NAME, {
-          field_name: 'file_path',
-          field_schema: 'keyword',
-        });
-        await client.createPayloadIndex(COLLECTION_NAME, {
-          field_name: 'related_entities',
-          field_schema: 'keyword', // Qdrant indexes each array element
-        });
-        console.log('[vector-store] Created payload indexes (entity_id, entity_type, file_path, related_entities)');
-      } catch (indexError: any) {
-        // Indexes might already exist or creation might fail - log but don't fail
-        console.warn('[vector-store] Warning creating indexes:', indexError.message);
-      }
-    }
-  } catch (error: any) {
-    // If collection already exists, that's fine
-    if (!error.message?.includes('already exists')) {
-      throw error;
-    }
-  }
+function escapeFilterValue(value: unknown): string {
+  const str = String(value);
+  return `"${str.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 }
 
 /**
- * Upsert documents into vector store
- * 
- * Idempotent: Qdrant's upsert() updates existing points by ID, so re-running
- * the embedding script is safe and won't create duplicates.
- * 
- * Important: The 'id' field in metadata is excluded to prevent overwriting
- * the document ID. Frontmatter 'id' should be stored as 'entity_id' instead.
- * 
- * @param documents - Array of document objects with id, text, embedding, metadata
- *   - id: Unique chunk ID (format: {entity_id}_chunk_{index})
- *   - text: Chunk text content
- *   - embedding: Vector embedding (768 dimensions for gemini-embedding-001)
- *   - metadata: Object with file_path, chunk_index, entity_id, etc.
- *     NOTE: Must not contain 'id' field (would overwrite document ID)
+ * Translate the legacy filter object into Upstash's metadata filter DSL.
+ *
+ *   { entity_id: 'project:foo' }
+ *     -> entity_id = "project:foo"
+ *
+ *   { related_entities: { $contains: 'lab:fram_design' } }
+ *     -> related_entities CONTAINS "lab:fram_design"
+ *
+ *   { entity_type: 'project', entity_id: 'project:foo' }
+ *     -> entity_type = "project" AND entity_id = "project:foo"
+ */
+function buildUpstashFilter(filters?: Record<string, any>): string | undefined {
+  if (!filters || Object.keys(filters).length === 0) return undefined;
+
+  const clauses: string[] = [];
+  for (const [key, value] of Object.entries(filters)) {
+    if (value === null || value === undefined) continue;
+    if (typeof value === 'object' && '$contains' in value) {
+      clauses.push(`${key} CONTAINS ${escapeFilterValue(value.$contains)}`);
+    } else {
+      clauses.push(`${key} = ${escapeFilterValue(value)}`);
+    }
+  }
+  return clauses.length > 0 ? clauses.join(' AND ') : undefined;
+}
+
+/**
+ * Build the metadata payload to send to Upstash.
+ * - Excludes 'id' (would shadow Upstash's id field).
+ * - Stores chunk text under 'text' so search results can return it
+ *   without an extra fetch.
+ */
+function buildPayloadMetadata(
+  text: string,
+  metadata?: Record<string, any>
+): Record<string, any> {
+  const payload: Record<string, any> = { text: String(text) };
+  if (!metadata) return payload;
+
+  for (const [key, value] of Object.entries(metadata)) {
+    if (key === 'id') continue;
+    if (value === null || value === undefined) continue;
+    payload[key] = value;
+  }
+  return payload;
+}
+
+function isNotFoundError(error: any): boolean {
+  const msg = String(error?.message || '').toLowerCase();
+  return (
+    msg.includes("doesn't exist") ||
+    msg.includes('not found') ||
+    msg.includes('404')
+  );
+}
+
+/**
+ * Upsert documents into the vector store.
+ * Idempotent: Upstash upsert overwrites by id.
  */
 export async function upsertDocuments(
   documents: Array<{
@@ -145,85 +118,40 @@ export async function upsertDocuments(
     metadata?: Record<string, any>;
   }>
 ): Promise<void> {
-  try {
-    if (documents.length === 0) {
-      console.warn('[vector-store] No documents to upsert');
-      return;
-    }
-
-    const client = getQdrantClient();
-
-    // Ensure collection exists
-    await ensureCollection();
-
-    // Prepare points for Qdrant
-    const points = documents.map((doc) => {
-      // Build payload from metadata, excluding 'id' field
-      const payload: Record<string, any> = {
-        text: String(doc.text),
-      };
-
-      if (doc.metadata) {
-        for (const [key, value] of Object.entries(doc.metadata)) {
-          // Skip 'id' field - it would overwrite the document ID
-          if (key === 'id') continue;
-          // Skip if value is null or undefined
-          if (value === null || value === undefined) continue;
-
-          // Qdrant payload supports: string, number, boolean, arrays, objects
-          if (
-            typeof value === 'string' ||
-            typeof value === 'number' ||
-            typeof value === 'boolean'
-          ) {
-            payload[key] = value;
-          } else if (Array.isArray(value)) {
-            payload[key] = value;
-          } else if (typeof value === 'object') {
-            // Convert objects to JSON strings for consistency
-            payload[key] = JSON.stringify(value);
-          }
-        }
-      }
-
-      // Convert string ID to deterministic UUID v5 for Qdrant
-      // Store original string ID in payload for retrieval
-      const pointId = stringIdToUuid(doc.id);
-      payload.original_id = doc.id; // Store original string ID in payload
-
-      return {
-        id: pointId, // Point ID: UUID v5 derived from {entity_id}_chunk_{index}
-        vector: doc.embedding, // 768-dimensional vector
-        payload: payload,
-      };
-    });
-
-    // Upsert points (idempotent operation)
-    await client.upsert(COLLECTION_NAME, {
-      wait: true,
-      points: points,
-    });
-
-    console.log(`[vector-store] Upserted ${documents.length} documents`);
-  } catch (error) {
-    console.error('[vector-store] Error upserting documents:', error);
-    throw error;
+  if (documents.length === 0) {
+    console.warn('[vector-store] No documents to upsert');
+    return;
   }
+
+  const index = getIndex();
+
+  const points = documents.map((doc) => {
+    if (doc.embedding.length !== VECTOR_SIZE) {
+      throw new Error(
+        `[vector-store] Embedding dimension mismatch for ${doc.id}: ` +
+          `expected ${VECTOR_SIZE}, got ${doc.embedding.length}`
+      );
+    }
+    return {
+      id: doc.id,
+      vector: doc.embedding,
+      metadata: buildPayloadMetadata(doc.text, doc.metadata),
+    };
+  });
+
+  // Upstash accepts batched upserts in a single call.
+  await index.upsert(points);
+  console.log(`[vector-store] Upserted ${points.length} documents`);
 }
 
 /**
- * Search for similar documents
- * @param queryEmbedding - Query embedding vector (768 dimensions)
- * @param topK - Number of results to return
- * @param filters - Optional metadata filters (e.g., { entity_id: "lab:fram_design" })
- * @param queryText - Query text (not used, kept for API compatibility)
- * @returns Array of search results with id, text, metadata, distance, score
+ * Vector similarity search with optional metadata filtering.
  */
 export async function searchSimilar(
   queryEmbedding: number[],
   topK: number = 5,
   filters?: Record<string, any>,
-  queryText?: string
+  _queryText?: string
 ): Promise<Array<{
   id: string;
   text: string;
@@ -232,277 +160,204 @@ export async function searchSimilar(
   score: number;
 }>> {
   try {
-    const client = getQdrantClient();
+    const index = getIndex();
+    const filter = buildUpstashFilter(filters);
 
-    // Build filter if provided
-    const queryFilter = buildQdrantFilter(filters);
-
-    // Perform vector search
-    const results = await client.search(COLLECTION_NAME, {
+    const results = await index.query({
       vector: queryEmbedding,
-      limit: topK,
-      filter: queryFilter,
-      with_payload: true,
+      topK,
+      includeMetadata: true,
+      filter,
     });
 
-    // Transform results to match expected format
-    return results.map((result) => {
-      // Extract text from payload
-      const text = (result.payload?.text as string) || '';
-
-      // Extract metadata (all payload fields except 'text' and 'original_id')
-      const metadata: Record<string, any> = {};
-      if (result.payload) {
-        for (const [key, value] of Object.entries(result.payload)) {
-          if (key !== 'text' && key !== 'original_id') {
-            metadata[key] = value;
-          }
-        }
-      }
-
-      // Use original_id from payload if available, otherwise convert integer ID to string
-      const documentId = (result.payload?.original_id as string) || String(result.id);
-
-      // Qdrant returns score (similarity), convert to distance
-      // Cosine similarity: 1 = identical, 0 = orthogonal, -1 = opposite
-      // Distance: 0 = identical, 1 = orthogonal, 2 = opposite
-      const score = result.score || 0;
-      const distance = 1 - score; // Cosine distance
-
+    return results.map((r) => {
+      const fullMetadata = (r.metadata as Record<string, any>) || {};
+      const text = (fullMetadata.text as string) || '';
+      // Strip 'text' from the metadata view we hand back, mirroring the
+      // legacy behaviour where text was stored alongside metadata.
+      const { text: _omit, ...metadata } = fullMetadata;
+      const score = typeof r.score === 'number' ? r.score : 0;
       return {
-        id: documentId, // Return original string ID
-        text: text,
-        metadata: metadata,
-        distance: distance,
-        score: score,
+        id: String(r.id),
+        text,
+        metadata,
+        distance: 1 - score,
+        score,
       };
     });
   } catch (error: any) {
-    // If collection doesn't exist, return empty results
-    const errorMsg = (error.message || '').toLowerCase();
-    if (errorMsg.includes('doesn\'t exist') || errorMsg.includes('not found')) {
-      return [];
-    }
-    // Log detailed error information from Qdrant
+    if (isNotFoundError(error)) return [];
     console.error('[vector-store] Error searching:', error);
-    if (error.data) {
-      console.error('[vector-store] Qdrant error details:', JSON.stringify(error.data, null, 2));
-    }
     throw error;
   }
 }
 
 /**
- * Delete documents by IDs
- * @param ids - Array of document string IDs to delete
+ * Delete documents by their string IDs.
  */
 export async function deleteDocuments(ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
   try {
-    if (ids.length === 0) {
-      return;
-    }
-
-    const client = getQdrantClient();
-
-    // Convert string IDs to integers for Qdrant
-    const pointIds = ids.map(stringIdToUuid);
-
-    // Delete points by IDs
-    await client.delete(COLLECTION_NAME, {
-      wait: true,
-      points: pointIds,
-    });
-
+    const index = getIndex();
+    await index.delete(ids);
     console.log(`[vector-store] Deleted ${ids.length} documents`);
   } catch (error: any) {
-    // If collection doesn't exist, nothing to delete
-    const errorMsg = (error.message || '').toLowerCase();
-    if (errorMsg.includes('doesn\'t exist') || errorMsg.includes('not found')) {
-      return;
-    }
+    if (isNotFoundError(error)) return;
     console.error('[vector-store] Error deleting documents:', error);
     throw error;
   }
 }
 
 /**
- * Get all document IDs in the collection
+ * Iterate every point in the index, paginating via Upstash's range cursor.
+ * Internal helper shared by getAllDocumentIds, scrollByFilter, countByFilter.
+ */
+async function* iterateAll(
+  withMetadata: boolean
+): AsyncGenerator<{ id: string; metadata?: Record<string, any> }> {
+  const index = getIndex();
+  let cursor: string | number = 0;
+  const PAGE = 1000;
+
+  while (true) {
+    const page: {
+      nextCursor: string;
+      vectors: Array<{ id: string | number; metadata?: Record<string, any> }>;
+    } = await index.range({
+      cursor,
+      limit: PAGE,
+      includeMetadata: withMetadata,
+    });
+
+    for (const v of page.vectors) {
+      yield {
+        id: String(v.id),
+        metadata: withMetadata ? (v.metadata as Record<string, any>) : undefined,
+      };
+    }
+
+    // Upstash returns nextCursor as '0' or '' when iteration is done.
+    if (!page.nextCursor || page.nextCursor === '0') {
+      return;
+    }
+    cursor = page.nextCursor;
+  }
+}
+
+/**
+ * Return all chunk IDs in the index.
  */
 export async function getAllDocumentIds(): Promise<string[]> {
   try {
-    const client = getQdrantClient();
-
-    // Scroll through all points to get IDs
-    const allIds: string[] = [];
-    let offset: string | number | Record<string, unknown> | undefined = undefined;
-
-    while (true) {
-      // Scroll with payload to get original_id
-      const result = await client.scroll(COLLECTION_NAME, {
-        limit: 100,
-        offset: offset,
-        with_payload: true,
-        with_vector: false,
-      });
-      
-      // Add IDs from this batch
-      for (const point of result.points) {
-        // Use original_id from payload if available, otherwise convert integer ID to string
-        const documentId = (point.payload?.original_id as string) || String(point.id);
-        allIds.push(documentId);
-      }
-      
-      // Check if there are more points
-      if (!result.next_page_offset) {
-        break;
-      }
-      offset = result.next_page_offset;
+    const ids: string[] = [];
+    for await (const point of iterateAll(false)) {
+      ids.push(point.id);
     }
-
-    return allIds;
+    return ids;
   } catch (error: any) {
-    // If collection doesn't exist, return empty array
-    const errorMsg = (error.message || '').toLowerCase();
-    if (errorMsg.includes('doesn\'t exist') || errorMsg.includes('not found')) {
-      return [];
-    }
+    if (isNotFoundError(error)) return [];
     console.error('[vector-store] Error getting document IDs:', error);
     return [];
   }
 }
 
 /**
- * Check if collection exists and has documents
+ * True iff the index has at least one vector.
  */
 export async function hasDocuments(): Promise<boolean> {
   try {
-    const client = getQdrantClient();
-
-    // Get collection info
-    const collectionInfo = await client.getCollection(COLLECTION_NAME);
-
-    // Check if collection has points
-    return (collectionInfo.points_count || 0) > 0;
+    const index = getIndex();
+    const info = await index.info();
+    return (info.vectorCount || 0) > 0;
   } catch (error: any) {
-    // If collection doesn't exist, return false
-    const errorMsg = (error.message || '').toLowerCase();
-    if (errorMsg.includes('doesn\'t exist') || errorMsg.includes('not found')) {
-      return false;
-    }
+    if (isNotFoundError(error)) return false;
     console.warn('[vector-store] Error checking documents:', error);
     return false;
   }
 }
 
 /**
- * Build a Qdrant filter object from a key-value filters map.
- * Shared by searchSimilar, countByFilter, and scrollByFilter.
+ * Match a metadata payload against a legacy filter object.
+ * Used for client-side filtering in scrollByFilter / countByFilter, since
+ * Upstash's range() does not accept metadata filters.
  */
-function buildQdrantFilter(filters?: Record<string, any>): any {
-  if (!filters || Object.keys(filters).length === 0) return undefined;
-
-  const mustConditions = Object.entries(filters).map(([key, value]) => {
+function matchesFilter(
+  metadata: Record<string, any> | undefined,
+  filters: Record<string, any>
+): boolean {
+  if (!metadata) return false;
+  for (const [key, value] of Object.entries(filters)) {
+    const actual = metadata[key];
     if (typeof value === 'object' && value !== null && '$contains' in value) {
-      return { key, match: { any: [value.$contains] } };
+      if (!Array.isArray(actual)) return false;
+      if (!actual.includes(value.$contains)) return false;
+    } else {
+      if (actual !== value) return false;
     }
-    return { key, match: { value } };
-  });
-
-  return { must: mustConditions };
+  }
+  return true;
 }
 
 /**
- * Count points matching a filter without vector search.
- * Uses Qdrant's count() API — no embedding needed.
- * @param filters - Metadata filters (same format as searchSimilar)
- * @returns Exact count of matching points
+ * Count points matching a filter. No vector search.
+ *
+ * Implementation note: Upstash's range() doesn't accept filters, so we
+ * iterate all metadata and count client-side. At the project's current
+ * scale (~1.5k chunks) this is one or two round trips.
  */
 export async function countByFilter(
   filters: Record<string, any>
 ): Promise<number> {
   try {
-    const client = getQdrantClient();
-    const queryFilter = buildQdrantFilter(filters);
-
-    const result = await client.count(COLLECTION_NAME, {
-      filter: queryFilter,
-      exact: true,
-    });
-
-    return result.count;
-  } catch (error: any) {
-    const errorMsg = (error.message || '').toLowerCase();
-    if (errorMsg.includes("doesn't exist") || errorMsg.includes('not found')) {
-      return 0;
+    let count = 0;
+    for await (const point of iterateAll(true)) {
+      if (matchesFilter(point.metadata, filters)) count++;
     }
+    return count;
+  } catch (error: any) {
+    if (isNotFoundError(error)) return 0;
     console.error('[vector-store] Error counting by filter:', error);
     throw error;
   }
 }
 
 /**
- * Scroll through ALL points matching a filter, returning lightweight metadata.
- * Uses Qdrant's scroll() API with pagination — no embedding needed.
- * @param filters - Metadata filters (same format as searchSimilar)
- * @param payloadFields - Which payload fields to include (default: id-related + type + title)
- * @returns Array of lightweight point metadata
+ * Scroll through all points matching a filter. Returns lightweight
+ * per-entity metadata, deduplicated across chunks.
  */
 export async function scrollByFilter(
   filters: Record<string, any>,
-  payloadFields?: string[]
+  _payloadFields?: string[]
 ): Promise<Array<{ id: string; type: string; title: string }>> {
   try {
-    const client = getQdrantClient();
-    const queryFilter = buildQdrantFilter(filters);
-
-    const allPoints: Array<{ id: string; type: string; title: string }> = [];
-    let offset: string | number | Record<string, unknown> | undefined = undefined;
-
-    while (true) {
-      const result = await client.scroll(COLLECTION_NAME, {
-        limit: 100,
-        offset,
-        filter: queryFilter,
-        with_payload: payloadFields
-          ? { include: payloadFields }
-          : { include: ['original_id', 'entity_id', 'entity_type', 'title'] },
-        with_vector: false,
-      });
-
-      for (const point of result.points) {
-        const entityId = (point.payload?.entity_id as string) || (point.payload?.original_id as string) || String(point.id);
-        const entityType = (point.payload?.entity_type as string) || 'unknown';
-        const title = (point.payload?.title as string) || entityId;
-        allPoints.push({ id: entityId, type: entityType, title });
-      }
-
-      if (!result.next_page_offset) break;
-      offset = result.next_page_offset;
-    }
-
-    // Deduplicate by entity id (multiple chunks per entity)
     const seen = new Set<string>();
-    return allPoints.filter(p => {
-      if (seen.has(p.id)) return false;
-      seen.add(p.id);
-      return true;
-    });
-  } catch (error: any) {
-    const errorMsg = (error.message || '').toLowerCase();
-    if (errorMsg.includes("doesn't exist") || errorMsg.includes('not found')) {
-      return [];
+    const out: Array<{ id: string; type: string; title: string }> = [];
+    for await (const point of iterateAll(true)) {
+      if (!matchesFilter(point.metadata, filters)) continue;
+      const md = point.metadata || {};
+      const entityId = (md.entity_id as string) || point.id;
+      if (seen.has(entityId)) continue;
+      seen.add(entityId);
+      out.push({
+        id: entityId,
+        type: (md.entity_type as string) || 'unknown',
+        title: (md.title as string) || entityId,
+      });
     }
+    return out;
+  } catch (error: any) {
+    if (isNotFoundError(error)) return [];
     console.error('[vector-store] Error scrolling by filter:', error);
     throw error;
   }
 }
 
 /**
- * Retrieve all chunks for a given entity_id without vector search.
- * Uses Qdrant's scroll() API with an entity_id filter — no embedding needed.
+ * Return all chunks for a given entity_id without running a vector search.
  *
- * @param entityId - The entity_id to look up (e.g., "project:vector_watch")
- * @returns Array of chunks with id, text, and metadata (empty if not found)
+ * Upstash's range() can't filter, but query() can. We use a small
+ * placeholder vector and rely on the entity_id filter to return every
+ * matching chunk; scores are meaningless here and ignored.
  */
 export async function getByEntityId(
   entityId: string
@@ -512,47 +367,29 @@ export async function getByEntityId(
   metadata: Record<string, any>;
 }>> {
   try {
-    const client = getQdrantClient();
-    const queryFilter = buildQdrantFilter({ entity_id: entityId });
+    const index = getIndex();
+    const placeholderVector = new Array(VECTOR_SIZE).fill(0.001);
+    const filter = buildUpstashFilter({ entity_id: entityId });
 
-    const allChunks: Array<{ id: string; text: string; metadata: Record<string, any> }> = [];
-    let offset: string | number | Record<string, unknown> | undefined = undefined;
+    const results = await index.query({
+      vector: placeholderVector,
+      topK: 100,
+      includeMetadata: true,
+      filter,
+    });
 
-    while (true) {
-      const result = await client.scroll(COLLECTION_NAME, {
-        limit: 100,
-        offset,
-        filter: queryFilter,
-        with_payload: true,
-        with_vector: false,
-      });
-
-      for (const point of result.points) {
-        const text = (point.payload?.text as string) || '';
-        const originalId = (point.payload?.original_id as string) || String(point.id);
-
-        const metadata: Record<string, any> = {};
-        if (point.payload) {
-          for (const [key, value] of Object.entries(point.payload)) {
-            if (key !== 'text' && key !== 'original_id') {
-              metadata[key] = value;
-            }
-          }
-        }
-
-        allChunks.push({ id: originalId, text, metadata });
-      }
-
-      if (!result.next_page_offset) break;
-      offset = result.next_page_offset;
-    }
-
-    return allChunks;
+    return results.map((r) => {
+      const fullMetadata = (r.metadata as Record<string, any>) || {};
+      const text = (fullMetadata.text as string) || '';
+      const { text: _omit, ...metadata } = fullMetadata;
+      return {
+        id: String(r.id),
+        text,
+        metadata,
+      };
+    });
   } catch (error: any) {
-    const errorMsg = (error.message || '').toLowerCase();
-    if (errorMsg.includes("doesn't exist") || errorMsg.includes('not found')) {
-      return [];
-    }
+    if (isNotFoundError(error)) return [];
     console.error('[vector-store] Error in getByEntityId:', error);
     throw error;
   }

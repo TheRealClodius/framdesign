@@ -2,7 +2,7 @@
  * kb_get Tool Handler
  *
  * Direct ID-based retrieval of KB documents.
- * Uses Qdrant scroll with entity_id filter — no embedding needed.
+ * Uses the vector store's entity_id filter — no embedding needed.
  */
 
 import { ErrorType, ToolError } from '../_core/error-types.js';
@@ -44,7 +44,7 @@ export async function execute(context) {
   console.log(`[kb_get] Retrieving entity: ${entityId}`);
 
   try {
-    // Direct ID retrieval via Qdrant scroll — no embedding needed
+    // Direct ID retrieval via vector store filter — no embedding needed
     let getByEntityId;
 
     try {
@@ -268,11 +268,11 @@ export async function execute(context) {
       const status = extractHttpStatus(error) || 503;
       throw new ToolError(
         ErrorType.TRANSIENT,
-        `Vector store unavailable (Qdrant ${status}). Please try again later.`,
+        `Vector store unavailable (HTTP ${status}). Please try again later.`,
         {
           retryable: false,
           details: {
-            service: 'qdrant',
+            service: 'vector-store',
             httpStatus: status
           }
         }

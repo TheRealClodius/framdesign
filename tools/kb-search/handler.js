@@ -87,7 +87,7 @@ export async function execute(context) {
       }
     }
 
-    // Generate query embedding (Qdrant accepts vectors directly)
+    // Generate query embedding (Upstash Vector accepts vectors directly)
     let queryEmbedding = [];
     const embeddingStart = Date.now();
     try {
@@ -116,20 +116,18 @@ export async function execute(context) {
     // If topK=5, we might need to search 10-15 chunks to get 5 unique entities
     const searchLimit = Math.max(topK * 3, 15); // Search 3x more chunks, minimum 15
     
-    // Map schema filter field names to Qdrant payload field names
-    // Schema uses 'type' but Qdrant index is on 'entity_type'
-    // 'related_to' maps to 'related_entities' array with $contains marker
-    const qdrantFilters = {};
+    // Map schema filter field names to vector store payload field names.
+    // Schema uses 'type' but the index field is 'entity_type'.
+    // 'related_to' maps to the 'related_entities' array via the $contains marker.
+    const vectorFilters = {};
     if (args.filters) {
       for (const [key, value] of Object.entries(args.filters)) {
         if (key === 'type') {
-          qdrantFilters['entity_type'] = value;
+          vectorFilters['entity_type'] = value;
         } else if (key === 'related_to') {
-          // Map related_to to related_entities array field with $contains marker
-          // This signals vector-store-service to use array membership filtering
-          qdrantFilters['related_entities'] = { $contains: value };
+          vectorFilters['related_entities'] = { $contains: value };
         } else {
-          qdrantFilters[key] = value;
+          vectorFilters[key] = value;
         }
       }
     }
@@ -140,7 +138,7 @@ export async function execute(context) {
       rawResults = await searchSimilar(
         queryEmbedding,
         searchLimit,
-        qdrantFilters
+        vectorFilters
       );
     } catch (error) {
       const errorMessage = error.message || String(error);
@@ -148,11 +146,11 @@ export async function execute(context) {
         const status = extractHttpStatus(error) || 503;
         throw new ToolError(
           ErrorType.TRANSIENT,
-          `Vector store unavailable (Qdrant ${status}). Please try again later.`,
+          `Vector store unavailable (HTTP ${status}). Please try again later.`,
           {
             retryable: false,
             details: {
-              service: 'qdrant',
+              service: 'vector-store',
               httpStatus: status,
               message: errorMessage
             }
@@ -298,7 +296,7 @@ export async function execute(context) {
     if (args.filters?.related_to && scrollByFilter && !isVoiceMode) {
       try {
         const allAssetsStart = Date.now();
-        allAssets = await scrollByFilter(qdrantFilters);
+        allAssets = await scrollByFilter(vectorFilters);
         console.log(`[kb_search] Full asset scroll: ${allAssets.length} items in ${Date.now() - allAssetsStart}ms`);
       } catch (scrollError) {
         console.warn(`[kb_search] scrollByFilter failed, continuing without _allAssets:`, scrollError.message);
