@@ -14,7 +14,7 @@ import type { Message } from "./storage";
  */
 export function prepareMessagesForSend(
   messages: Message[]
-): Array<{ role: string; content: string; timestamp?: number }> {
+): Array<{ id: string; role: string; content: string; timestamp?: number }> {
   const filtered = messages.filter((m) => !m.streaming);
 
   // Find the index of the first user message
@@ -29,6 +29,7 @@ export function prepareMessagesForSend(
   return messagesFromFirstUser
     .slice(-MESSAGE_LIMITS.MAX_SENT_MESSAGES)
     .map((m) => ({
+      id: m.id,
       role: m.role,
       content: m.content,
       ...(m.timestamp ? { timestamp: m.timestamp } : {}),

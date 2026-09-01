@@ -85,6 +85,33 @@ export function generateMessageId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function generateConversationId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `conversation-${generateMessageId()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+/**
+ * Get the anonymous identifier for the current text conversation.
+ * A new ID is created when the visitor clears the chat.
+ */
+export function getConversationId(): string {
+  let conversationId = safeStorage.get(STORAGE_KEYS.CONVERSATION_ID);
+  if (!conversationId) {
+    conversationId = generateConversationId();
+    safeStorage.set(STORAGE_KEYS.CONVERSATION_ID, conversationId);
+  }
+  return conversationId || "server-side-conversation";
+}
+
+/** Start a fresh anonymous conversation and return its ID. */
+export function rotateConversationId(): string {
+  const conversationId = generateConversationId();
+  safeStorage.set(STORAGE_KEYS.CONVERSATION_ID, conversationId);
+  return conversationId;
+}
+
 /**
  * Get or generate a persistent user ID for global budget tracking
  */

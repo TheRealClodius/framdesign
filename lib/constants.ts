@@ -6,6 +6,7 @@
 export const STORAGE_KEYS = {
   TIMEOUT: "fram_timeout_until",
   CONVERSATION: "fram_conversation",
+  CONVERSATION_ID: "fram_conversation_id",
   USER_ID: "fram_user_id",
   BUDGET_EXHAUSTED: "fram_budget_exhausted",
 } as const;

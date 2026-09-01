@@ -26,7 +26,8 @@
     "generate:audio": "node scripts/generate-test-audio.js",
     "test:e2e": "npx playwright test",
     "kb:audit": "npx tsx scripts/kb-audit.ts",
-    "kb:audit:fast": "npx tsx scripts/kb-audit.ts --skip-gcs --skip-qdrant"
+    "kb:audit:fast": "npx tsx scripts/kb-audit.ts --skip-gcs --skip-qdrant",
+    "chats": "tsx scripts/chat-retention.ts"
   },
   "dependencies": {
     "@fontsource/google-sans-code": "^5.2.3",

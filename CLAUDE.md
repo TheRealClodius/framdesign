@@ -132,6 +132,8 @@ Node 24 (.nvmrc). ES modules. Deployed: Vercel (text) + Railway (voice).
 | Test KB search | `npx tsx scripts/Testing/kb/test-search.ts` |
 | KB health audit | `npm run kb:audit` |
 | KB audit (fast) | `npm run kb:audit:fast` |
+| List retained text chats | `npm run chats -- list --since 7d` |
+| Read one retained text chat | `npm run chats -- show {conversation-id}` |
 
 ## Environment
 
@@ -149,6 +151,9 @@ GOOGLE_APPLICATION_CREDENTIALS  # ADC or JSON credentials (local dev)
 RESEND_API_KEY                  # Email service
 NEXT_PUBLIC_VOICE_SERVER_URL    # Voice server WebSocket URL
 NEXT_PUBLIC_GA_MEASUREMENT_ID   # Google Analytics
+CHAT_RETENTION_ENABLED          # Set true in Vercel to retain raw text chats
+CHAT_RETENTION_BUCKET_NAME      # Dedicated private GCS bucket (never the asset bucket)
+CHAT_RETENTION_HMAC_SECRET      # Secret used to pseudonymize browser visitor IDs
 ```
 
 Voice server also needs its own `.env` in `voice-server/` with: `GEMINI_API_KEY`, `QDRANT_CLUSTER_ENDPOINT`, `QDRANT_API_KEY`, `ALLOWED_ORIGINS`.
@@ -156,3 +161,4 @@ Voice server also needs its own `.env` in `voice-server/` with: `GEMINI_API_KEY`
 ## Reference
 
 For detailed architecture, diagrams, tool memory internals, deployment configs, and project history, see `ARCHITECTURE.md`.
+Raw text-chat storage and operator access are documented in `docs/CHAT_RETENTION.md`.

@@ -136,6 +136,8 @@ import {
   saveMessagesToStorage,
   clearChatHistory,
   getUserId,
+  getConversationId,
+  rotateConversationId,
   isBudgetExhausted,
   setBudgetExhausted,
   type Message,
@@ -1215,6 +1217,7 @@ export default function ChatInterface() {
           messages: requestMessages,
           timeoutExpired: false,
           userId: getUserId(),
+          conversationId: getConversationId(),
           timezone: userTimezone
         },
           (chunk) => {
@@ -1319,6 +1322,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
           messages: fixMessages,
           timeoutExpired: false,
           userId: getUserId(),
+          conversationId: getConversationId(),
           timezone: userTimezone
         },
         (chunk) => {
@@ -1429,7 +1433,13 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
 
       try {
         const response = await streamChatResponse(
-          { messages: requestMessages, timeoutExpired: expired || false, timezone: userTimezone },
+          {
+            messages: requestMessages,
+            timeoutExpired: expired || false,
+            userId: getUserId(),
+            conversationId: getConversationId(),
+            timezone: userTimezone
+          },
           (chunk) => {
             if (!streamCompleted) {
               streamedContent += chunk;
@@ -1580,6 +1590,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
           messages: requestMessages,
           timeoutExpired: expired || false,
           userId: getUserId(),
+          conversationId: getConversationId(),
           timezone: userTimezone
         });
 
@@ -1667,6 +1678,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
       
       // Clear localStorage
       clearChatHistory();
+      rotateConversationId();
       
       // Clear voice service's conversation history to prevent bleeding
       voiceService.clearConversationHistory();

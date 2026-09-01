@@ -25,6 +25,7 @@ import { toolRegistry } from '@/tools/_core/registry';
 import { createStateController } from '@/tools/_core/state-controller';
 import { retryWithBackoff as retryToolExecution } from '@/tools/_core/retry-handler';
 import { UsageService } from '@/lib/services/usage-service';
+import { retainTextChatMessage } from '@/lib/services/chat-retention-service';
 import { toolMemoryStore } from '@/tools/_core/tool-memory-store';
 import { loopDetector } from '@/tools/_core/loop-detector';
 import { toolMemoryDedup } from '@/tools/_core/tool-memory-dedup';
@@ -67,6 +68,7 @@ type FunctionCallPart = {
 };
 
 type RawMessage = {
+  id?: string;
   role: string;
   content: string;
   timestamp?: number; // Unix timestamp in milliseconds (for user messages)
@@ -495,6 +497,13 @@ function stripSuggestionsFromContent(content: string): string {
   }
 
   return result;
+}
+
+/** Remove UI-only context appended to card-click messages before retention. */
+function stripInternalUserContext(content: string): string {
+  return content
+    .replace(/\s*\[viewing:\s*asset_id=[^,]+,\s*blob_id=[^,]+,\s*ext=[^,]+,\s*desc="[^"]+"\]/g, "")
+    .trim();
 }
 
 /**
@@ -1056,7 +1065,7 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { messages, timeoutExpired, userId, timezone } = body;
+    const { messages, timeoutExpired, userId, conversationId, timezone } = body;
 
     // Check global budget if userId is provided
     // Wrapped in try/catch to prevent chat failures when usage store is inaccessible
@@ -1145,6 +1154,30 @@ export async function POST(request: Request) {
     }
 
     const lastUserMessageText = getLastUserMessageText(messages);
+    const lastUserMessage = [...messages]
+      .reverse()
+      .find((message: RawMessage) => message?.role === "user" && typeof message.content === "string") as RawMessage | undefined;
+    const lastUserMessageId = lastUserMessage?.id || `user-${requestStartTime}`;
+
+    await retainTextChatMessage({
+      conversationId,
+      messageId: lastUserMessageId,
+      userId,
+      role: "user",
+      content: stripInternalUserContext(lastUserMessage?.content || lastUserMessageText),
+      createdAt: lastUserMessage?.timestamp || requestStartTime,
+    });
+
+    const retainAssistantResponse = async (content: string): Promise<void> => {
+      await retainTextChatMessage({
+        conversationId,
+        messageId: `assistant-${lastUserMessageId}`,
+        userId,
+        role: "assistant",
+        content: stripSuggestionsFromContent(content),
+        createdAt: Date.now(),
+      });
+    };
 
     const ai = new GoogleGenAI({ apiKey });
 
@@ -1854,6 +1887,8 @@ export async function POST(request: Request) {
             }
           };
 
+          await retainAssistantResponse(String(response.message || ""));
+
           // Append observability if enabled
           if (observability) {
             (response as { observability?: ObservabilityData }).observability = {
@@ -1937,6 +1972,8 @@ export async function POST(request: Request) {
             startVoiceSession: true,
             pendingRequest: pendingRequest
           };
+
+          await retainAssistantResponse(messageText);
 
           // Append observability if enabled
           if (observability) {
@@ -2864,6 +2901,8 @@ export async function POST(request: Request) {
                     .catch(err => console.warn(`[Usage] Failed to record usage for ${userId}:`, err));
                 }
 
+                await retainAssistantResponse(accumulatedFullText);
+
 
                 // T6: Final response sent (chained path)
                 const requestEndTime = Date.now();
@@ -3360,6 +3399,8 @@ export async function POST(request: Request) {
                   .then(usage => console.log(`[Usage] Recorded ${generatedTokens} tokens for ${userId}. Total: ${usage.totalTokens}`))
                   .catch(err => console.warn(`[Usage] Failed to record usage for ${userId}:`, err));
               }
+
+              await retainAssistantResponse(accumulatedFullText);
 
 
               controller.close();
