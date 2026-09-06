@@ -72,3 +72,6 @@ test-run.log
 
 # playwright MCP artifacts
 .playwright-mcp/
+
+# Served from GCS (storage_provider: gcs in kb/assets/manifest.json) — do not commit local copies
+public/kb-assets/
