@@ -3,15 +3,10 @@ import { GoogleGenAI, HarmCategory, HarmBlockThreshold, type Content, type Part,
 import { FRAM_SYSTEM_PROMPT, GEMINI_TEXT_MODEL } from "@/lib/config";
 import { createHash } from "crypto";
 import { handleServerError, isRetryableError, isCacheError } from "@/lib/errors";
-import fs from 'fs';
-import path from 'path';
 
+// Verbose tracing for local development only; never touches the filesystem.
 function debugLog(msg: string) {
-  try {
-    fs.appendFileSync(path.join(process.cwd(), 'debug.log'), new Date().toISOString() + ' ' + msg + '\n');
-  } catch (e) {
-    // ignore
-  }
+  if (process.env.NODE_ENV === 'development') console.debug(`[chat] ${msg}`);
 }
 import {
   CACHE_CONFIG,
@@ -35,6 +30,8 @@ import { toolMemoryDedup } from '@/tools/_core/tool-memory-dedup';
 import { hashArgs } from '@/tools/_core/utils/hash-args';
 import { estimateTokens as estimateTokensForJson } from '@/tools/_core/utils/estimate-tokens';
 import { logMessage } from '@/lib/services/message-log-service';
+import { VOICE_ENABLED, VOICE_TOOL_IDS } from '@/lib/feature-flags';
+import { extractCardViewingContext, buildCardAssetMarkdown, type CardViewingContext } from '@/lib/utils/card-asset';
 
 // Type definitions
 type ProviderSchema = {
@@ -1051,7 +1048,8 @@ export async function POST(request: Request) {
 
   // Check for observability mode (dev-only)
   const url = new URL(request.url);
-  const observabilityMode = url.searchParams.get('_observability') === 'true';
+  const observabilityMode =
+    process.env.NODE_ENV !== 'production' && url.searchParams.get('_observability') === 'true';
 
   // Initialize observability collector (only if mode is enabled)
   const observability: ObservabilityData | null = observabilityMode ? {
@@ -1229,7 +1227,10 @@ export async function POST(request: Request) {
 
     // Get provider schemas for Gemini 3
     // Use canonical JSON Schema directly from registry (no conversion needed)
-    const providerSchemas = Array.from(toolRegistry.tools.values()).map(tool => ({
+    // Voice tools are hidden from the model while voice mode is feature-flagged off
+    const providerSchemas = Array.from(toolRegistry.tools.values())
+      .filter(tool => VOICE_ENABLED || !VOICE_TOOL_IDS.has(tool.toolId))
+      .map(tool => ({
       name: tool.toolId,
       description: tool.description,
       parametersJsonSchema: tool.jsonSchema  // Canonical JSON Schema from registry
@@ -1340,7 +1341,7 @@ export async function POST(request: Request) {
     let includeYearOnNextUserMessage = summary !== null;
 
     // Track asset viewing context from card clicks (hoisted for use in streaming)
-    let cardViewingContext: { assetId: string; blobId: string; ext: string; desc: string } | null = null;
+    let cardViewingContext: CardViewingContext | null = null;
 
     for (let i = 0; i < rawMessages.length; i++) {
       const msg = rawMessages[i];
@@ -1361,11 +1362,9 @@ export async function POST(request: Request) {
 
       // Extract [viewing: ...] asset context from user messages (card clicks)
       if (msg.role === 'user') {
-        const viewingMatch = content.match(/\s*\[viewing:\s*asset_id=([^,]+),\s*blob_id=([^,]+),\s*ext=([^,]+),\s*desc="([^"]+)"\]/);
-        if (viewingMatch) {
-          cardViewingContext = { assetId: viewingMatch[1], blobId: viewingMatch[2], ext: viewingMatch[3], desc: viewingMatch[4] };
-          content = content.replace(viewingMatch[0], '');
-        }
+        const viewing = extractCardViewingContext(content);
+        content = viewing.content;
+        if (viewing.context) cardViewingContext = viewing.context;
       }
 
       // For user messages with timestamps, prepend the formatted timestamp
@@ -2359,11 +2358,7 @@ export async function POST(request: Request) {
 
                 // Prepend card image markdown on the first chain iteration
                 if (cardViewingContext && chainCount === 0) {
-                  const isVideo = ['mov', 'mp4', 'webm'].includes(cardViewingContext.ext);
-                  const assetRef = `/kb-assets/${cardViewingContext.blobId}.${cardViewingContext.ext}`;
-                  const imageMarkdown = isVideo
-                    ? `<video controls><source src="${assetRef}" type="video/${cardViewingContext.ext === 'mov' ? 'quicktime' : cardViewingContext.ext}">Your browser does not support the video tag.</video>\n\n*${cardViewingContext.desc}*\n\n`
-                    : `![${cardViewingContext.desc}](${assetRef})\n\n`;
+                  const imageMarkdown = buildCardAssetMarkdown(cardViewingContext);
                   const encoded = encoder.encode(imageMarkdown);
                   totalBytesSent += encoded.length;
                   accumulatedFullText += imageMarkdown;
@@ -2386,7 +2381,6 @@ export async function POST(request: Request) {
                   let chunkCount = 0;
                   let firstTokenTime: number | null = null;
                   const streamStartTime = Date.now();
-                  const debugChunks: unknown[] = [];
 
                   while (true) {
                     const { value, done } = await iterator.next();
@@ -2399,7 +2393,6 @@ export async function POST(request: Request) {
                     
                     chunkCount++;
                     const typed = value as StreamChunk;
-                    debugChunks.push(typed);
                     const candidates: StreamChunkPart[] = typed?.candidates?.[0]?.content?.parts || [];
 
                     // Process parts in this chunk
@@ -2439,12 +2432,7 @@ export async function POST(request: Request) {
                      };
                      
                      if (!accumulatedThoughtSignature) {
-                        console.error(`[Chain ${chainCount}] MISSING thoughtSignature! Dumping chunks to chunks_debug.json`);
-                        try {
-                           fs.writeFileSync('chunks_debug.json', JSON.stringify(debugChunks, null, 2));
-                        } catch (e) {
-                           console.error('Failed to write chunks debug file', e);
-                        }
+                        console.error(`[Chain ${chainCount}] MISSING thoughtSignature (${chunkCount} chunks)`);
                      }
                   }
 
@@ -2479,14 +2467,6 @@ export async function POST(request: Request) {
                       break;
                     }
 
-                    // Debug: Check API key availability
-                    const perplexityApiKey = process.env.PERPLEXITY_API_KEY;
-                    console.log(`[Chain ${chainCount}] PERPLEXITY_API_KEY check:`, {
-                      present: !!perplexityApiKey,
-                      length: perplexityApiKey?.length || 0,
-                      startsWith: perplexityApiKey?.substring(0, 4) || 'N/A'
-                    });
-
                     // Create state controller for chained execution
                     const chainedState = createStateController({ mode: 'text', isActive: true }) as StateController;
                     const chainedExecutionContext = {
@@ -2501,7 +2481,7 @@ export async function POST(request: Request) {
                         state: chainedState.getSnapshot()
                       },
                       meta: {
-                        perplexityApiKey: perplexityApiKey
+                        perplexityApiKey: process.env.PERPLEXITY_API_KEY
                       }
                     };
 
@@ -3031,11 +3011,7 @@ export async function POST(request: Request) {
             try {
               // Prepend card image markdown if the user clicked an asset card
               if (cardViewingContext) {
-                const isVideo = ['mov', 'mp4', 'webm'].includes(cardViewingContext.ext);
-                const assetRef = `/kb-assets/${cardViewingContext.blobId}.${cardViewingContext.ext}`;
-                const imageMarkdown = isVideo
-                  ? `<video controls><source src="${assetRef}" type="video/${cardViewingContext.ext === 'mov' ? 'quicktime' : cardViewingContext.ext}">Your browser does not support the video tag.</video>\n\n*${cardViewingContext.desc}*\n\n`
-                  : `![${cardViewingContext.desc}](${assetRef})\n\n`;
+                const imageMarkdown = buildCardAssetMarkdown(cardViewingContext);
                 const encoded = encoder.encode(imageMarkdown);
                 bytesSent += encoded.length;
                 accumulatedFullText += imageMarkdown;

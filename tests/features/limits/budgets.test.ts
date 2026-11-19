@@ -122,7 +122,7 @@ describe('Feature: Telemetry & Limits', () => {
 
       expect(error.name).toBe('BudgetExhaustedError');
       expect(error.status).toBe(402);
-      expect(error.message).toContain('iceberg');
+      expect(error.message).toContain('andrei@fram.design');
       expect(error.message).toContain('Andrei');
     });
 

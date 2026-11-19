@@ -46,7 +46,7 @@ describe('Voice Feature: Transcripts & History', () => {
     }
 
     test('should correctly tag and store user vs assistant transcripts', () => {
-      const history = { user: [], assistant: [] };
+      const history: { user: VoiceTranscript[]; assistant: VoiceTranscript[] } = { user: [], assistant: [] };
       const content = {
         inputTranscription: { text: 'Hello' },
         outputTranscription: { text: 'Hi there' }
@@ -60,13 +60,13 @@ describe('Voice Feature: Transcripts & History', () => {
     });
 
     test('should handle missing transcription fields gracefully', () => {
-      const history = { user: [], assistant: [] };
+      const history: { user: VoiceTranscript[]; assistant: VoiceTranscript[] } = { user: [], assistant: [] };
       const received = simulateTranscriptReception({}, history);
       expect(received).toHaveLength(0);
     });
 
     test('should prefer model turn text over output transcription for the same assistant turn', () => {
-      const history = { user: [], assistant: [] };
+      const history: { user: VoiceTranscript[]; assistant: VoiceTranscript[] } = { user: [], assistant: [] };
       let assistantTranscriptSentFromModelTurn = false;
 
       const emitAssistantModelTurnText = (text: string) => {

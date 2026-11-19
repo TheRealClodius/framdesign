@@ -10,6 +10,7 @@
 
 import { readFileSync } from 'fs';
 import { join } from 'path';
+import { VOICE_ENABLED, VOICE_TOOL_IDS } from './feature-flags';
 
 const PROMPTS_DIR = join(process.cwd(), 'prompts');
 const TOOLS_DIR = join(process.cwd(), 'tools');
@@ -35,7 +36,8 @@ function loadToolGuides(): string {
     const registry = JSON.parse(readFileSync(registryPath, 'utf-8'));
 
     const guides = registry.tools
-      .filter((tool: { documentation?: string }) => tool.documentation)
+      .filter((tool: { toolId: string; documentation?: string }) => tool.documentation)
+      .filter((tool: { toolId: string }) => VOICE_ENABLED || !VOICE_TOOL_IDS.has(tool.toolId))
       .map(
         (tool: { toolId: string; documentation: string }) =>
           `### ${tool.toolId}\n\n${tool.documentation}`

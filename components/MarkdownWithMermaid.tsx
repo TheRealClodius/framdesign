@@ -5,9 +5,29 @@ import dynamic from "next/dynamic";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
+import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import type { Components } from "react-markdown";
 import { parseAssetUrl, normalizeAssetPath, refreshAssetUrl } from '@/lib/utils/asset-url';
 import { isStableAssetRef, resolveAssetSrc } from '@/lib/utils/asset-resolver';
+
+// Agent output is untrusted: raw HTML is parsed (for <video>), then reduced to
+// GitHub's safe subset plus the media tags our cards emit. Event handlers,
+// scripts, iframes and javascript: URLs are dropped.
+const SANITIZE_SCHEMA = {
+  ...defaultSchema,
+  tagNames: [...(defaultSchema.tagNames ?? []), "video", "source"],
+  attributes: {
+    ...defaultSchema.attributes,
+    video: ["src", "controls", "poster", "preload", "loop", "muted", "playsInline"],
+    source: ["src", "type"],
+  },
+  protocols: {
+    ...defaultSchema.protocols,
+    src: ["http", "https"],
+  },
+  // Remove <suggestions> blocks entirely (they are parsed out separately)
+  strip: [...(defaultSchema.strip ?? []), "suggestions"],
+};
 
 // Lazy load MermaidRenderer to avoid SSR issues
 const MermaidRenderer = dynamic(() => import("./MermaidRenderer"), {
@@ -553,7 +573,7 @@ export default function MarkdownWithMermaid({ content, className = "", isStreami
       <div className={`markdown-content overflow-x-hidden break-words ${className}`}>
         <ReactMarkdown 
           remarkPlugins={[remarkGfm]} 
-          rehypePlugins={[rehypeRaw]}
+          rehypePlugins={[rehypeRaw, [rehypeSanitize, SANITIZE_SCHEMA]]}
           components={components}
         >
           {content}

@@ -1,4 +1,5 @@
 import { Storage } from '@google-cloud/storage';
+import { parseInlineServiceAccount } from '@/lib/utils/gcp-credentials';
 
 export interface LoggedMessage {
   userId: string;
@@ -26,11 +27,9 @@ function getStorage(): Storage {
       Buffer.from(process.env.GCS_SERVICE_ACCOUNT_KEY, 'base64').toString()
     );
   } else if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-    try {
-      config.credentials = JSON.parse(process.env.GOOGLE_APPLICATION_CREDENTIALS);
-    } catch {
-      // File path — SDK handles it via ADC
-    }
+    // Inline JSON (Vercel / .env.local); null means a file path the SDK reads via ADC
+    const credentials = parseInlineServiceAccount(process.env.GOOGLE_APPLICATION_CREDENTIALS);
+    if (credentials) config.credentials = credentials;
   }
 
   storage = new Storage(config);
@@ -117,6 +116,22 @@ export async function getRecentMessages(hours = 24): Promise<LoggedMessage[]> {
   return all
     .filter(m => m.timestamp > cutoff)
     .sort((a, b) => b.timestamp - a.timestamp);
+}
+
+export async function getMessagesSince(timestamp: number): Promise<LoggedMessage[]> {
+  let all: LoggedMessage[];
+
+  if (readCache && Date.now() < readCache.expiresAt) {
+    all = [...readCache.data, ...writeBuffer];
+  } else {
+    const gcsData = await readFromGCS();
+    readCache = { data: gcsData, expiresAt: Date.now() + READ_CACHE_TTL };
+    all = [...gcsData, ...writeBuffer];
+  }
+
+  return all
+    .filter(m => m.timestamp > timestamp)
+    .sort((a, b) => a.timestamp - b.timestamp);
 }
 
 export async function getMessageCount(): Promise<number> {

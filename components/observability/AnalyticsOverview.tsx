@@ -25,6 +25,9 @@ interface TopicsData {
   surprising: string[];
   totalMessages: number;
   analyzedAt: number;
+  lastMessageTimestamp?: number;
+  analysisMode?: 'full' | 'incremental';
+  incrementCount?: number;
 }
 
 interface RecentMessage {
@@ -45,29 +48,37 @@ export default function AnalyticsOverview({ isDark }: AnalyticsOverviewProps) {
   const [topicsError, setTopicsError] = useState<string | null>(null);
 
   useEffect(() => {
-    async function fetchAnalytics() {
+    async function fetchAll() {
       setLoading(true);
-      try {
-        const res = await fetch("/api/observability/analytics");
-        const data = await res.json();
-        if (data.success) {
-          setAnalytics(data.data);
-        } else {
-          setAnalyticsError(data.error || "Unknown error");
-        }
-      } catch (err) {
-        setAnalyticsError(err instanceof Error ? err.message : "Fetch failed");
+      // Fetch analytics and previous topic analysis in parallel
+      const [analyticsRes, topicsRes] = await Promise.allSettled([
+        fetch("/api/observability/analytics").then(r => r.json()),
+        fetch("/api/observability/topics").then(r => r.json()),
+      ]);
+
+      if (analyticsRes.status === "fulfilled" && analyticsRes.value.success) {
+        setAnalytics(analyticsRes.value.data);
+      } else {
+        const err = analyticsRes.status === "fulfilled"
+          ? analyticsRes.value.error || "Unknown error"
+          : "Fetch failed";
+        setAnalyticsError(err);
       }
+
+      if (topicsRes.status === "fulfilled" && topicsRes.value.success && topicsRes.value.data) {
+        setTopics(topicsRes.value.data);
+      }
+
       setLoading(false);
     }
-    fetchAnalytics();
+    fetchAll();
   }, []);
 
   async function handleAnalyzeTopics() {
     setTopicsLoading(true);
     setTopicsError(null);
     try {
-      const res = await fetch("/api/observability/topics");
+      const res = await fetch("/api/observability/topics", { method: "POST" });
       const data = await res.json();
       if (data.success) {
         setTopics(data.data);
@@ -76,7 +87,7 @@ export default function AnalyticsOverview({ isDark }: AnalyticsOverviewProps) {
         setTopicsError(data.error || "Failed to analyze topics");
       }
     } catch {
-      setTopicsError("Failed to fetch topics");
+      setTopicsError("Failed to analyze topics");
     }
     setTopicsLoading(false);
   }
@@ -157,9 +168,28 @@ export default function AnalyticsOverview({ isDark }: AnalyticsOverviewProps) {
       {/* Topic Analysis */}
       <div className={`border ${border} ${cardBg} p-4`}>
         <div className="flex items-center justify-between mb-4">
-          <h3 className={`font-mono text-xs ${muted}`}>
-            Topic Analysis
-          </h3>
+          <div>
+            <h3 className={`font-mono text-xs ${muted}`}>
+              Topic Analysis
+            </h3>
+            {topics?.analyzedAt && (
+              <div className="flex items-center gap-2">
+                <span className={`font-mono text-[0.6rem] ${muted}`}>
+                  Last analyzed: {new Date(topics.analyzedAt).toLocaleDateString("en-US", {
+                    month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+                  })}
+                </span>
+                {topics.analysisMode && (
+                  <span className={`font-mono text-[0.55rem] px-1.5 py-0.5 border ${
+                    isDark ? "border-gray-700 text-gray-400" : "border-gray-300 text-gray-500"
+                  }`}>
+                    {topics.analysisMode === 'incremental' ? 'Incremental' : 'Full'}
+                    {topics.incrementCount ? ` (#${topics.incrementCount})` : ''}
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
           <button
             onClick={handleAnalyzeTopics}
             disabled={topicsLoading}

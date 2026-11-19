@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Cormorant_Garamond, JetBrains_Mono, M_PLUS_1_Code } from "next/font/google";
+import { Archivo, Cormorant_Garamond, JetBrains_Mono, M_PLUS_1_Code } from "next/font/google";
 import "@fontsource/google-sans-flex";
 import "@fontsource/google-sans-code";
 import "../globals.css";
@@ -10,6 +10,14 @@ const cormorant = Cormorant_Garamond({
   variable: "--font-cormorant",
   subsets: ["latin"],
   weight: ["300", "400", "500", "600", "700"],
+  display: "swap",
+});
+
+// Wordmark: Archivo Expanded Black (variable wdth axis)
+const archivo = Archivo({
+  variable: "--font-archivo",
+  subsets: ["latin"],
+  axes: ["wdth"],
   display: "swap",
 });
 
@@ -27,7 +35,7 @@ const mPlus1Code = M_PLUS_1_Code({
 
 export const metadata: Metadata = {
   title: "FRAM DESIGN",
-  description: "Building and launching products. iOS apps, AI agents, and innovative solutions.",
+  description: "Designing software objects. Digital products lab in Bucharest and Rome. Fitbit (acquired by Google), UiPath.",
   icons: {
     icon: "/favicon.svg",
   },
@@ -37,7 +45,7 @@ export const metadata: Metadata = {
   },
   openGraph: {
     title: "FRAM DESIGN",
-    description: "Building and launching products. iOS apps, AI agents, and innovative solutions.",
+    description: "Designing software objects. Digital products lab in Bucharest and Rome. Fitbit (acquired by Google), UiPath.",
     type: "website",
     locale: "en_US",
     siteName: "FRAM DESIGN",
@@ -45,7 +53,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "FRAM DESIGN",
-    description: "Building and launching products. iOS apps, AI agents, and innovative solutions.",
+    description: "Designing software objects. Digital products lab in Bucharest and Rome. Fitbit (acquired by Google), UiPath.",
   },
 };
 
@@ -66,7 +74,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="bg-black">
       <body
-        className={`${cormorant.variable} ${jetbrainsMono.variable} ${mPlus1Code.variable} antialiased bg-black text-white selection:bg-white selection:text-black`}
+        className={`${archivo.variable} ${cormorant.variable} ${jetbrainsMono.variable} ${mPlus1Code.variable} antialiased bg-black text-white selection:bg-white selection:text-black`}
       >
         <ConsoleFilter />
         {children}

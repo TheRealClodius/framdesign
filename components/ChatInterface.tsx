@@ -144,6 +144,8 @@ import {
   MESSAGE_LIMITS,
   BLOCKED_MESSAGE,
   BUDGET_EXHAUSTED_MESSAGE,
+  CONTACT_MAILTO,
+  GREETING_MESSAGE,
 } from "@/lib/constants";
 import {
   streamChatResponse,
@@ -151,6 +153,7 @@ import {
 } from "@/lib/services/chat-service";
 import { OverloadedError, BudgetExhaustedError } from "@/lib/errors";
 import { voiceService } from "@/lib/services/voice-service";
+import { VOICE_ENABLED } from "@/lib/feature-flags";
 import { useTheme } from "@/lib/hooks/useTheme";
 import { getSuggestionImage } from "@/lib/project-image-map";
 import { PROJECTS } from "@/lib/project-config";
@@ -441,22 +444,22 @@ export default function ChatInterface() {
   // Generate conversation starters with random project on client-side only to avoid hydration mismatch
   // Start with a default (first project) to ensure server/client match, then update on mount
   const [conversationStarters, setConversationStarters] = useState([
-    "What does FRAM Design do?",
-    "I have a design challenge I'm thinking through",
+    "What has FRAM shipped?",
+    "I have a product I want to design",
     `Tell me about ${PROJECTS[0]}`, // Default to first project for SSR
-    "How would you approach a new product?",
+    "How do I work with Andrei?",
   ]);
 
   const [messages, setMessages] = useState<Message[]>([
     {
       id: "initial-assistant",
       role: "assistant",
-      content: "Hello. How can I help you today?",
+      content: GREETING_MESSAGE,
       suggestions: [
-        "What does FRAM Design do?",
-        "I have a design challenge I'm thinking through",
+        "What has FRAM shipped?",
+        "I have a product I want to design",
         `Tell me about ${PROJECTS[0]}`,
-        "How would you approach a new product?",
+        "How do I work with Andrei?",
       ]
     }
   ]);
@@ -464,10 +467,10 @@ export default function ChatInterface() {
   // Set random project only after component mounts on client (avoid hydration mismatch)
   useEffect(() => {
     const updatedStarters = [
-      "What does FRAM Design do?",
-      "I have a design challenge I'm thinking through",
+      "What has FRAM shipped?",
+      "I have a product I want to design",
       `Tell me about ${getRandomProject()}`,
-      "How would you approach a new product?",
+      "How do I work with Andrei?",
     ];
     setConversationStarters(updatedStarters);
     
@@ -1477,7 +1480,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
         setLoadingStatus(null);
 
         // Check if response is JSON (tool call) and handle startVoiceSession
-        if (response && response.startVoiceSession) {
+        if (VOICE_ENABLED && response && response.startVoiceSession) {
           // Start voice session - same logic as voice button click
           try {
             setIsVoiceLoading(true);
@@ -1595,7 +1598,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
         }
 
         // Check if Fram wants to start voice session
-        if (data.startVoiceSession) {
+        if (VOICE_ENABLED && data.startVoiceSession) {
           // Start voice session - same logic as voice button click
           try {
             setIsVoiceLoading(true);
@@ -1676,7 +1679,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
         {
           id: "initial-assistant",
           role: "assistant",
-          content: "Hello. How can I help you today?",
+          content: GREETING_MESSAGE,
           suggestions: conversationStarters
         }
       ]);
@@ -1888,7 +1891,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
                                   setHoveredSuggestion(null);
                                 }}
                                 disabled={isLoading || isVoiceMode || isBlocked}
-                                className={`text-[0.75rem] font-mono uppercase tracking-wider transition-colors px-3 py-1.5 border rounded disabled:opacity-50 disabled:cursor-not-allowed text-left ${isDark ? 'text-gray-400 hover:text-gray-100 border-gray-600 hover:border-gray-400' : 'text-gray-400 hover:text-black border-gray-300 hover:border-black'}`}
+                                className={`text-[0.75rem] font-mono uppercase tracking-wider transition-colors px-3 py-1.5 border rounded disabled:opacity-50 disabled:cursor-not-allowed text-left ${isDark ? 'text-gray-200 hover:text-white border-gray-500 hover:border-gray-200' : 'text-gray-800 hover:text-black border-gray-400 hover:border-black'}`}
                               >
                                 {suggestion}
                               </button>
@@ -1941,8 +1944,14 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
         <div className="pointer-events-none absolute bottom-0 left-0 right-0 z-10 h-[120px]" style={{ background: `linear-gradient(to top, ${isDark ? 'rgb(17 24 39)' : 'rgb(255 255 255)'}, ${isDark ? 'rgb(17 24 39 / 0)' : 'rgb(255 255 255 / 0)'})` }} />
 
         {/* Floating header — right-aligned, suggestion-style box */}
-        <div className="absolute top-25 left-0 right-0 z-20 pointer-events-none">
-          <div className="md:max-w-[950px] md:mx-auto flex justify-end pr-2">
+        <div className="absolute top-25 md:top-8 left-0 right-0 z-20 pointer-events-none">
+          <div className="md:max-w-[950px] md:mx-auto flex justify-between pl-2 pr-2">
+            <a
+              href={CONTACT_MAILTO}
+              className={`pointer-events-auto text-[0.75rem] font-mono uppercase tracking-wider transition-colors px-3 py-1.5 border rounded shadow-md ${isDark ? 'bg-white text-black border-white hover:bg-black hover:text-white shadow-black/40' : 'bg-black text-white border-black hover:bg-white hover:text-black shadow-gray-400/50'}`}
+            >
+              Work with FRAM
+            </a>
             <button
               onClick={handleClearChat}
               className={`pointer-events-auto text-[0.75rem] font-mono uppercase tracking-wider transition-colors px-3 py-1.5 border rounded shadow-md ${isDark ? 'text-gray-400 hover:text-gray-100 border-gray-600 hover:border-gray-400 bg-gray-950 shadow-black/40' : 'text-gray-400 hover:text-black border-gray-300 hover:border-black bg-gray-50 shadow-gray-400/50'}`}
@@ -1963,16 +1972,14 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
               <p className={`text-[0.8rem] leading-relaxed mb-4 transition-colors duration-300 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                 {budgetExhausted ? BUDGET_EXHAUSTED_MESSAGE : BLOCKED_MESSAGE}
               </p>
-              {budgetExhausted && (
-                <div className="flex justify-start">
+              <div className="flex justify-start">
                   <a
-                    href="mailto:andrei@fram.design?subject=Partner%20Account%20Request&body=Hi%20Andrei%2C%0A%0AI've%20reached%20my%20conversation%20limit%20with%20Fram%20and%20would%20like%20to%20upgrade%20to%20a%20partner%20account.%0A%0AThanks!"
+                    href={CONTACT_MAILTO}
                     className={`text-[0.75rem] font-mono uppercase tracking-wider transition-colors px-3 py-1.5 border rounded ${isDark ? 'text-gray-400 hover:text-gray-100 border-gray-600 hover:border-gray-400' : 'text-gray-400 hover:text-black border-gray-300 hover:border-black'}`}
                   >
-                    Send Email
+                    Write to Andrei
                   </a>
                 </div>
-              )}
               {process.env.NODE_ENV === 'development' && !budgetExhausted && (
                 <div className="text-center">
                   <button
@@ -2054,7 +2061,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
                     } else if (input.trim()) {
                       // Send state — submit message
                       handleSubmit();
-                    } else {
+                    } else if (VOICE_ENABLED) {
                       // Voice state — toggle voice
                       await unlockAudio();
 
@@ -2123,8 +2130,8 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
                       }
                     }
                   }}
-                  disabled={isVoiceLoading}
-                  className={`relative text-[0.75rem] font-mono uppercase tracking-wider transition-colors h-5 flex items-center after:absolute after:-inset-3 after:content-[''] ${
+                  disabled={isVoiceLoading || (!VOICE_ENABLED && !isLoading && !input.trim())}
+                  className={`relative text-[0.75rem] font-mono uppercase tracking-wider transition-colors h-5 flex items-center after:absolute after:-inset-3 after:content-[''] disabled:opacity-40 disabled:cursor-default ${
                     isLoading
                       ? isDark ? 'text-red-400 hover:text-red-300' : 'text-red-600 hover:text-red-700'
                       : input.trim()
@@ -2133,9 +2140,9 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
                           ? isDark ? 'text-red-400 hover:text-red-300' : 'text-red-600 hover:text-red-700'
                           : isDark ? 'text-gray-100 hover:text-gray-300' : 'text-black hover:text-gray-600'
                   } ${isVoiceLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
-                  aria-label={isLoading ? 'Stop generating' : input.trim() ? 'Send message' : isVoiceMode ? 'End voice' : 'Start voice'}
+                  aria-label={isLoading ? 'Stop generating' : (input.trim() || !VOICE_ENABLED) ? 'Send message' : isVoiceMode ? 'End voice' : 'Start voice'}
                 >
-                  {isLoading ? 'STOP' : input.trim() ? 'SEND' : isVoiceLoading ? 'STARTING...' : isVoiceMode ? 'END' : (
+                  {isLoading ? 'STOP' : (input.trim() || !VOICE_ENABLED) ? 'SEND' : isVoiceLoading ? 'STARTING...' : isVoiceMode ? 'END' : (
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
                       <path d="M19 10v2a7 7 0 0 1-14 0v-2" />

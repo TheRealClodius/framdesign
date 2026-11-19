@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { getRandomCardAssets } from "@/lib/project-image-map";
 import type { CardAsset } from "@/lib/project-image-map";
+import { GREETING_MESSAGE } from "@/lib/constants";
 
 interface AssetContext {
   assetId: string;
@@ -39,14 +40,14 @@ const CARD_PAD = 16;
 function generatePositions(
   containerW: number,
   containerH: number,
-  count: number
+  count: number,
+  topReserve: number
 ): CardPosition[] {
   const isMobile = containerW < 640;
   const w = isMobile ? CARD_W_MOBILE : CARD_W;
   const h = isMobile ? CARD_H_MOBILE : CARD_H;
 
-  // Reserve space: top for greeting, bottom just enough for footer
-  const topReserve = 120;
+  // topReserve: measured bottom of the greeting; bottom: just enough for footer
   const bottomReserve = 56; // bottom-14 footer area only
 
   // Prompt exclusion zone: centered box matching the prompt input (max-w-[500px])
@@ -106,6 +107,7 @@ export default function EmptyStateCards({
   isVisible,
 }: EmptyStateCardsProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const greetingRef = useRef<HTMLDivElement>(null);
   const [cardPositions, setCardPositions] = useState<CardPosition[]>([]);
   const [cards, setCards] = useState<CardAsset[]>([]);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
@@ -120,7 +122,10 @@ export default function EmptyStateCards({
     const measure = () => {
       const { width, height } = el.getBoundingClientRect();
       if (width > 0 && height > 0) {
-        const positions = generatePositions(width, height, CARD_COUNT);
+        // Cards start just below the greeting, whatever its wrapped height
+        const greeting = greetingRef.current;
+        const topReserve = greeting ? greeting.offsetTop + greeting.offsetHeight + CARD_PAD : 160;
+        const positions = generatePositions(width, height, CARD_COUNT, topReserve);
         setCardPositions(positions);
       }
     };
@@ -181,7 +186,7 @@ export default function EmptyStateCards({
       }}
     >
       {/* Greeting */}
-      <div className="absolute top-12 left-0 right-0 px-4 md:max-w-[950px] md:mx-auto">
+      <div ref={greetingRef} className="absolute top-[9rem] md:top-[5.5rem] left-0 right-0 px-4 md:max-w-[950px] md:mx-auto">
         <p
           className={`uppercase text-[0.75rem] mb-1 tracking-wider transition-colors duration-300 ${
             isDark ? "text-gray-500" : "text-gray-400"
@@ -190,11 +195,11 @@ export default function EmptyStateCards({
           FRAM
         </p>
         <p
-          className={`leading-relaxed text-[0.875rem] font-mono transition-colors duration-300 ${
+          className={`leading-relaxed text-[0.875rem] font-mono max-w-[40rem] text-pretty transition-colors duration-300 ${
             isDark ? "text-gray-100" : "text-black"
           }`}
         >
-          Hello. How can I help you today?
+          {GREETING_MESSAGE}
         </p>
       </div>
 

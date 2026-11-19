@@ -1614,6 +1614,12 @@ wss.on('connection', async (ws, req) => {
             const config = {
               responseModalities: [Modality.AUDIO],
               systemInstruction: systemInstruction,
+              // Gemini 3.1 Live only accepts sendClientContent for the initial
+              // history seed when this flag is enabled. After setup, ongoing
+              // user input continues through sendRealtimeInput.
+              historyConfig: {
+                initialHistoryInClientContent: true
+              },
               speechConfig: {
                 voiceConfig: {
                   prebuiltVoiceConfig: {

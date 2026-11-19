@@ -75,3 +75,9 @@ test-run.log
 
 # Served from GCS (storage_provider: gcs in kb/assets/manifest.json) — do not commit local copies
 public/kb-assets/
+
+
+# Local env backups / diffs (contain secrets)
+.env.bak*
+.env.vercel.check
+voice-server/.env.bak*

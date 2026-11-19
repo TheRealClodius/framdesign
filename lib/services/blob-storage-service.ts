@@ -6,6 +6,7 @@
  */
 
 import { Storage } from '@google-cloud/storage';
+import { parseInlineServiceAccount } from '@/lib/utils/gcp-credentials';
 
 // Initialize GCS client
 // Supports multiple credential methods:
@@ -42,14 +43,9 @@ function createStorageClient() {
   // Priority 3: GOOGLE_APPLICATION_CREDENTIALS as JSON string (for Vercel)
   // If it's a JSON string, parse it; otherwise SDK will use it as file path (ADC)
   if (process.env.GOOGLE_APPLICATION_CREDENTIALS && !config.credentials && !config.keyFilename) {
-    try {
-      // Try to parse as JSON string (Vercel stores JSON as string in env vars)
-      const credentials = JSON.parse(process.env.GOOGLE_APPLICATION_CREDENTIALS);
-      config.credentials = credentials;
-    } catch {
-      // Not JSON - it's a file path, SDK will use it via ADC
-      // No explicit config needed - SDK handles it automatically
-    }
+    // Inline JSON (Vercel / .env.local); null means a file path the SDK reads via ADC
+    const credentials = parseInlineServiceAccount(process.env.GOOGLE_APPLICATION_CREDENTIALS);
+    if (credentials) config.credentials = credentials;
   }
 
   return new Storage(config);

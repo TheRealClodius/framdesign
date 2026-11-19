@@ -17,9 +17,16 @@ export const MESSAGE_LIMITS = {
   MAX_RAW_MESSAGES: 20,
 } as const;
 
+// Greeting shown in the empty chat state
+export const GREETING_MESSAGE = "I am Fram, the polar bear who keeps this lab's archive. FRAM designs software objects: from the Fitbit and Vector watches to UiPath's AI agents. Ask me about the work, or about one of yours.";
+
+// Contact
+export const CONTACT_EMAIL = "andrei@fram.design";
+export const CONTACT_MAILTO = `mailto:${CONTACT_EMAIL}?subject=Working%20with%20FRAM`;
+
 // Timeout and blocking
-export const BLOCKED_MESSAGE = "Fram has decided not to respond to you anymore as you've been rude. Fram does not take shit from anybody.";
-export const BUDGET_EXHAUSTED_MESSAGE = "We've just hit an iceberg in our conversation...metaphorically speaking that is. This is the max amount of tokens I can spend chatting with you. If you want to talk more, reach out to Andrei to upgrade you to a partner account.";
+export const BLOCKED_MESSAGE = "This conversation has ended. Fram keeps its exchanges civil. If you have a project to discuss, write to andrei@fram.design.";
+export const BUDGET_EXHAUSTED_MESSAGE = "We have reached the end of what this conversation can hold. If you want to keep going, write to Andrei directly at andrei@fram.design.";
 
 // Cache configuration
 export const CACHE_CONFIG = {
