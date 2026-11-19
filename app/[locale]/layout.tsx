@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Archivo, Cormorant_Garamond, JetBrains_Mono, M_PLUS_1_Code } from "next/font/google";
+import { Cormorant_Garamond, JetBrains_Mono, M_PLUS_1_Code, Mona_Sans } from "next/font/google";
 import "@fontsource/google-sans-flex";
 import "@fontsource/google-sans-code";
 import "../globals.css";
@@ -13,9 +13,9 @@ const cormorant = Cormorant_Garamond({
   display: "swap",
 });
 
-// Wordmark: Archivo Expanded Black (variable wdth axis)
-const archivo = Archivo({
-  variable: "--font-archivo",
+// Wordmark + tagline: Mona Sans (variable wght + wdth axes; Expanded at wdth 125)
+const monaSans = Mona_Sans({
+  variable: "--font-mona",
   subsets: ["latin"],
   axes: ["wdth"],
   display: "swap",
@@ -74,7 +74,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="bg-black">
       <body
-        className={`${archivo.variable} ${cormorant.variable} ${jetbrainsMono.variable} ${mPlus1Code.variable} antialiased bg-black text-white selection:bg-white selection:text-black`}
+        className={`${monaSans.variable} ${cormorant.variable} ${jetbrainsMono.variable} ${mPlus1Code.variable} antialiased bg-black text-white selection:bg-white selection:text-black`}
       >
         <ConsoleFilter />
         {children}

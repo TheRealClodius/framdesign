@@ -15,10 +15,10 @@
 import { Fragment, useEffect, useRef } from "react";
 import { CONTACT_MAILTO } from "@/lib/constants";
 
-// Ink metrics for "FRAM" in Archivo 900 at 125% width (measured at 1000px):
-// ink spans 0.074em to 3.748em, so ink width is 3.674em.
-const WORDMARK_INK_EM = 3.674;
-const WORDMARK_LEFT_BEARING_EM = 0.074;
+// Ink metrics for "FRAM" in Mona Sans 900 at 125% width (measured at 1000px):
+// ink spans 0.047em to 3.273em, so ink width is 3.226em.
+const WORDMARK_INK_EM = 3.226;
+const WORDMARK_LEFT_BEARING_EM = 0.047;
 
 // Plain descriptor first, then proof
 // A string is plain text; an object renders as a link (the visitor's slot in the proof line)

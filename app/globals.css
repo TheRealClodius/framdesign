@@ -49,14 +49,14 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .font-tagline {
-  font-family: var(--font-archivo), "Arial Black", sans-serif;
+  font-family: var(--font-mona), "Arial Black", sans-serif;
   font-weight: 800;
   font-stretch: 112%;
   letter-spacing: -0.01em;
 }
 
 .font-wordmark {
-  font-family: var(--font-archivo), "Arial Black", sans-serif;
+  font-family: var(--font-mona), "Arial Black", sans-serif;
   font-weight: 900;
   font-stretch: 125%;
   letter-spacing: -0.02em;
