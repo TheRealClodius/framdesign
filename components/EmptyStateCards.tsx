@@ -112,6 +112,10 @@ export default function EmptyStateCards({
   const [cards, setCards] = useState<CardAsset[]>([]);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [mounted, setMounted] = useState(false);
+  // Assets whose image/clip has painted, so each card fades in instead of flashing empty
+  const [loaded, setLoaded] = useState<Set<string>>(() => new Set());
+  const markLoaded = (assetId: string) =>
+    setLoaded((prev) => (prev.has(assetId) ? prev : new Set(prev).add(assetId)));
   const [introComplete, setIntroComplete] = useState(false);
 
   // Measure container and generate positions on mount
@@ -208,7 +212,6 @@ export default function EmptyStateCards({
         if (index >= cards.length) return null;
         const card = cards[index];
         const isHovered = hoveredIndex === index;
-        const isVideo = card.entityType === "video" || card.entityType === "gif";
 
         return (
           <button
@@ -248,25 +251,35 @@ export default function EmptyStateCards({
                   ? "0 4px 12px rgba(0,0,0,0.4)"
                   : "0 4px 12px rgba(0,0,0,0.08)",
               zIndex: isHovered ? 10 : 1,
+              backgroundColor: isDark ? "#1f2937" : "#eceef1",
             }}
           >
-            {/* Asset thumbnail: video/gif or image */}
-            {isVideo ? (
+            {/* Card thumb (still or short clip); fades in once it can paint */}
+            {card.isMotion ? (
               <video
                 src={card.url}
+                poster={card.poster}
                 muted
                 loop
                 autoPlay
                 playsInline
-                className="absolute inset-0 w-full h-full object-cover"
+                preload="auto"
+                onLoadedData={() => markLoaded(card.assetId)}
+                className="absolute inset-0 w-full h-full object-cover transition-opacity duration-300"
+                style={{ opacity: loaded.has(card.assetId) || card.poster ? 1 : 0 }}
               />
             ) : (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={card.url}
                 alt={card.projectName}
-                className="absolute inset-0 w-full h-full object-cover"
+                className="absolute inset-0 w-full h-full object-cover transition-opacity duration-300"
+                style={{ opacity: loaded.has(card.assetId) ? 1 : 0 }}
                 loading="eager"
+                decoding="async"
+                fetchPriority={index < 4 ? "high" : "auto"}
+                onLoad={() => markLoaded(card.assetId)}
+                onError={() => markLoaded(card.assetId)}
               />
             )}
 

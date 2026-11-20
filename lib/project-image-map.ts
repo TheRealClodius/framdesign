@@ -290,8 +290,16 @@ export async function getSuggestionImage(
   };
 }
 
+// Card sources that play as video (GIFs get an MP4 card thumb too)
+const CARD_MOTION_EXTS = new Set(['mov', 'mp4', 'webm', 'gif']);
+
 export interface CardAsset {
+  /** What the card displays: a small card thumb when one exists, else the original */
   url: string;
+  /** Still to show while a motion card loads (card thumb), if any */
+  poster?: string;
+  /** True when `url` is a video the card should play */
+  isMotion: boolean;
   entityType: string;
   assetId: string;
   blobId: string;
@@ -342,15 +350,36 @@ export async function getRandomCardAssets(count: number): Promise<CardAsset[]> {
     }
   }
 
-  // Resolve signed URLs in parallel
+  // Resolve signed URLs in parallel. Cards use the small thumbs made by
+  // scripts/generate-card-thumbs.ts (assets/thumbs/<blob_id>.webp|.mp4) and
+  // fall back to the original asset when a thumb doesn't exist yet.
   const results = await Promise.all(
     picked.map(async (asset): Promise<CardAsset | null> => {
-      const signedUrl = await fetchSignedAssetUrl(asset.blob_id!, asset.file_extension!);
-      if (!signedUrl) return null;
+      const blobId = asset.blob_id!;
+      const ext = asset.file_extension!.toLowerCase();
+      const motion = CARD_MOTION_EXTS.has(ext);
+
+      const [still, clip] = await Promise.all([
+        fetchSignedAssetUrl(`thumbs/${blobId}`, 'webp'),
+        motion ? fetchSignedAssetUrl(`thumbs/${blobId}`, 'mp4') : Promise.resolve(null),
+      ]);
+
+      let url: string | null;
+      let isMotion: boolean;
+      if (still) {
+        url = clip ?? still;
+        isMotion = Boolean(clip);
+      } else {
+        url = await fetchSignedAssetUrl(blobId, ext);
+        isMotion = motion && ext !== 'gif'; // an original GIF animates in <img>
+      }
+      if (!url) return null;
 
       const projectEntity = asset.related_entities?.find(r => r.startsWith('project:')) || '';
       return {
-        url: signedUrl,
+        url,
+        poster: still ?? undefined,
+        isMotion,
         entityType: asset.entity_type,
         assetId: asset.id,
         blobId: asset.blob_id!,
