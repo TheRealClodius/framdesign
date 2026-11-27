@@ -114,8 +114,8 @@ describe('Fix #3: Suggestion buttons keyboard accessibility', () => {
   });
 
   test('send button should have aria-label', () => {
-    // The send button should have an accessible label
-    expect(chatSource).toMatch(/aria-label="Send message"/);
+    // Dynamic aria-label in JSX (ternary), not a static aria-label="..." attribute
+    expect(chatSource).toMatch(/aria-label=\{[\s\S]*?'Send message'/);
   });
 
   test('loading indicator should have aria-live region', () => {

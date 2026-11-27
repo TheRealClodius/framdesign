@@ -125,7 +125,8 @@
  *   floating prompt overlay, even as the textarea grows (max-h-[120px]).
  * - The fade gradients use CSS classes defined in globals, not inline styles.
  */
-import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import MarkdownWithMermaid from "./MarkdownWithMermaid";
 import {
   generateMessageId,
@@ -159,6 +160,17 @@ import { getSuggestionImage } from "@/lib/project-image-map";
 import { PROJECTS } from "@/lib/project-config";
 import SuggestionImagePopup from "./SuggestionImagePopup";
 import EmptyStateCards from "./EmptyStateCards";
+import {
+  parseDeepLinkFromSearchParams,
+  stripDeepLinkParamsFromUrl,
+  getDeepLinkKind,
+  buildChatSharePageUrl,
+} from "@/lib/deep-link";
+import { trackChatEvent } from "@/lib/chat-analytics";
+import {
+  stripSuggestionsFromContent,
+  buildAssistantCopyText,
+} from "@/lib/chat-display-utils";
 
 /**
  * Normalize text response from voice agent, especially fixing mermaid diagram formatting
@@ -375,40 +387,6 @@ function extractSuggestionsFromContent(content: string): string[] | undefined {
   return undefined;
 }
 
-/**
- * Strip suggestions and metadata from message content for display
- * Handles inline format: <suggestions>[...]</suggestions>
- * Also handles legacy formats: ---SUGGESTIONS---, ---OBSERVABILITY---, ---HAS_QUESTION---
- */
-function stripSuggestionsFromContent(content: string): string {
-  if (!content) return content;
-
-  let result = content;
-
-  // Remove inline suggestions: <suggestions>[...]</suggestions>
-  result = result.replace(/<suggestions>[\s\S]*?<\/suggestions>/g, '').trimEnd();
-
-  // Remove legacy ---SUGGESTIONS--- markers and their JSON payloads
-  const suggestionsMarker = '---SUGGESTIONS---';
-  if (result.includes(suggestionsMarker)) {
-    result = result.substring(0, result.indexOf(suggestionsMarker)).trimEnd();
-  }
-
-  // Remove observability metadata
-  const obsMarker = '---OBSERVABILITY---';
-  if (result.includes(obsMarker)) {
-    result = result.substring(0, result.indexOf(obsMarker)).trimEnd();
-  }
-
-  // Remove HAS_QUESTION marker (legacy)
-  const questionMarker = '---HAS_QUESTION---';
-  if (result.includes(questionMarker)) {
-    result = result.substring(0, result.indexOf(questionMarker)).trimEnd();
-  }
-
-  return result.trimEnd();
-}
-
 function formatVoiceSessionDuration(startTime: number | null): string | null {
   if (!startTime) return null;
 
@@ -436,7 +414,8 @@ function getRandomProject(): string {
   return PROJECTS[Math.floor(Math.random() * PROJECTS.length)];
 }
 
-export default function ChatInterface() {
+function ChatInterfaceInner() {
+  const searchParams = useSearchParams();
   // Get current theme (dark mode during night time or based on system preference)
   const theme = useTheme();
   const isDark = theme === 'dark';
@@ -486,6 +465,11 @@ export default function ChatInterface() {
     });
   }, []);
   const [input, setInput] = useState("");
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
+  const copyFeedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [shareLinkCopied, setShareLinkCopied] = useState(false);
+  const shareLinkFeedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const deepLinkAnalyticsFiredRef = useRef(false);
   const [isLoading, setIsLoading] = useState(false);
   const [loadingStatus, setLoadingStatus] = useState<string | null>(null);
   const [timeoutUntil, setTimeoutUntilState] = useState<number | null>(null);
@@ -503,6 +487,56 @@ export default function ChatInterface() {
 
   // Detect user's IANA timezone once (e.g. "Europe/Bucharest")
   const userTimezone = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []);
+
+  const handleCopyShareLink = useCallback(async () => {
+    const t = input.trim();
+    if (!t) return;
+    const url = buildChatSharePageUrl(window.location.href, t);
+    try {
+      await navigator.clipboard.writeText(url);
+      trackChatEvent("chat_share_link_copied");
+      setShareLinkCopied(true);
+      if (shareLinkFeedbackTimeoutRef.current) {
+        clearTimeout(shareLinkFeedbackTimeoutRef.current);
+      }
+      shareLinkFeedbackTimeoutRef.current = setTimeout(() => {
+        setShareLinkCopied(false);
+        shareLinkFeedbackTimeoutRef.current = null;
+      }, 2000);
+    } catch {
+      // Permission denied — silent
+    }
+  }, [input]);
+
+  const handleCopyAssistant = useCallback(async (message: Message) => {
+    const text = buildAssistantCopyText(message);
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      trackChatEvent("assistant_copy_clicked", { content_length: text.length });
+      setCopiedMessageId(message.id);
+      if (copyFeedbackTimeoutRef.current) {
+        clearTimeout(copyFeedbackTimeoutRef.current);
+      }
+      copyFeedbackTimeoutRef.current = setTimeout(() => {
+        setCopiedMessageId(null);
+        copyFeedbackTimeoutRef.current = null;
+      }, 2000);
+    } catch {
+      // Permission denied or unsupported — silent
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (copyFeedbackTimeoutRef.current) {
+        clearTimeout(copyFeedbackTimeoutRef.current);
+      }
+      if (shareLinkFeedbackTimeoutRef.current) {
+        clearTimeout(shareLinkFeedbackTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Keep a ref to latest messages to avoid stale closures in async handlers
   const messagesRef = useRef(messages);
@@ -744,13 +778,25 @@ export default function ChatInterface() {
     checkBudget();
   }, []);
 
-  // Load conversation from localStorage on mount
+  // Load conversation from localStorage; prefill from ?q= / ?query= / ?project= only when no saved thread
   useEffect(() => {
     const loadedMessages = loadMessagesFromStorage(MESSAGE_LIMITS.MAX_PERSISTED_MESSAGES);
     if (loadedMessages.length > 0) {
       setMessages(loadedMessages);
+      return;
     }
-  }, []);
+    const fromUrl = parseDeepLinkFromSearchParams(searchParams);
+    if (fromUrl) {
+      setInput((prev) => (prev.trim() === "" ? fromUrl : prev));
+      if (!deepLinkAnalyticsFiredRef.current) {
+        deepLinkAnalyticsFiredRef.current = true;
+        const kind = getDeepLinkKind(searchParams);
+        if (kind) {
+          trackChatEvent("deep_link_opened", { link_type: kind });
+        }
+      }
+    }
+  }, [searchParams]);
 
   // Auto-save messages to localStorage on changes (debounced to reduce blocking during streaming)
   useEffect(() => {
@@ -940,14 +986,14 @@ export default function ChatInterface() {
         console.log('🔴 FLAG SET: Voice session ended due to error - shouldStartNewTurn = TRUE');
         
         // Build error message with helpful details
-        let errorContent = `VOICE ERROR: ${message}`;
+        let errorContent = `Voice could not continue: ${message}`;
         if (details?.suggestion) {
           errorContent += `\n\nSuggestion: ${details.suggestion}`;
         }
         if (details?.helpUrl) {
           errorContent += `\n\nHelp: ${details.helpUrl}`;
         }
-        errorContent += `\n\nPLEASE TRY AGAIN OR USE TEXT CHAT.`;
+        errorContent += `\n\nYou can try again or keep chatting in text.`;
         
         setMessages((prev) => [
           ...prev,
@@ -1197,6 +1243,7 @@ export default function ChatInterface() {
 
     // Trigger the chat request
     const submitStarter = async () => {
+      stripDeepLinkParamsFromUrl();
       try {
         // Append asset context tag for the API (not shown in UI)
         const apiContent = assetContext
@@ -1266,7 +1313,7 @@ export default function ChatInterface() {
         const errorMessage = error instanceof Error ? error.message : "Unknown error";
         setMessages((prev) => [
           ...prev,
-          { id: generateMessageId(), role: "assistant", content: `ERROR: ${errorMessage}. PLEASE TRY AGAIN.` }
+          { id: generateMessageId(), role: "assistant", content: `${errorMessage}. Please try again.` }
         ]);
       } finally {
         setIsLoading(false);
@@ -1396,6 +1443,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
 
     const userMessage = input.trim();
     setInput("");
+    stripDeepLinkParamsFromUrl();
     setMessages((prev) => [...prev, { id: generateMessageId(), role: "user", content: userMessage, timestamp: Date.now() }]);
     setIsLoading(true);
 
@@ -1569,7 +1617,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
             if (lastIndex >= 0 && updated[lastIndex].id === assistantMessageId) {
               updated[lastIndex] = {
                 ...updated[lastIndex],
-                content: `ERROR: ${streamError.message}. PLEASE TRY AGAIN.`,
+                content: `${streamError.message}. Please try again.`,
                 streaming: false,
               };
             }
@@ -1633,7 +1681,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
           if (lastIndex >= 0 && updated[lastIndex].id === assistantMessageId) {
             updated[lastIndex] = {
               ...updated[lastIndex],
-              content: data.message || data.error || "ERROR: COULD NOT GET RESPONSE.",
+              content: data.message || data.error || "No response from the assistant. Please try again.",
               streaming: false,
             };
           }
@@ -1649,7 +1697,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
 
       setMessages((prev) => [
         ...prev,
-        { id: generateMessageId(), role: "assistant", content: `ERROR: ${errorMessage}. PLEASE TRY AGAIN.` }
+        { id: generateMessageId(), role: "assistant", content: `${errorMessage}. Please try again.` }
       ]);
     } finally {
       setIsLoading(false);
@@ -1750,6 +1798,18 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
                           }}
                         />
                       </div>
+                      {!message.streaming && buildAssistantCopyText(message) ? (
+                        <div className="mt-2">
+                          <button
+                            type="button"
+                            onClick={() => handleCopyAssistant(message)}
+                            className={`text-[0.65rem] uppercase tracking-wider font-mono transition-colors underline-offset-2 hover:underline ${isDark ? "text-gray-500 hover:text-gray-300" : "text-gray-500 hover:text-gray-800"}`}
+                            aria-label="Copy reply"
+                          >
+                            {copiedMessageId === message.id ? "Copied" : "Copy"}
+                          </button>
+                        </div>
+                      ) : null}
                       {message.images && message.images.length > 0 && (
                         <div className="mt-3">
                           {message.images.map((markdown, idx) => (
@@ -2049,8 +2109,21 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
                 placeholder={isVoiceMode ? "Voice mode active..." : "Ask me anything about FRAM..."}
               />
 
-              {/* Chin — right-aligned multi-state button */}
-              <div className="flex justify-end mt-2">
+              {/* Chin — copy share link + multi-state button */}
+              <div className="flex justify-between items-end gap-2 mt-2">
+                <div className="min-h-[20px] flex items-center">
+                  {input.trim() && !isVoiceMode ? (
+                    <button
+                      type="button"
+                      onClick={() => handleCopyShareLink()}
+                      className={`text-[0.65rem] uppercase tracking-wider font-mono transition-colors underline-offset-2 hover:underline ${isDark ? "text-gray-500 hover:text-gray-300" : "text-gray-500 hover:text-gray-800"}`}
+                      aria-label="Copy link to this prompt"
+                    >
+                      {shareLinkCopied ? "Link copied" : "Copy link"}
+                    </button>
+                  ) : null}
+                </div>
+                <div className="flex justify-end shrink-0">
                 <button
                   type="button"
                   onClick={async () => {
@@ -2123,7 +2196,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
                             {
                               id: generateMessageId(),
                               role: "assistant",
-                              content: `VOICE ERROR: ${userFriendlyMessage}. YOU CAN CONTINUE USING TEXT CHAT.`
+                              content: `Voice unavailable: ${userFriendlyMessage} You can keep using text chat.`
                             }
                           ]);
                         }
@@ -2150,6 +2223,7 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
                     </svg>
                   )}
                 </button>
+                </div>
               </div>
             </div>
           </div>
@@ -2170,5 +2244,25 @@ PLEASE FIX THE MERMAID DIAGRAM SYNTAX AND REGENERATE YOUR RESPONSE WITH THE CORR
         />
       )}
     </section>
+  );
+}
+
+function ChatInterfaceSuspenseFallback() {
+  return (
+    <section
+      className="w-full max-w-[28rem] md:max-w-none mx-auto pt-0 pb-0 md:pb-0 h-fit md:h-[100vh] md:flex md:flex-col md:min-h-0 overflow-x-hidden bg-gray-900"
+      aria-busy="true"
+      aria-label="Chat"
+    >
+      <div className="relative flex-1 min-h-0 h-[600px] md:h-auto" />
+    </section>
+  );
+}
+
+export default function ChatInterface() {
+  return (
+    <Suspense fallback={<ChatInterfaceSuspenseFallback />}>
+      <ChatInterfaceInner />
+    </Suspense>
   );
 }
